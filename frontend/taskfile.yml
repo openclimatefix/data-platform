@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  generate-templ-go:
+    desc: "Generate Go code from .templ files"
+    cmds:
+      - templ generate
