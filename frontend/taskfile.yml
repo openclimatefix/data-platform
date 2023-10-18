@@ -1,7 +1,12 @@
 version: '3'
 
 tasks:
-  generate-templ-go:
-    desc: "Generate Go code from .templ files"
+  install:
+    desc: "Install dependencies using npm"
     cmds:
-      - templ generate
+      - npm install
+  run:
+    desc: "Run vite server"
+    cmds:
+      - npm run dev
+
