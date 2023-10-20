@@ -10,19 +10,7 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-func TestBasicYieldFunc(t *testing.T) {
-	windowStart := time.Now().Add(-time.Hour * 48).Truncate(time.Hour * 24)
-	windowEnd := time.Now().Add(time.Hour * 48).Truncate(time.Hour * 24)
-	numMins := windowEnd.Sub(windowStart).Hours() * 60
-	t.Log("numMins")
-
-	pts := make(plotter.XYs, int(numMins))
-	for i := range pts {
-		ti := windowStart.Add((60 * time.Hour) + time.Minute * time.Duration(i))
-		pts[i].X = float64(ti.Unix())
-		pts[i].Y = float64(BasicYieldFunc(ti.Unix()))
-	}
-
+func Plot(pts plotter.XYs) {
 	p := plot.New()
 	// xticks defines how we convert and display time.Time values.
 	xticks := plot.TimeTicks{Format: "2006-01-02\n15:04"}
@@ -40,6 +28,21 @@ func TestBasicYieldFunc(t *testing.T) {
 	err = p.Save(40*vg.Centimeter, 20*vg.Centimeter, "timeseries.png")
 	if err != nil {
 		log.Panic(err)
+	}
+
+}
+
+func TestBasicYieldFunc(t *testing.T) {
+	windowStart := time.Now().Add(-time.Hour * 48).Truncate(time.Hour * 24)
+	windowEnd := time.Now().Add(time.Hour * 48).Truncate(time.Hour * 24)
+	numMins := windowEnd.Sub(windowStart).Hours() * 60
+
+	pts := make(plotter.XYs, int(numMins))
+	for i := range pts {
+		ti := windowStart.Add(time.Minute * time.Duration(i))
+
+		pts[i].X = float64(ti.Unix())
+		pts[i].Y = BasicYieldFunc(ti.Unix(), 10000.0)
 	}
 
 }
