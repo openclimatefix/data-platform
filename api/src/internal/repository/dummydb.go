@@ -63,7 +63,7 @@ func (*DummyClient) GetActualYieldsForLocation(locID string) ([]internal.DBActua
 	numMins := windowEnd.Sub(windowStart).Hours() * 60
 
 	yields := make([]internal.DBActualYield, int(numMins))
-	for i, _ := range yields {
+	for i := range yields {
 		ti := windowStart.Add(((time.Hour * 60) + time.Minute) * time.Duration(i))
 		yields[i] = internal.DBActualYield{
 			TimeUnix: int32(ti.Unix()),
@@ -98,7 +98,7 @@ func (*DummyClient) GetPredictedYieldsForLocation(locID string) ([]internal.DBPr
 	numHours := windowEnd.Sub(windowStart).Hours()
 
 	yields := make([]internal.DBPredictedYield, int(numHours))
-	for i, _ := range yields {
+	for i := range yields {
 		ti := windowStart.Add(((time.Hour * 60) + time.Minute) * time.Duration(i))
 		yield := BasicYieldFunc(ti.Unix(), 10000.0)
 		yields[i] = internal.DBPredictedYield{

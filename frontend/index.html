@@ -7,27 +7,151 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
        crossorigin=""/>
-    <!-- Make sure you put this AFTER Leaflet's CSS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
        crossorigin=""></script>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-    <title>Vite + TS</title>
+    <script src="https://unpkg.com/protomaps-leaflet@latest/dist/protomaps-leaflet.min.js"></script>
+    <script src="https://d3js.org/d3.v4.js"></script>
+    <link rel="stylesheet" href="style.css" type="text/css">
+    <title>Quertz Seler</title>
   </head>
   <body>
-    <div style="width: 100%;">
-      <div style="float:left; width: 50%">
-        <div id="container" style="width: 600px; height: 300px;">
-          <script type="text/javascript" src="/src/chart.js"></script>
+    <div id="appbar" style="position: fixed; top: 0; width: 100%; height: 40px; background: grey;">
+      <h3>Quertz Seler</h3>
+    </div>
+    <div id="app">
+      <div>
+        <div style="width: 100%">
+          <div style="float:left; width: 50%;">
+            <div id="graph" style="width: 600px; height: 300px;"></div>
+            <script>
+              function generateData() {
+                // Generate data with random y value, and an x value of every hour
+                // between two days ago and two days ahead
+                var now = new Date();
+                var data = d3.timeHour
+                  .every(1)
+                  .range(new Date(now.getTime() - 2 * 86400000), new Date(now.getTime() + 2 * 86400000))
+                  .map(function(time) {
+                      return {
+                        time: time,
+                        value: Math.random() * 100
+                      };
+                  });
+                return data;
+              }
+
+              function createGraph(data) {
+                // set the dimensions and margins of the graph
+                var margin = {top: 10, right: 30, bottom: 30, left: 60},
+                    width = 600 - margin.left - margin.right,
+                    height = 300 - margin.top - margin.bottom;
+
+                // Remove previous graph
+                d3.select("#graph").selectAll("svg").remove();
+
+                // Add svg
+                var svg = d3.select("#graph")
+                  .append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                  .append("g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+                // Add x axis in date format
+                var x = d3.scaleTime()
+                  .domain(d3.extent(data, function(d) { return d.time; }))
+                  .range([0, width]);
+                svg.append("g")
+                  .attr("transform", "translate(0," + height + ")")
+                  .attr("class", "axis")
+                  .call(d3.axisBottom(x));
+                // Add y axis in number format
+                var y = d3.scaleLinear()
+                  .domain([0, 100])
+                  .range([height, 0]);
+                svg.append("g")
+                  .attr("class", "axis")
+                  .call(d3.axisLeft(y));
+
+                // Add the line
+                svg.append("path")
+                  .datum(data)
+                  .attr("fill", "none")
+                  .attr("stroke", "steelblue")
+                  .attr("stroke-width", 1.5)
+                  .attr("d", d3.line()
+                    .x(function(d) { return x(d.time) })
+                    .y(function(d) { return y(d.value) })
+                  );
+              }
+            </script>
+          </div>
+          <div style="float:right;">
+            <div id="map" style="width: 600px; height: 750px; background: black;"></div>
+            <script>
+              const map = L.map('map', {
+                minZoom: 6,
+                maxZoom: 8,
+                maxBounds: L.latLngBounds(L.latLng(49.5, -11.5), L.latLng(60.5, 2.5)),
+              });
+            
+              class GSPSymboliser {
+
+                draw(context, geom, z, feature) {
+                  var fill = '#2D2D2D' 
+                  if (feature.props.GSPGroup == "_N") fill = 'darkslategrey'
+                  context.strokeStyle = '#2F2F2F'
+                  context.beginPath()
+                  for (var poly of geom) {
+                    for (var p = 0; p < poly.length-1; p++) {
+                      let pt = poly[p]
+                      if (p == 0) context.moveTo(pt.x, pt.y)
+                      else context.lineTo(pt.x, pt.y)
+                    }
+                  }
+                  context.fillStyle = fill
+                  context.fill()
+                }
+ 
+              }
+
+              var maplayer = protomapsL.leafletLayer({
+                url: '/uk-gsp.pmtiles',
+                paint_rules: [
+                  {
+                    datalayer: "gspregions",
+                    symbolizer: new protomapsL.PolygonSymbolizer({fill: "dimgrey"})
+                  },
+                  {
+                    dataLayer:"gspregions",
+                    symbolizer:new GSPSymboliser()
+                  },
+                ],
+                label_rules: [
+                  {
+                    datalayer: "gspregions",
+                    symbolizer: new GSPSymboliser()
+                  }
+                ],
+                attribution: 'opennetzero.org',
+                onEachFeature: function(feature, layer) {
+                  layer.bindPopup(feature.props.GSPs)
+                }
+              });
+
+              maplayer.addTo(map);
+              map.setView([54.8, -4.3], 6);
+
+              map.on('click', function(e) {
+                  console.log(e.latlng);
+                  createGraph(generateData());
+              });
+            </script>
+          </div>
         </div>
-      </div>
-      <div style="float:right;">
-        <div id="map" style="width: 600px; height: 800px;">
-          <script src="/src/map.js"></script>
-        </div>
+        <div style="clear:both"></div>
       </div>
     </div>
-    <div style="clear:both"></div>
-
   </body>
 </html>
