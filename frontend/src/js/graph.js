@@ -51,7 +51,7 @@ function createGraph(data, target, regionname) {
     svg.append("path")
         .datum(data)
         .attr("fill", "none")
-        .attr("stroke", "steelblue")
+        .attr("stroke", "#fe9929")
         .attr("stroke-width", 1.5)
         .attr("d", d3.line()
         .x(function(d) { return x(d.time) })

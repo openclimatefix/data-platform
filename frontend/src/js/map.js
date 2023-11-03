@@ -18,8 +18,8 @@ function getColor(d) {
 }
 
 class GSPSymboliser {
-    constructor() {
-        this.yields = getCrossSection()
+    constructor(crossSection) {
+        this.yields = crossSection;
     }
 
     draw(context, geom, z, feature) {
@@ -46,16 +46,16 @@ class GSPSymboliser {
 // then add the GSPs yield data on top when loaded.
 var gsplayer = protomapsL.leafletLayer({
     url: '/uk-gsp.pmtiles',
-        paint_rules: [
-            {
-                datalayer: "gspregions",
-                symbolizer: new protomapsL.PolygonSymbolizer({fill: "dimgrey"})
-            },
-            {
-                dataLayer:"gspregions",
-                symbolizer:new GSPSymboliser()
-            },
-        ],
+    paint_rules: [
+        {
+            dataLayer: "gspregions",
+            symbolizer: new protomapsL.PolygonSymbolizer({fill: "dimgrey"})
+        },
+        {
+            dataLayer: "gspregions",
+            symbolizer: new GSPSymboliser(getCrossSection())
+        }
+    ]
 });
 
 var featurelayer = new L.GeoJSON.AJAX("/gsp-regions-lowpoly.json", {
@@ -69,7 +69,6 @@ var featurelayer = new L.GeoJSON.AJAX("/gsp-regions-lowpoly.json", {
     onEachFeature: function(feature, layer) {
         layer.on({
             click: function(e) {
-                console.log(feature);
                 createGraph(generateData(), "#graph");
                 zoomToFeature(e);
             },
@@ -140,3 +139,19 @@ info.addTo(map);
 legend.addTo(map);
 
 map.setView([54.8, -4.3], 6);
+
+function updateRegionPaint(data) {
+    gsplayer.paint_rules = [
+        {
+            dataLayer: "gspregions",
+            symbolizer: new protomapsL.PolygonSymbolizer({fill: "dimgrey"})
+        },
+        {
+            dataLayer: "gspregions",
+            symbolizer: new GSPSymboliser(data)
+        }
+    ];
+    gsplayer.rerenderTiles();
+}
+
+export { updateRegionPaint };
