@@ -14,17 +14,17 @@ function generateData() {
     return data;
 }
 
-function createGraph(data) {
+function createGraph(data, target, regionname) {
     // set the dimensions and margins of the graph
-    var margin = {top: 10, right: 30, bottom: 30, left: 60},
+    var margin = {top: 30, right: 30, bottom: 30, left: 60},
         width = 600 - margin.left - margin.right,
         height = 300 - margin.top - margin.bottom;
 
     // Remove previous graph
-    d3.select("#graph").selectAll("svg").remove();
+    d3.select(target).selectAll("svg").remove();
 
     // Add svg
-    var svg = d3.select("#graph")
+    var svg = d3.select(target)
         .append("svg")
             .attr("width", width + margin.left + margin.right)
             .attr("height", height + margin.top + margin.bottom)
@@ -58,5 +58,7 @@ function createGraph(data) {
         .y(function(d) { return y(d.value) })
     );
 }
+
+createGraph(generateData(), "#national-graph", "National");
 
 export { generateData, createGraph };
