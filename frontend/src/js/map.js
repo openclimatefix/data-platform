@@ -46,6 +46,7 @@ class GSPSymboliser {
 // then add the GSPs yield data on top when loaded.
 var gsplayer = protomapsL.leafletLayer({
     url: '/uk-gsp.pmtiles',
+    edgeBufferTiles: 1,
     paint_rules: [
         {
             dataLayer: "gspregions",
