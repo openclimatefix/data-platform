@@ -1,3 +1,20 @@
+import { QuartzAPIClient } from "../proto/api.client";
+import { GrpcWebFetchTransport } from "@protobuf-ts/grpcweb-transport";
+
+let transport = new GrpcWebFetchTransport({baseUrl: "http://localhost:8088"});
+let client = new QuartzAPIClient(transport);
+
+async function getTimeSeries() {
+    var values = [];
+    let streamingCall = client.getPredictedTimeseries({
+        locationIDs: ["test-id", "test-id-2"]
+    });
+    for await (let response of streamingCall.responses) {
+        values.push(response);
+    }
+    console.log(values);
+    return values;
+};
 
 function getCrossSection() {
     var values = [];
@@ -15,4 +32,4 @@ function getCrossSection() {
     return values;
 };
 
-export { getCrossSection };
+export { getCrossSection, getTimeSeries };

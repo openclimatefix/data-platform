@@ -8,7 +8,11 @@ import (
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
+	"github.com/stretchr/testify/require"
+
 )
+
+var testClient = DummyClient{}
 
 func Plot(pts plotter.XYs) {
 	p := plot.New()
@@ -42,7 +46,15 @@ func TestBasicYieldFunc(t *testing.T) {
 		ti := windowStart.Add(time.Minute * time.Duration(i))
 
 		pts[i].X = float64(ti.Unix())
-		pts[i].Y = BasicYieldFunc(ti.Unix(), 10000.0)
+		pts[i].Y = BasicYieldFunc(ti.Unix(), 10000.0).Yield
 	}
+}
+
+func TestGetPredictedYieldsForLocation(t *testing.T) {
+
+	locID := "test-id"
+	out, err := testClient.GetPredictedYieldsForLocation(locID)
+    require.NoError(t, err)
+	require.NotNil(t, out)
 
 }

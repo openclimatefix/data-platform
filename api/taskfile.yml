@@ -3,6 +3,11 @@ version: '3'
 tasks:
   generate-proto-go:
     desc: "Generate Go gRPC client and server interfaces."
+    preconditions:
+      - sh: command -v protoc
+        msg: "Requires protoc bianry on path. See https://grpc.io/docs/protoc-installation"
+      - sh: command -v protoc-gen-go
+        msg: "Requires protoc-gen-go and protoc-gen-go-grpc binary on path. See https://grpc.io/docs/languages/go/quickstart/#prerequisites"
     aliases: ["gen-pro-go"]
     cmds:
       - |
@@ -12,8 +17,27 @@ tasks:
           --go-grpc_out=. \
           --go-grpc_opt=paths=source_relative \
           src/proto/api.proto
+  generate-proto-javascript:
+    desc: "Generate JS gRPC client interfaces."
+    preconditions:
+      - sh: command -v protoc
+        msg: "Requires protoc binary on path. See https://grpc.io/docs/protoc-installation"
+      - sh: command -v protoc-gen-ts
+        msg: "Requires protoc-gen-ts binary on path. Try `npm install -g @protobuf-ts/plugin`"
+    aliases: ["gen-pro-js"]
+    cmds:
+      - |
+        protoc \
+          --ts_out=../frontend/src/proto \
+          --ts_opt=output_javascript \
+          --proto_path=src/proto \
+          src/proto/api.proto
   build-container:
     desc: "Build container from the Containerfile"
     aliases: ["cont"]
     cmds:
       - docker build -f Containerfile --tag api:local .
+  run:
+    desc: "Run the application locally"
+    cmds:
+      - go run src/cmd/main.go

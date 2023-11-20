@@ -1,3 +1,7 @@
+import { getTimeSeries } from "./api";
+
+getTimeSeries();
+
 function generateData() {
     // Generate data with random y value, and an x value of every hour
     // between two days ago and two days ahead
@@ -14,7 +18,7 @@ function generateData() {
     return data;
 }
 
-function createGraph(data, target, regionname) {
+function createGraph(data, target) {
     // set the dimensions and margins of the graph
     var margin = {top: 30, right: 30, bottom: 30, left: 60},
         width = 600 - margin.left - margin.right,

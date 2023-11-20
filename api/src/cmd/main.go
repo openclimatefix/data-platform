@@ -142,8 +142,8 @@ func (s *apiServer) GetLocationMetadata(ctx context.Context, req *pb.GetLocation
 }
 
 func main() {
-	lis, err := net.Listen("tcp", "localhost:50051")
-	log.Info().Msg("Listening on localhost:50051")
+	lis, err := net.Listen("tcp", ":50051")
+	log.Info().Msg("Listening on :50051")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to listen")
 	}

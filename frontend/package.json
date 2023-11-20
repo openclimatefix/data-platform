@@ -10,5 +10,9 @@
   },
   "devDependencies": {
     "vite": "^4.2.0"
+  },
+  "dependencies": {
+    "@protobuf-ts/grpcweb-transport": "^2.9.1",
+    "node-fetch": "^3.3.2"
   }
 }

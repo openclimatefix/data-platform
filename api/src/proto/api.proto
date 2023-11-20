@@ -31,10 +31,10 @@ message GetPredictedTimeseriesResponse {
 message PredictedYield {
   int64 yield_kw = 1;
   int64 timestamp_unix = 2;
-  PredictedYieldError error = 3;
+  PredictedYieldUncertainty uncertainty = 3;
 }
 
-message PredictedYieldError {
+message PredictedYieldUncertainty {
   int64 lower_kw = 1;
   int64 upper_kw = 2;
 }
@@ -68,7 +68,7 @@ message GetPredictedCrossSectionResponse {
 message PredictedYieldAtLocation {
   string locationID = 1;
   int64 yield_kw = 2;
-  PredictedYieldError error = 3;
+  PredictedYieldUncertainty uncertainty = 3;
 }
 
 // --- GetActualCrossSection ---------------------------------------------------------
