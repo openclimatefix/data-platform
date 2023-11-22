@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  envoy-proxy:
+    container_name: envoy-proxy
+    ports:
+      - "80:80"
+      - "8088:8088"
+    image: envoyproxy/envoy-distroless:v1.28-latest
+    volumes:
+      - ./frontend/envoy.yaml:/etc/envoy/envoy.yaml
+  api:
+    container_name: api
+    ports:
+      - "50051:50051"
+    image: api:local
+
+
