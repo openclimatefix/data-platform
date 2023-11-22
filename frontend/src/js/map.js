@@ -1,5 +1,5 @@
-import { createGraph, generateData } from './graph.js';
-import { getCrossSection } from './api.js';
+import { createGraph } from './graph.js';
+import { getCrossSection, getNationalTimeSeries } from './api.js';
 
 const map = L.map('map', {
     zoomControl: false,
@@ -69,8 +69,8 @@ var featurelayer = new L.GeoJSON.AJAX("/gsp-regions-lowpoly.json", {
     },
     onEachFeature: function(feature, layer) {
         layer.on({
-            click: function(e) {
-                createGraph(generateData(), "#graph");
+            click: async function(e) {
+                createGraph(await getNationalTimeSeries(), "#graph");
                 zoomToFeature(e);
             },
             mouseover: highlightFeature,

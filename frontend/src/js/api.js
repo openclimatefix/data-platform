@@ -4,16 +4,21 @@ import { GrpcWebFetchTransport } from "@protobuf-ts/grpcweb-transport";
 let transport = new GrpcWebFetchTransport({baseUrl: "http://localhost:8088"});
 let client = new QuartzAPIClient(transport);
 
-async function getTimeSeries() {
-    var values = [];
+async function getNationalTimeSeries() {
+    let locationValues = [];
     let streamingCall = client.getPredictedTimeseries({
-        locationIDs: ["test-id", "test-id-2"]
+        locationIDs: ["national"]
     });
     for await (let response of streamingCall.responses) {
-        values.push(response);
+        for (let y of response.yields) {
+            locationValues.push({
+                time: new Date(Number(y.timestampUnix) * 1000),
+                value: Number(y.yieldKw),
+            });
+        }
     }
-    console.log(values);
-    return values;
+    console.log(locationValues);
+    return locationValues;
 };
 
 function getCrossSection() {
@@ -32,4 +37,4 @@ function getCrossSection() {
     return values;
 };
 
-export { getCrossSection, getTimeSeries };
+export { getCrossSection, getNationalTimeSeries };

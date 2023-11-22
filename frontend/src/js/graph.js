@@ -1,6 +1,4 @@
-import { getTimeSeries } from "./api";
-
-getTimeSeries();
+import { getNationalTimeSeries } from "./api";
 
 function generateData() {
     // Generate data with random y value, and an x value of every hour
@@ -18,7 +16,9 @@ function generateData() {
     return data;
 }
 
+
 function createGraph(data, target) {
+    
     // set the dimensions and margins of the graph
     var margin = {top: 30, right: 30, bottom: 30, left: 60},
         width = 600 - margin.left - margin.right,
@@ -45,7 +45,7 @@ function createGraph(data, target) {
         .call(d3.axisBottom(x));
     // Add y axis in number format
     var y = d3.scaleLinear()
-        .domain([0, 100])
+        .domain(d3.extent(data, function(d) { return d.value; }))
         .range([height, 0]);
     svg.append("g")
         .attr("class", "axis")
@@ -63,6 +63,7 @@ function createGraph(data, target) {
     );
 }
 
-createGraph(generateData(), "#national-graph", "National");
+let data = await getNationalTimeSeries();
+createGraph(data, "#national-graph", "National");
 
-export { generateData, createGraph };
+export { createGraph };
