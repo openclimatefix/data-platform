@@ -36,13 +36,13 @@ export interface GetPredictedTimeseriesResponse {
  */
 export interface PredictedYield {
     /**
-     * @generated from protobuf field: int64 yield_kw = 1;
+     * @generated from protobuf field: int32 yield_kw = 1;
      */
-    yieldKw: bigint;
+    yieldKw: number;
     /**
-     * @generated from protobuf field: int64 timestamp_unix = 2;
+     * @generated from protobuf field: int32 timestamp_unix = 2;
      */
-    timestampUnix: bigint;
+    timestampUnix: number;
     /**
      * @generated from protobuf field: api.PredictedYieldUncertainty uncertainty = 3;
      */
@@ -53,13 +53,13 @@ export interface PredictedYield {
  */
 export interface PredictedYieldUncertainty {
     /**
-     * @generated from protobuf field: int64 lower_kw = 1;
+     * @generated from protobuf field: int32 lower_kw = 1;
      */
-    lowerKw: bigint;
+    lowerKw: number;
     /**
-     * @generated from protobuf field: int64 upper_kw = 2;
+     * @generated from protobuf field: int32 upper_kw = 2;
      */
-    upperKw: bigint;
+    upperKw: number;
 }
 /**
  * --- GetActualTimeseries -----------------------------------------------------------
@@ -90,13 +90,13 @@ export interface GetActualTimeseriesResponse {
  */
 export interface ActualYield {
     /**
-     * @generated from protobuf field: int64 yield_kw = 1;
+     * @generated from protobuf field: int32 yield_kw = 1;
      */
-    yieldKw: bigint;
+    yieldKw: number;
     /**
-     * @generated from protobuf field: int64 timestamp_unix = 2;
+     * @generated from protobuf field: int32 timestamp_unix = 2;
      */
-    timestampUnix: bigint;
+    timestampUnix: number;
 }
 /**
  * --- GetPredictedCrossSection ------------------------------------------------------
@@ -109,9 +109,9 @@ export interface GetPredictedCrossSectionRequest {
      */
     locationIDs: string[];
     /**
-     * @generated from protobuf field: int64 timestamp_unix = 2;
+     * @generated from protobuf field: int32 timestamp_unix = 2;
      */
-    timestampUnix: bigint;
+    timestampUnix: number;
 }
 /**
  * @generated from protobuf message api.GetPredictedCrossSectionResponse
@@ -135,9 +135,9 @@ export interface PredictedYieldAtLocation {
      */
     locationID: string;
     /**
-     * @generated from protobuf field: int64 yield_kw = 2;
+     * @generated from protobuf field: int32 yield_kw = 2;
      */
-    yieldKw: bigint;
+    yieldKw: number;
     /**
      * @generated from protobuf field: api.PredictedYieldUncertainty uncertainty = 3;
      */
@@ -154,9 +154,9 @@ export interface GetActualCrossSectionRequest {
      */
     locationIDs: string[];
     /**
-     * @generated from protobuf field: int64 timestamp_unix = 2;
+     * @generated from protobuf field: int32 timestamp_unix = 2;
      */
-    timestampUnix: bigint;
+    timestampUnix: number;
 }
 /**
  * @generated from protobuf message api.GetActualCrossSectionResponse
@@ -180,9 +180,9 @@ export interface ActualYieldAtLocation {
      */
     locationID: string;
     /**
-     * @generated from protobuf field: int64 yield_kw = 2;
+     * @generated from protobuf field: int32 yield_kw = 2;
      */
-    yieldKw: bigint;
+    yieldKw: number;
 }
 /**
  * --- GetLocationMetadata -----------------------------------------------------------

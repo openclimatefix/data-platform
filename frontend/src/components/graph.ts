@@ -1,32 +1,36 @@
 import { select  } from "d3-selection";
 import { scaleLinear, scaleTime } from "d3-scale";
 import { timeHour } from "d3-time";
-import { extent } from "d3-array";
 import { axisBottom, axisLeft } from "d3-axis";
-import { line } from "d3-shape";
+import { line, curveMonotoneX } from "d3-shape";
 
-function generateData() {
+import type { GetPredictedTimeseriesResponse, PredictedYield } from "../proto/api";
+
+function generateData(): GetPredictedTimeseriesResponse {
     // Generate data with random y value, and an x value of every hour
     // between two days ago and two days ahead
     var now = new Date();
-    var data = timeHour
-        .every(1)
-        .range(new Date(now.getTime() - 2 * 86400000), new Date(now.getTime() + 2 * 86400000))
+    let allHours: Date[]  = timeHour
+        .range(new Date(now.getTime() - 2 * 86400000), new Date(now.getTime() + 2 * 86400000));
+    var data: PredictedYield[] = allHours
         .map(function(time) {
             return {
-                time: time,
-                value: Math.random() * 100
+                timestampUnix: time.getTime() / 1000,
+                yieldKw: Math.random() * 100
             };
         });
-    return data;
+        return {
+            yields: data,
+            locationID: "generated-location",
+        };
 }
 
 
-function createGraph(target, data) {
+function createGraph(target: string, data: GetPredictedTimeseriesResponse): void {
 
     target = "#" + target;
     
-    // set the dimensions and margins of the graph
+    // Set the dimensions and margins of the graph
     var margin = {top: 30, right: 30, bottom: 30, left: 60},
         width = 600 - margin.left - margin.right,
         height = 300 - margin.top - margin.bottom;
@@ -34,8 +38,8 @@ function createGraph(target, data) {
     // Remove previous graph
     select(target).selectAll("svg").remove();
 
-    // Add svg
-    var svg = select(target)
+    // Create canvas
+    var canvas = select(target)
         .append("svg")
             .attr("width", width + margin.left + margin.right)
             .attr("height", height + margin.top + margin.bottom)
@@ -43,31 +47,35 @@ function createGraph(target, data) {
             .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
     // Add x axis in date format
+    let msUnixTimes: number[] = data.yields.map(y => y.timestampUnix * 1000);
     var x = scaleTime()
-        .domain(extent(data, function(d) { return d.time; }))
+        .domain([new Date(Math.min(...msUnixTimes)), new Date(Math.max(...msUnixTimes))])
         .range([0, width]);
-    svg.append("g")
+    canvas.append("g")
         .attr("transform", "translate(0," + height + ")")
         .attr("class", "axis")
         .call(axisBottom(x));
+
     // Add y axis in number format
+    let yields: number[] = data.yields.map(y => y.yieldKw);
     var y = scaleLinear()
-        .domain(extent(data, function(d) { return d.value; }))
+        .domain([Math.min(...yields), Math.max(...yields)])
         .range([height, 0]);
-    svg.append("g")
+    canvas.append("g")
         .attr("class", "axis")
         .call(axisLeft(y));
 
     // Add the line
-    svg.append("path")
-        .datum(data)
+    const graphline = line<PredictedYield>()
+        .x(d => x(d.timestampUnix * 1000))
+        .y(d => y(d.yieldKw))
+        .curve(curveMonotoneX);
+    canvas.append("path")
+        .datum(data.yields)
         .attr("fill", "none")
         .attr("stroke", "#fe9929")
         .attr("stroke-width", 1.5)
-        .attr("d", line()
-        .x(function(d) { return x(d.time) })
-        .y(function(d) { return y(d.value) })
-    );
+        .attr("d", graphline);
 }
 
 export { createGraph, generateData };

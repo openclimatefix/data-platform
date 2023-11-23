@@ -4,10 +4,6 @@ import 'leaflet-edgebuffer';
 import 'leaflet/dist/leaflet.css';
 import * as protomapsL from 'protomaps-leaflet';
 
-
-import { createGraph, generateData } from './graph.js';
-
-
 function getColor(d) {
     return d > 80 ? '#ffffd4' :
         d > 60 ? '#fed98e' :
