@@ -4,39 +4,24 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-       crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-       crossorigin=""></script>
-    <script src="https://unpkg.com/protomaps-leaflet@latest/dist/protomaps-leaflet.min.js"></script>
-    <script src="https://d3js.org/d3.v4.js"></script>
-    <script src="src/plugins/leaflet-ajax.min.js"></script>
-    <script src="src/plugins/leaflet-edgebuffer.js"></script>
-    <link rel="stylesheet" href="style.css" type="text/css">
+    <link rel="stylesheet" href="src/global.css" type="text/css">
+    <script src="src/main.js" type="module"></script>
     <title>Quertz Seler</title>
   </head>
   <body>
-    <div id="appbar" style="position: fixed; top: 0; width: 100%; height: 40px; background: #2D2D2D;">
-      <h3>Quertz Seler</h3>
-    </div>
-    <div id="app">
-      <div>
-        <div style="width: 100%">
-          <div style="float:left; width: 50%;">
-            <div id="national-graph" style="width: 600px; height: 300px;"></div>
-            </br>
-            <div id="graph" style="width: 600px; height: 300px;"></div>
-            <script src="src/js/graph.js" type="module"></script>
-          </div>
-          <div style="float:right;">
-            <div id="map" style="width: 600px; height: 750px; background: black;"></div>
-            <script src="src/js/map.js" type="module"></script>
-          </div>
-        </div>
-        <div style="clear:both"></div>
+    <div class="grid">
+      <div class="appbar">
+        <h3>Quertz Seler</h3>
       </div>
+      <div class="graphs">
+        <div id="national-graph" style="height: 300px;"></div>
+        </br>
+        <div id="regional-graph" style="height: 300px;"></div>
+      </div>
+      <div class="map">
+        <div id="map-container" style="height: 750px; width: 600px; background: black;"></div>
+      </div>
+      <div class="footer"></div>
     </div>
   </body>
 </html>

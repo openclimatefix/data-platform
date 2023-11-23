@@ -1,0 +1,109 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  place-items: center;
+  min-height: 100vh;
+  background-color: #000000;
+}
+
+/* Default to a column layout for small screens */
+.grid {
+  display: grid;
+  gap: 4px;
+  grid-template-areas:
+    'appbar'
+    'national'
+    'regional'
+    'local'
+    'map'
+    'footer';
+}
+
+/* Switch to a row layout for larger screens */
+@media (min-width: 600px) {
+  .grid {
+    display: grid;
+    background-color: #000000;
+    justify-content: center;
+    justify-items: center;
+    gap: 4px;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 60px 1fr 60px;
+    grid-template-areas:
+      'appbar   appbar'
+      'graphs   map'
+      'footer   footer';
+  }
+}
+
+.appbar {
+  grid-area: appbar;
+  align-items: center;
+  background-color: #242424;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-bottom: 1px solid #fff;
+  justify-self: stretch;
+}
+
+.graphs {
+  grid-area: graphs;
+}
+
+.map {
+  grid-area: map;
+}
+
+.footer {
+  grid-area: footer;
+}
+
+/* --- D3 ------------------------------------------------ */
+axis line{
+  stroke: #ffffff; 
+}
+.axis text{fill: #ffffff; }
+.axis path{stroke: #ffffff; }
+
+
+/* --- Leaflet -------------------------------------------- */
+.legend {
+    line-height: 18px;
+    padding: 6px 8px;
+    color: #555;
+    background: white;
+    border-radius: 5px;
+}
+/* Define the look of the color boxes in the legend */
+.legend i {
+    width: 18px;
+    height: 18px;
+    float: left;
+    margin-right: 8px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    opacity: 0.7;
+}
+.info {
+    padding: 6px 8px;
+    font: 14px/16px Arial, Helvetica, sans-serif;
+    background: white;
+    background: rgba(255,255,255,0.8);
+    color: #000000;
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    border-radius: 5px;
+}
