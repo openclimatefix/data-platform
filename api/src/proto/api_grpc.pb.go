@@ -22,15 +22,24 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type QuartzAPIClient interface {
-	// Get a set of Predicted Yields as a timeseries per location
+	// GetPredictedTimeseriesRequest is a request for a set of predicted yields for one or more locations.
+	// The response is a stream of GetPredictedTimeseriesResponse messages.
+	// each containing the predicted yields for a single location.
 	GetPredictedTimeseries(ctx context.Context, in *GetPredictedTimeseriesRequest, opts ...grpc.CallOption) (QuartzAPI_GetPredictedTimeseriesClient, error)
-	// Get a set of Actual Yields as a timeseries per location
+	// GetActualTimeseriesRequest is a request for a set of actual yields for one or more locations.
+	// The response is a stream of GetActualTimeseriesResponse messages.
+	// each containing the actual yields for a single location.
 	GetActualTimeseries(ctx context.Context, in *GetActualTimeseriesRequest, opts ...grpc.CallOption) (QuartzAPI_GetActualTimeseriesClient, error)
-	// Get the predicted yield for a single timestamp across a set of locations
+	// GetPredictedCrossSectionRequest is a request for a specific predicted yield for one or more locations
+	// at a single timestamp. The response is a GetPredictedCrossSectionResponse message containing the
+	// predicted yields for each location.
 	GetActualCrossSection(ctx context.Context, in *GetActualCrossSectionRequest, opts ...grpc.CallOption) (*GetActualCrossSectionResponse, error)
-	// Get the actual yield for a single timestamp across a set of locations
+	// GetActualCrossSectionRequest is a request for a specific actual yield for one or more locations
+	// at a single timestamp. The response is a GetActualCrossSectionResponse message containing the
+	// actual yields for each location.
 	GetPredictedCrossSection(ctx context.Context, in *GetPredictedCrossSectionRequest, opts ...grpc.CallOption) (*GetPredictedCrossSectionResponse, error)
-	// Get the metadata for a single location
+	// GetLocationMetadataRequest is a request for the metadata for a single location.
+	// The response is a GetLocationMetadataResponse message containing the metadata for the location.
 	GetLocationMetadata(ctx context.Context, in *GetLocationMetadataRequest, opts ...grpc.CallOption) (*GetLocationMetadataResponse, error)
 }
 
@@ -137,15 +146,24 @@ func (c *quartzAPIClient) GetLocationMetadata(ctx context.Context, in *GetLocati
 // All implementations must embed UnimplementedQuartzAPIServer
 // for forward compatibility
 type QuartzAPIServer interface {
-	// Get a set of Predicted Yields as a timeseries per location
+	// GetPredictedTimeseriesRequest is a request for a set of predicted yields for one or more locations.
+	// The response is a stream of GetPredictedTimeseriesResponse messages.
+	// each containing the predicted yields for a single location.
 	GetPredictedTimeseries(*GetPredictedTimeseriesRequest, QuartzAPI_GetPredictedTimeseriesServer) error
-	// Get a set of Actual Yields as a timeseries per location
+	// GetActualTimeseriesRequest is a request for a set of actual yields for one or more locations.
+	// The response is a stream of GetActualTimeseriesResponse messages.
+	// each containing the actual yields for a single location.
 	GetActualTimeseries(*GetActualTimeseriesRequest, QuartzAPI_GetActualTimeseriesServer) error
-	// Get the predicted yield for a single timestamp across a set of locations
+	// GetPredictedCrossSectionRequest is a request for a specific predicted yield for one or more locations
+	// at a single timestamp. The response is a GetPredictedCrossSectionResponse message containing the
+	// predicted yields for each location.
 	GetActualCrossSection(context.Context, *GetActualCrossSectionRequest) (*GetActualCrossSectionResponse, error)
-	// Get the actual yield for a single timestamp across a set of locations
+	// GetActualCrossSectionRequest is a request for a specific actual yield for one or more locations
+	// at a single timestamp. The response is a GetActualCrossSectionResponse message containing the
+	// actual yields for each location.
 	GetPredictedCrossSection(context.Context, *GetPredictedCrossSectionRequest) (*GetPredictedCrossSectionResponse, error)
-	// Get the metadata for a single location
+	// GetLocationMetadataRequest is a request for the metadata for a single location.
+	// The response is a GetLocationMetadataResponse message containing the metadata for the location.
 	GetLocationMetadata(context.Context, *GetLocationMetadataRequest) (*GetLocationMetadataResponse, error)
 	mustEmbedUnimplementedQuartzAPIServer()
 }

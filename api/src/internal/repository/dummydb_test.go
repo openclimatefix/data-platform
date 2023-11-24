@@ -56,5 +56,13 @@ func TestGetPredictedYieldsForLocation(t *testing.T) {
 	out, err := testClient.GetPredictedYieldsForLocation(locID)
     require.NoError(t, err)
 	require.NotNil(t, out)
+}
 
+func TestGetPredictedYieldForLocations(t *testing.T) {
+
+	locIDs := []string{"test-id", "test-id2"}
+	ti := time.Now().Unix()
+	out, err := testClient.GetPredictedYieldForLocations(locIDs, ti)
+	require.NoError(t, err)
+	require.NotNil(t, out)
 }

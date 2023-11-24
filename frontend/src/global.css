@@ -1,6 +1,5 @@
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
@@ -16,15 +15,17 @@
 
 body {
   margin: 0;
+  padding: 0;
   place-items: center;
-  min-height: 100vh;
+  height: 100vh;
   background-color: #000000;
 }
 
 /* Default to a column layout for small screens */
 .grid {
   display: grid;
-  gap: 4px;
+  height: 100vh;
+  gap: 12px;
   grid-template-areas:
     'appbar'
     'national'
@@ -43,7 +44,7 @@ body {
     justify-items: center;
     gap: 4px;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: 60px 1fr 60px;
+    grid-template-rows: 1fr 10fr 1fr;
     grid-template-areas:
       'appbar   appbar'
       'graphs   map'
@@ -59,6 +60,7 @@ body {
   letter-spacing: 0.1em;
   border-bottom: 1px solid #fff;
   justify-self: stretch;
+  padding: 0 12px 0 12px;
 }
 
 .graphs {

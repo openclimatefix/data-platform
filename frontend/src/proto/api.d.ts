@@ -40,9 +40,9 @@ export interface PredictedYield {
      */
     yieldKw: number;
     /**
-     * @generated from protobuf field: int32 timestamp_unix = 2;
+     * @generated from protobuf field: int64 timestamp_unix = 2;
      */
-    timestampUnix: number;
+    timestampUnix: bigint;
     /**
      * @generated from protobuf field: api.PredictedYieldUncertainty uncertainty = 3;
      */
@@ -94,9 +94,9 @@ export interface ActualYield {
      */
     yieldKw: number;
     /**
-     * @generated from protobuf field: int32 timestamp_unix = 2;
+     * @generated from protobuf field: int64 timestamp_unix = 2;
      */
-    timestampUnix: number;
+    timestampUnix: bigint;
 }
 /**
  * --- GetPredictedCrossSection ------------------------------------------------------
@@ -109,9 +109,9 @@ export interface GetPredictedCrossSectionRequest {
      */
     locationIDs: string[];
     /**
-     * @generated from protobuf field: int32 timestamp_unix = 2;
+     * @generated from protobuf field: int64 timestamp_unix = 2;
      */
-    timestampUnix: number;
+    timestampUnix: bigint;
 }
 /**
  * @generated from protobuf message api.GetPredictedCrossSectionResponse
@@ -154,9 +154,9 @@ export interface GetActualCrossSectionRequest {
      */
     locationIDs: string[];
     /**
-     * @generated from protobuf field: int32 timestamp_unix = 2;
+     * @generated from protobuf field: int64 timestamp_unix = 2;
      */
-    timestampUnix: number;
+    timestampUnix: bigint;
 }
 /**
  * @generated from protobuf message api.GetActualCrossSectionResponse

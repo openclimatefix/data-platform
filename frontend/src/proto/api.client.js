@@ -14,7 +14,9 @@ export class QuartzAPIClient {
         this.options = QuartzAPI.options;
     }
     /**
-     * Get a set of Predicted Yields as a timeseries per location
+     * GetPredictedTimeseriesRequest is a request for a set of predicted yields for one or more locations.
+     * The response is a stream of GetPredictedTimeseriesResponse messages.
+     * each containing the predicted yields for a single location.
      *
      * @generated from protobuf rpc: GetPredictedTimeseries(api.GetPredictedTimeseriesRequest) returns (stream api.GetPredictedTimeseriesResponse);
      */
@@ -23,7 +25,9 @@ export class QuartzAPIClient {
         return stackIntercept("serverStreaming", this._transport, method, opt, input);
     }
     /**
-     * Get a set of Actual Yields as a timeseries per location
+     * GetActualTimeseriesRequest is a request for a set of actual yields for one or more locations.
+     * The response is a stream of GetActualTimeseriesResponse messages.
+     * each containing the actual yields for a single location.
      *
      * @generated from protobuf rpc: GetActualTimeseries(api.GetActualTimeseriesRequest) returns (stream api.GetActualTimeseriesResponse);
      */
@@ -32,7 +36,9 @@ export class QuartzAPIClient {
         return stackIntercept("serverStreaming", this._transport, method, opt, input);
     }
     /**
-     * Get the predicted yield for a single timestamp across a set of locations
+     * GetPredictedCrossSectionRequest is a request for a specific predicted yield for one or more locations
+     * at a single timestamp. The response is a GetPredictedCrossSectionResponse message containing the
+     * predicted yields for each location.
      *
      * @generated from protobuf rpc: GetActualCrossSection(api.GetActualCrossSectionRequest) returns (api.GetActualCrossSectionResponse);
      */
@@ -41,7 +47,9 @@ export class QuartzAPIClient {
         return stackIntercept("unary", this._transport, method, opt, input);
     }
     /**
-     * Get the actual yield for a single timestamp across a set of locations
+     * GetActualCrossSectionRequest is a request for a specific actual yield for one or more locations
+     * at a single timestamp. The response is a GetActualCrossSectionResponse message containing the
+     * actual yields for each location.
      *
      * @generated from protobuf rpc: GetPredictedCrossSection(api.GetPredictedCrossSectionRequest) returns (api.GetPredictedCrossSectionResponse);
      */
@@ -50,7 +58,8 @@ export class QuartzAPIClient {
         return stackIntercept("unary", this._transport, method, opt, input);
     }
     /**
-     * Get the metadata for a single location
+     * GetLocationMetadataRequest is a request for the metadata for a single location.
+     * The response is a GetLocationMetadataResponse message containing the metadata for the location.
      *
      * @generated from protobuf rpc: GetLocationMetadata(api.GetLocationMetadataRequest) returns (api.GetLocationMetadataResponse);
      */

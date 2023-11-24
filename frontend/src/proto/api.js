@@ -138,12 +138,12 @@ class PredictedYield$Type extends MessageType {
     constructor() {
         super("api.PredictedYield", [
             { no: 1, name: "yield_kw", kind: "scalar", T: 5 /*ScalarType.INT32*/ },
-            { no: 2, name: "timestamp_unix", kind: "scalar", T: 5 /*ScalarType.INT32*/ },
+            { no: 2, name: "timestamp_unix", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ },
             { no: 3, name: "uncertainty", kind: "message", T: () => PredictedYieldUncertainty }
         ]);
     }
     create(value) {
-        const message = { yieldKw: 0, timestampUnix: 0 };
+        const message = { yieldKw: 0, timestampUnix: 0n };
         globalThis.Object.defineProperty(message, MESSAGE_TYPE, { enumerable: false, value: this });
         if (value !== undefined)
             reflectionMergePartial(this, message, value);
@@ -157,8 +157,8 @@ class PredictedYield$Type extends MessageType {
                 case /* int32 yield_kw */ 1:
                     message.yieldKw = reader.int32();
                     break;
-                case /* int32 timestamp_unix */ 2:
-                    message.timestampUnix = reader.int32();
+                case /* int64 timestamp_unix */ 2:
+                    message.timestampUnix = reader.int64().toBigInt();
                     break;
                 case /* api.PredictedYieldUncertainty uncertainty */ 3:
                     message.uncertainty = PredictedYieldUncertainty.internalBinaryRead(reader, reader.uint32(), options, message.uncertainty);
@@ -178,9 +178,9 @@ class PredictedYield$Type extends MessageType {
         /* int32 yield_kw = 1; */
         if (message.yieldKw !== 0)
             writer.tag(1, WireType.Varint).int32(message.yieldKw);
-        /* int32 timestamp_unix = 2; */
-        if (message.timestampUnix !== 0)
-            writer.tag(2, WireType.Varint).int32(message.timestampUnix);
+        /* int64 timestamp_unix = 2; */
+        if (message.timestampUnix !== 0n)
+            writer.tag(2, WireType.Varint).int64(message.timestampUnix);
         /* api.PredictedYieldUncertainty uncertainty = 3; */
         if (message.uncertainty)
             PredictedYieldUncertainty.internalBinaryWrite(message.uncertainty, writer.tag(3, WireType.LengthDelimited).fork(), options).join();
@@ -354,11 +354,11 @@ class ActualYield$Type extends MessageType {
     constructor() {
         super("api.ActualYield", [
             { no: 1, name: "yield_kw", kind: "scalar", T: 5 /*ScalarType.INT32*/ },
-            { no: 2, name: "timestamp_unix", kind: "scalar", T: 5 /*ScalarType.INT32*/ }
+            { no: 2, name: "timestamp_unix", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ }
         ]);
     }
     create(value) {
-        const message = { yieldKw: 0, timestampUnix: 0 };
+        const message = { yieldKw: 0, timestampUnix: 0n };
         globalThis.Object.defineProperty(message, MESSAGE_TYPE, { enumerable: false, value: this });
         if (value !== undefined)
             reflectionMergePartial(this, message, value);
@@ -372,8 +372,8 @@ class ActualYield$Type extends MessageType {
                 case /* int32 yield_kw */ 1:
                     message.yieldKw = reader.int32();
                     break;
-                case /* int32 timestamp_unix */ 2:
-                    message.timestampUnix = reader.int32();
+                case /* int64 timestamp_unix */ 2:
+                    message.timestampUnix = reader.int64().toBigInt();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -390,9 +390,9 @@ class ActualYield$Type extends MessageType {
         /* int32 yield_kw = 1; */
         if (message.yieldKw !== 0)
             writer.tag(1, WireType.Varint).int32(message.yieldKw);
-        /* int32 timestamp_unix = 2; */
-        if (message.timestampUnix !== 0)
-            writer.tag(2, WireType.Varint).int32(message.timestampUnix);
+        /* int64 timestamp_unix = 2; */
+        if (message.timestampUnix !== 0n)
+            writer.tag(2, WireType.Varint).int64(message.timestampUnix);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -408,11 +408,11 @@ class GetPredictedCrossSectionRequest$Type extends MessageType {
     constructor() {
         super("api.GetPredictedCrossSectionRequest", [
             { no: 1, name: "locationIDs", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "timestamp_unix", kind: "scalar", T: 5 /*ScalarType.INT32*/ }
+            { no: 2, name: "timestamp_unix", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ }
         ]);
     }
     create(value) {
-        const message = { locationIDs: [], timestampUnix: 0 };
+        const message = { locationIDs: [], timestampUnix: 0n };
         globalThis.Object.defineProperty(message, MESSAGE_TYPE, { enumerable: false, value: this });
         if (value !== undefined)
             reflectionMergePartial(this, message, value);
@@ -426,8 +426,8 @@ class GetPredictedCrossSectionRequest$Type extends MessageType {
                 case /* repeated string locationIDs */ 1:
                     message.locationIDs.push(reader.string());
                     break;
-                case /* int32 timestamp_unix */ 2:
-                    message.timestampUnix = reader.int32();
+                case /* int64 timestamp_unix */ 2:
+                    message.timestampUnix = reader.int64().toBigInt();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -444,9 +444,9 @@ class GetPredictedCrossSectionRequest$Type extends MessageType {
         /* repeated string locationIDs = 1; */
         for (let i = 0; i < message.locationIDs.length; i++)
             writer.tag(1, WireType.LengthDelimited).string(message.locationIDs[i]);
-        /* int32 timestamp_unix = 2; */
-        if (message.timestampUnix !== 0)
-            writer.tag(2, WireType.Varint).int32(message.timestampUnix);
+        /* int64 timestamp_unix = 2; */
+        if (message.timestampUnix !== 0n)
+            writer.tag(2, WireType.Varint).int64(message.timestampUnix);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -577,11 +577,11 @@ class GetActualCrossSectionRequest$Type extends MessageType {
     constructor() {
         super("api.GetActualCrossSectionRequest", [
             { no: 1, name: "locationIDs", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
-            { no: 2, name: "timestamp_unix", kind: "scalar", T: 5 /*ScalarType.INT32*/ }
+            { no: 2, name: "timestamp_unix", kind: "scalar", T: 3 /*ScalarType.INT64*/, L: 0 /*LongType.BIGINT*/ }
         ]);
     }
     create(value) {
-        const message = { locationIDs: [], timestampUnix: 0 };
+        const message = { locationIDs: [], timestampUnix: 0n };
         globalThis.Object.defineProperty(message, MESSAGE_TYPE, { enumerable: false, value: this });
         if (value !== undefined)
             reflectionMergePartial(this, message, value);
@@ -595,8 +595,8 @@ class GetActualCrossSectionRequest$Type extends MessageType {
                 case /* repeated string locationIDs */ 1:
                     message.locationIDs.push(reader.string());
                     break;
-                case /* int32 timestamp_unix */ 2:
-                    message.timestampUnix = reader.int32();
+                case /* int64 timestamp_unix */ 2:
+                    message.timestampUnix = reader.int64().toBigInt();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -613,9 +613,9 @@ class GetActualCrossSectionRequest$Type extends MessageType {
         /* repeated string locationIDs = 1; */
         for (let i = 0; i < message.locationIDs.length; i++)
             writer.tag(1, WireType.LengthDelimited).string(message.locationIDs[i]);
-        /* int32 timestamp_unix = 2; */
-        if (message.timestampUnix !== 0)
-            writer.tag(2, WireType.Varint).int32(message.timestampUnix);
+        /* int64 timestamp_unix = 2; */
+        if (message.timestampUnix !== 0n)
+            writer.tag(2, WireType.Varint).int64(message.timestampUnix);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);

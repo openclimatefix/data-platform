@@ -5,16 +5,24 @@ option go_package = "github.com/openclimatefix/api/src/proto";
 package api;
 
 service QuartzAPI {
-  // Get a set of Predicted Yields as a timeseries per location
+  /* GetPredictedTimeseriesRequest is a request for a set of predicted yields for one or more locations.
+   * The response is a stream of GetPredictedTimeseriesResponse messages.
+   * each containing the predicted yields for a single location. */
   rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesResponse) {}
-  // Get a set of Actual Yields as a timeseries per location
+  /* GetActualTimeseriesRequest is a request for a set of actual yields for one or more locations.
+   * The response is a stream of GetActualTimeseriesResponse messages.
+   * each containing the actual yields for a single location. */
   rpc GetActualTimeseries(GetActualTimeseriesRequest) returns (stream GetActualTimeseriesResponse) {}
-  // Get the predicted yield for a single timestamp across a set of locations
+  /* GetPredictedCrossSectionRequest is a request for a specific predicted yield for one or more locations
+   * at a single timestamp. The response is a GetPredictedCrossSectionResponse message containing the
+   * predicted yields for each location. */
   rpc GetActualCrossSection(GetActualCrossSectionRequest) returns (GetActualCrossSectionResponse) {}
-  // Get the actual yield for a single timestamp across a set of locations
+  /* GetActualCrossSectionRequest is a request for a specific actual yield for one or more locations
+   * at a single timestamp. The response is a GetActualCrossSectionResponse message containing the
+   * actual yields for each location. */
   rpc GetPredictedCrossSection(GetPredictedCrossSectionRequest) returns (GetPredictedCrossSectionResponse) {}
-
-  // Get the metadata for a single location
+  /* GetLocationMetadataRequest is a request for the metadata for a single location.
+   * The response is a GetLocationMetadataResponse message containing the metadata for the location. */
   rpc GetLocationMetadata(GetLocationMetadataRequest) returns (GetLocationMetadataResponse) {}
 }
 
@@ -30,7 +38,7 @@ message GetPredictedTimeseriesResponse {
 
 message PredictedYield {
   int32 yield_kw = 1;
-  int32 timestamp_unix = 2;
+  int64 timestamp_unix = 2;
   PredictedYieldUncertainty uncertainty = 3;
 }
 
@@ -51,13 +59,13 @@ message GetActualTimeseriesResponse {
 
 message ActualYield {
   int32 yield_kw = 1;
-  int32 timestamp_unix = 2;
+  int64 timestamp_unix = 2;
 }
 
 // --- GetPredictedCrossSection ------------------------------------------------------
 message GetPredictedCrossSectionRequest {
   repeated string locationIDs = 1;
-  int32 timestamp_unix = 2;
+  int64 timestamp_unix = 2;
 }
 
 message GetPredictedCrossSectionResponse {
@@ -74,7 +82,7 @@ message PredictedYieldAtLocation {
 // --- GetActualCrossSection ---------------------------------------------------------
 message GetActualCrossSectionRequest {
   repeated string locationIDs = 1;
-  int32 timestamp_unix = 2;
+  int64 timestamp_unix = 2;
 }
 
 message GetActualCrossSectionResponse {
@@ -125,7 +133,4 @@ message NationLocationMetadata {
   string nationName = 1;
   string capacity_kw = 2;
 }
-
-
-
 
