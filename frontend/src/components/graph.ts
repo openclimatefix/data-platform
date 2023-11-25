@@ -52,49 +52,73 @@ function createGraph(target: string, data: GetPredictedTimeseriesResponse): void
     target = "#" + target;
 
     // Set the dimensions and margins of the graph
-    var margin = {top: 30, right: 30, bottom: 30, left: 60},
-        width = 600 - margin.left - margin.right,
-        height = 300 - margin.top - margin.bottom;
+    var margin = {top: 30, right: 12, bottom: 30, left: 60};
 
     // Remove previous graph
     select(target).selectAll("svg").remove();
 
-    // Create canvas
+
+
+    // Create svg canvas (container)
     var canvas = select(target)
         .append("svg")
-            .attr("width", width + margin.left + margin.right)
-            .attr("height", height + margin.top + margin.bottom)
-        .append("g")
-            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+            .attr("width", '100%')
+            .attr("height", '100%')
+            .attr("viewbox", [0, 0, "100%", "100%"])
+            .attr("preserveAspectRatio", "xMinYMin meet")
+    
+    // Get the width and height of the canvas
+    var width = 600;
+    var height = 300;
+    var node = canvas.node();
+    if (node) {
+        width = node.getBoundingClientRect().width;
+        height = node.getBoundingClientRect().height;
+    }
 
-    // Add x axis in date format
+    // Declate the x axis
     let msUnixTimes: number[] = data.yields.map(y => Number(y.timestampUnix) * 1000);
-    var x = scaleTime()
+    const x = scaleTime()
         .domain([new Date(Math.min(...msUnixTimes)), new Date(Math.max(...msUnixTimes))])
-        .range([0, width]);
-    canvas.append("g")
-        .attr("transform", "translate(0," + height + ")")
-        .attr("class", "axis")
-        .call(axisBottom(x));
-
-    // Add y axis in number format
+        .range([margin.left, width-margin.right]);
+    // Decalre the y axis
     let yields: number[] = data.yields.map(y => y.yieldKw);
-    var y = scaleLinear()
+    const y = scaleLinear()
         .domain([Math.min(...yields), Math.max(...yields)])
-        .range([height, 0]);
+        .range([height - margin.bottom, margin.top]);
+    // Add x axis
     canvas.append("g")
+        .attr("transform", `translate(0,${height - margin.bottom})`)
         .attr("class", "axis")
-        .call(axisLeft(y));
+        .call(axisBottom(x).tickSizeOuter(0));
 
-    // Add the line
+    // Add y axis
+    canvas.append("g")
+        .attr("transform", `translate(${margin.left},0)`)
+        .attr("class", "axis")
+        .call(axisLeft(y))
+        .call(g => g.select(".domain").remove())
+        .call(g => g.selectAll(".tick line").clone()
+            .attr("x2", width - margin.left - margin.right)
+            .attr("stroke-opacity", 0.3))
+        .call(g => g.append("text")
+            .attr("text-anchor", "start")
+            .attr("x", -margin.left)
+            .attr("y", 10)
+            .attr("fill", "currentColor")
+            .text("↑ Yield (kW)"));
+
+    // Create the line generator
     const graphline = line<PredictedYield>()
         .x(d => x(Number(d.timestampUnix) * 1000))
         .y(d => y(d.yieldKw))
         .curve(curveMonotoneX);
+
+    // Add the line
     canvas.append("path")
         .datum(data.yields)
         .attr("fill", "none")
-        .attr("stroke", "#fe9929")
+        .attr("stroke", "#ccc")
         .attr("stroke-width", 1.5)
         .attr("d", graphline);
 }

@@ -172,7 +172,7 @@ class UKMap extends Map {
         // Add the PMTiles layer
         this.pmtilesLayer = leafletLayer({
             url: '/uk-gsp.pmtiles',
-            edgeBufferTiles: 1,
+            edgeBufferTiles: 2,
             paint_rules: [
                 {
                     dataLayer: "gspregions",

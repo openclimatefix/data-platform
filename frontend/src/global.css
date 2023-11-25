@@ -13,7 +13,7 @@
   -webkit-text-size-adjust: 100%;
 }
 
-body {
+body, html {
   margin: 0;
   padding: 0;
   place-items: center;
@@ -24,8 +24,8 @@ body {
 /* Default to a column layout for small screens */
 .grid {
   display: grid;
-  height: 100vh;
   gap: 12px;
+  height: 100%;
   grid-template-areas:
     'appbar'
     'national'
@@ -42,13 +42,13 @@ body {
     background-color: #000000;
     justify-content: center;
     justify-items: center;
+    height: 100vh;
     gap: 4px;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 10fr 1fr;
+    grid-template-rows: 1fr 15fr;
     grid-template-areas:
       'appbar   appbar'
       'graphs   map'
-      'footer   footer';
   }
 }
 
@@ -65,14 +65,13 @@ body {
 
 .graphs {
   grid-area: graphs;
+  width: 100%;
 }
 
 .map {
   grid-area: map;
-}
-
-.footer {
-  grid-area: footer;
+  height: 100%;
+  width: 100%;
 }
 
 /* --- D3 ------------------------------------------------ */
