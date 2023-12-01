@@ -4,6 +4,7 @@ import (
 	"log"
 	"testing"
 	"time"
+	"math"
 
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -37,13 +38,12 @@ func Plot(pts plotter.XYs) {
 }
 
 func TestBasicYieldFunc(t *testing.T) {
-	windowStart := time.Now().Add(-time.Hour * 48).Truncate(time.Hour * 24)
-	windowEnd := time.Now().Add(time.Hour * 48).Truncate(time.Hour * 24)
-	numMins := windowEnd.Sub(windowStart).Hours() * 60
+	windowStart, windowEnd := getWindow()
+	numSteps := int(math.Floor(float64(windowEnd.Sub(windowStart) / step)))
 
-	pts := make(plotter.XYs, int(numMins))
+	pts := make(plotter.XYs, numSteps)
 	for i := range pts {
-		ti := windowStart.Add(time.Minute * time.Duration(i))
+		ti := windowStart.Add(time.Duration(i) * step)
 
 		pts[i].X = float64(ti.Unix())
 		pts[i].Y = BasicYieldFunc(ti.Unix(), 10000.0).Yield

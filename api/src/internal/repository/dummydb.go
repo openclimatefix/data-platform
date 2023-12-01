@@ -8,10 +8,20 @@ import (
 	"github.com/openclimatefix/api/src/internal"
 )
 
+// step defines the time step of the timeseries data
+const step = time.Duration(5 * time.Minute)
+
 type FakeYield struct {
 	Yield float64
 	ErrLow float64
 	ErrHigh float64
+}
+
+/// getWindow returns the start and end of the window for the timeseries data.
+func getWindow() (time.Time, time.Time) {
+	windowStart := time.Now().Add(-time.Hour * 48).Truncate(time.Hour * 24)
+	windowEnd := time.Now().Add(time.Hour * 48).Truncate(time.Hour * 24)
+	return windowStart, windowEnd
 }
 
 /// BasicYieldFunc returns a fake yield value for a given time and scale factor.
@@ -86,13 +96,15 @@ func (*DummyClient) GetActualYieldForLocations(locIDs []string, timeUnix int64) 
 
 // GetActualYieldsForLocation implements main.DatabaseService.
 func (*DummyClient) GetActualYieldsForLocation(locID string) ([]internal.DBActualYield, error) {
-	windowStart := time.Now().Add(-time.Hour * 48).Truncate(time.Hour * 24)
-	windowEnd := time.Now().Add(time.Hour * 48).Truncate(time.Hour * 24)
-	numMins := windowEnd.Sub(windowStart).Hours() * 60
+	windowStart, windowEnd := getWindow()
+	numSteps := int(math.Floor(float64(windowEnd.Sub(windowStart) / step)))
 
-	yields := make([]internal.DBActualYield, int(numMins))
+	yields := make([]internal.DBActualYield, numSteps)
 	for i := range yields {
-		ti := windowStart.Add(((time.Hour * 60) + time.Minute) * time.Duration(i))
+		// Note that this is not a mathematical multiplication of two durations,
+		// but rather a conversion of the integer i to a duration type in order
+		// for Go to allow it to be multiplied by step, which is a duration type.
+		ti := windowStart.Add(time.Duration(i) * step)
 		yields[i] = internal.DBActualYield{
 			TimeUnix: ti.Unix(),
 			YieldKW:  int(BasicYieldFunc(ti.Unix(), 10000.0).Yield),
@@ -120,13 +132,15 @@ func (*DummyClient) GetPredictedYieldForLocations(locIDs []string, timeUnix int6
 }
 
 func (*DummyClient) GetPredictedYieldsForLocation(locID string) ([]internal.DBPredictedYield, error) {
-	windowStart := time.Now().Add(-time.Hour * 48).Truncate(time.Hour * 24)
-	windowEnd := time.Now().Add(time.Hour * 48).Truncate(time.Hour * 24)
-	numHours := windowEnd.Sub(windowStart).Hours()
+	windowStart, windowEnd := getWindow()
+	numSteps := int(math.Floor(float64(windowEnd.Sub(windowStart) / step)))
 
-	yields := make([]internal.DBPredictedYield, int(numHours))
+	yields := make([]internal.DBPredictedYield, int(numSteps))
 	for i := range yields {
-		ti := windowStart.Add(((time.Hour * 60) + time.Minute) * time.Duration(i))
+		// Note that this is not a mathematical multiplication of two durations,
+		// but rather a conversion of the integer i to a duration type in order
+		// for Go to allow it to be multiplied by step, which is a duration type.
+		ti := windowStart.Add(time.Duration(i) * step)
 		yield := BasicYieldFunc(ti.Unix(), 10000.0)
 		yields[i] = internal.DBPredictedYield{
 			TimeUnix: windowStart.Add(time.Hour * time.Duration(i)).Unix(),
