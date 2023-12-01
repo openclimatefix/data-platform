@@ -25,9 +25,11 @@
     "d3-selection": "^3.0.0",
     "d3-shape": "^3.2.0",
     "d3-time": "^3.1.0",
+    "events": "^3.3.0",
     "leaflet": "^1.9.4",
     "leaflet-edgebuffer": "^1.0.6",
     "node-fetch": "^3.3.2",
-    "protomaps-leaflet": "^1.24.0"
+    "protomaps-leaflet": "^1.24.0",
+    "tiny-typed-emitter": "^2.1.0"
   }
 }

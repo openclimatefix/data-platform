@@ -57,8 +57,6 @@ function createGraph(target: string, data: GetPredictedTimeseriesResponse): void
     // Remove previous graph
     select(target).selectAll("svg").remove();
 
-
-
     // Create svg canvas (container)
     var canvas = select(target)
         .append("svg")

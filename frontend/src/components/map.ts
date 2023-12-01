@@ -11,6 +11,8 @@ import { leafletLayer, PolygonSymbolizer } from 'protomaps-leaflet';
 import type { PaintSymbolizer, Feature as PLFeature } from 'protomaps-leaflet';
 import type { GeoJsonProperties, Feature } from 'geojson';
 
+import { TypedEmitter } from 'tiny-typed-emitter';
+import { AppEvents } from './events';
 import { UKGSPs } from './geojsons';
 import { GetPredictedCrossSectionResponse } from '../proto/api';
 
@@ -150,8 +152,9 @@ class UKMap extends Map {
     
     private infoControl: Info
     private pmtilesLayer: any
+    private emitter: TypedEmitter<AppEvents>
 
-    constructor(element: string | HTMLElement, options?: MapOptions) {
+    constructor(element: string | HTMLElement, emitter: TypedEmitter<AppEvents>, options?: MapOptions) {
         // Set the default options
         if (options == null) {
             options = {
@@ -162,7 +165,11 @@ class UKMap extends Map {
                 maxBounds: new LatLngBounds(new LatLng(49.5, -11.5), new LatLng(60.5, 2.5))
             }
         }
+        // Create the map with the passed in options
         super(element, options);
+
+        // Set the emitter
+        this.emitter = emitter;
 
         // Add the info and legend controls
         this.infoControl = new Info({ position: 'topright' });
@@ -194,15 +201,15 @@ class UKMap extends Map {
             },
             onEachFeature: this.onEachFeature.bind(this),
         }).addTo(this);
-        
+
         this.setView([54.8, -4], 6);
     }
 
     private onEachFeature(_: Feature, layer: Layer) {
          layer.on({
             click: (e) => {
-                // TODO: Create new map
-                //  onClickFeatureFunc(e.target.feature);
+                // Emit the event
+                this.emitter.emit("region:selected", e.target.feature.properties.GSPs);
                 // Zoom to the region
                 this.fitBounds(e.target.getBounds());
             },
