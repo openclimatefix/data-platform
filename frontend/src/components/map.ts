@@ -158,6 +158,8 @@ class UKMap extends Map {
         // Set the default options
         if (options == null) {
             options = {
+                zoomSnap: 0.5,
+                wheelPxPerZoomLevel: 1,
                 zoomControl: false,
                 attributionControl: false,
                 minZoom: 6,
