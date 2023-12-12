@@ -19,8 +19,8 @@ type FakeYield struct {
 
 /// getWindow returns the start and end of the window for the timeseries data.
 func getWindow() (time.Time, time.Time) {
-	windowStart := time.Now().Add(-time.Hour * 48).Truncate(time.Hour * 24)
-	windowEnd := time.Now().Add(time.Hour * 48).Truncate(time.Hour * 24)
+	windowStart := time.Now().UTC().Add(-time.Hour * 48).Truncate(time.Hour * 24)
+	windowEnd := time.Now().UTC().Add(time.Hour * 48).Truncate(time.Hour * 24)
 	return windowStart, windowEnd
 }
 
@@ -143,7 +143,7 @@ func (*DummyClient) GetPredictedYieldsForLocation(locID string) ([]internal.DBPr
 		ti := windowStart.Add(time.Duration(i) * step)
 		yield := BasicYieldFunc(ti.Unix(), 10000.0)
 		yields[i] = internal.DBPredictedYield{
-			TimeUnix: windowStart.Add(time.Hour * time.Duration(i)).Unix(),
+			TimeUnix: ti.Unix(),
 			YieldKW:  int(yield.Yield),
 			ErrLow:   int(yield.ErrLow),
 			ErrHigh:  int(yield.ErrHigh),

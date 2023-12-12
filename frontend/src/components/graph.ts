@@ -52,10 +52,11 @@ export function generateData(scale?: number): GetPredictedTimeseriesResponse {
  */
 export class TimeseriesGraph {
 
-    private svg: Selection<SVGSVGElement, unknown, HTMLElement, any>; 
-    private x: ScaleTime<number, number, never>;
-    private y: ScaleLinear<number, number, never>;
-    private yAxis: Selection<SVGGElement, unknown, HTMLElement, any>;
+    private svg: Selection<SVGSVGElement, unknown, HTMLElement, any> = select("svg"); 
+    private x: ScaleTime<number, number, never> = scaleTime();
+    private y: ScaleLinear<number, number, never> = scaleLinear();
+    private yAxis: Selection<SVGGElement, unknown, HTMLElement, any> = select("g.y-axis");
+    private line: Selection<SVGPathElement, unknown, HTMLElement, any> = select("path");
     
     margin = {top: 30, right: 12, bottom: 30, left: 60};
     size = {width: 600, height: 300};
@@ -127,6 +128,13 @@ export class TimeseriesGraph {
                 .attr("fill", "currentColor")
             .text("↑ Yield (kW)"))
             .call(axisLeft(this.y).scale(this.y));
+
+        // Append an as yet undrawn path for the data
+        this.line = this.svg.append("path")
+            .attr("class", "line")
+            .attr("fill", "none")
+            .attr("stroke", "#FFAC5F")
+            .attr("stroke-width", 1.5);
     }
 
 
@@ -138,34 +146,27 @@ export class TimeseriesGraph {
      */
     _getWindow(): [Date, Date] {
         var now = new Date();
-        const start = new Date(new Date(now.getTime() - 2 * 86400000).toDateString()); 
-        const end = new Date(new Date(now.getTime() + 2 * 86400000).toDateString());
+        var startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+        const start = new Date(startOfDay.getTime().valueOf() - 2 * 86400 * 1000);
+        const end = new Date(startOfDay.getTime().valueOf() + 2 * 86400 * 1000);
         return [start, end];
     }
 
     update(data: PredictedYield[]) {
     
+        var t = transition().duration(350);
+
         // Update the y axis
         this.y.domain([0, Math.max(...data.map(d => d.yieldKw))]);
-        var t = transition().duration(350);
         this.yAxis.transition(t).call(axisLeft(this.y).scale(this.y));
-
 
         // Create the line generator
         const lineGenerator = line<PredictedYield>()
-            .x(d => this.x(Number(d.timestampUnix) * 1000))
+            .x(d => this.x(new Date(Number(d.timestampUnix) * 1000)))
             .y(d => this.y(d.yieldKw))
             .curve(curveMonotoneX);
 
-        // Create update selection
-        // var u = this.svg.selectAll("path").data([data]).enter().append("path");
-        // Update the line
-        this.svg.append("path")
-            .datum(data)
-            .attr("fill", "none")
-            .attr("stroke", "#FFAC5F")
-            .attr("stroke-width", 1.5)
-            .attr("d", lineGenerator);
+        this.line.attr("d", lineGenerator(data)).transition(t);
     }
 }
 

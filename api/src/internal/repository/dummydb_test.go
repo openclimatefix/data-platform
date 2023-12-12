@@ -48,6 +48,15 @@ func TestBasicYieldFunc(t *testing.T) {
 		pts[i].X = float64(ti.Unix())
 		pts[i].Y = BasicYieldFunc(ti.Unix(), 10000.0).Yield
 	}
+	numZero := 0
+	for i := range pts {
+		require.False(t, math.IsNaN(pts[i].Y))
+		if pts[i].Y == 0 {
+			numZero++
+		}
+	}
+	require.False(t, numZero == numSteps)
+	t.Log(pts[len(pts)-1].X)
 }
 
 func TestGetPredictedYieldsForLocation(t *testing.T) {
@@ -56,6 +65,7 @@ func TestGetPredictedYieldsForLocation(t *testing.T) {
 	out, err := testClient.GetPredictedYieldsForLocation(locID)
     require.NoError(t, err)
 	require.NotNil(t, out)
+	t.Log(out[len(out)-1].TimeUnix)
 }
 
 func TestGetPredictedYieldForLocations(t *testing.T) {
