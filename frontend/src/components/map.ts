@@ -181,6 +181,7 @@ class UKMap extends Map {
         // Add the PMTiles layer
         this.pmtilesLayer = leafletLayer({
             url: '/uk-gsp.pmtiles',
+            // @ts-ignore: Unknown parameter "edgeBufferTiles" from leaflet-edgebuffer
             edgeBufferTiles: 2,
             paint_rules: [
                 {

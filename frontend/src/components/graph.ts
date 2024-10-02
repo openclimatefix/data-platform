@@ -3,7 +3,6 @@ import type { Selection } from "d3-selection";
 import { transition } from "d3-transition";
 import { scaleLinear, scaleTime } from "d3-scale";
 import type { ScaleLinear, ScaleTime } from "d3-scale";
-import { bisector } from "d3-array";
 import { timeHour } from "d3-time";
 import { axisBottom, axisLeft } from "d3-axis";
 import { line, curveMonotoneX } from "d3-shape";
@@ -53,7 +52,6 @@ export function generateData(scale?: number): GetPredictedTimeseriesResponse {
  */
 export class TimeseriesGraph {
 
-    private data: PredictedYield[] = [];
     private svg: Selection<SVGSVGElement, unknown, HTMLElement, any> = select("svg");
     private x: ScaleTime<number, number, never> = scaleTime();
     private y: ScaleLinear<number, number, never> = scaleLinear();

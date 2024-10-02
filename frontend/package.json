@@ -21,7 +21,7 @@
     "@types/d3-time": "^3.0.3",
     "@types/d3-transition": "^3.0.8",
     "@types/geojson": "^7946.0.13",
-    "@types/leaflet": "^1.9.8",
+    "@types/leaflet": "^1.9.12",
     "d3-array": "^3.2.4",
     "d3-axis": "^3.0.0",
     "d3-scale": "^4.0.2",
