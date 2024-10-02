@@ -1,6 +1,9 @@
-version: '3'
+networks:
+  fcfs-net:
+    driver: bridge
 
 services:
+
   envoy-proxy:
     container_name: envoy-proxy
     ports:
@@ -9,6 +12,9 @@ services:
     image: envoyproxy/envoy-distroless:v1.28-latest
     volumes:
       - ./frontend/envoy.yaml:/etc/envoy/envoy.yaml
+    networks:
+      - fcfs-net
+
   api:
     container_name: api
     build:
@@ -17,5 +23,18 @@ services:
     ports:
       - "50051:50051"
     image: api:local
+    networks:
+      - fcfs-net
+
+  frontend:
+    container_name: frontend
+    build:
+      context: ./frontend
+      dockerfile: Containerfile
+    ports:
+      - "5713:5713"
+    image: frontend:local
+    networks:
+      - fcfs-net
 
 
