@@ -11,6 +11,9 @@ services:
       - ./frontend/envoy.yaml:/etc/envoy/envoy.yaml
   api:
     container_name: api
+    build:
+      context: ./api
+      dockerfile: Containerfile
     ports:
       - "50051:50051"
     image: api:local
