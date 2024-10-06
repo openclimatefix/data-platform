@@ -12,6 +12,7 @@ services:
     image: envoyproxy/envoy-distroless:v1.28-latest
     volumes:
       - ./frontend/envoy.yaml:/etc/envoy/envoy.yaml
+    depends_on: ["api"]
     networks:
       - fcfs-net
 
@@ -34,6 +35,21 @@ services:
     ports:
       - "5713:5713"
     image: frontend:local
+    environment:
+      - GRPCWEB_URL=http://envoy-proxy:8088
+    depends_on: ["envoy-proxy"]
+    networks:
+      - fcfs-net
+
+  database:
+    container_name: database
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
     networks:
       - fcfs-net
 

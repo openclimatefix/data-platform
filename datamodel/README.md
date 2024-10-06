@@ -1,4 +1,4 @@
-# Database
+# Datamodel
 
 Migrations and queries that define schema of the database and associated SDKs.
 

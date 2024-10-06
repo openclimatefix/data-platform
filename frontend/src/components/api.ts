@@ -5,9 +5,10 @@ import {
     GetPredictedCrossSectionResponse } from "../proto/api";
 
 import { UKGSPs } from "./geojsons";
+import process from "process";
 
 // Create a client using the GrpcWebFetchTransport
-let transport = new GrpcWebFetchTransport({baseUrl: "http://localhost:8088"});
+let transport = new GrpcWebFetchTransport({baseUrl: process.env.GRPCWEB_URL || "http://localhost:8088"});
 let client = new QuartzAPIClient(transport);
 
 /**
