@@ -21,8 +21,6 @@ jobs:
             image: ghcr.io/devsjc/fcfs-frontend
           - folder: api
             image: ghcr.io/devsjc/fcfs-api
-          - folder: db
-            image: ghcr.io/devsjc/fcfs-database
 
     steps:
       - name: Checkout repository
