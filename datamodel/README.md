@@ -17,3 +17,4 @@ $ migrate -path migrations -database "postgres://user:password@localhost:5432/db
 
 replacing the database connection string with the appropriate database instance.
 
+# TODO: Metrics tables

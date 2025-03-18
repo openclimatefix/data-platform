@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/openclimatefix/api/src/proto";
+option go_package = "github.com/devsjc/fcfs/api/src/proto";
 
 package api;
 

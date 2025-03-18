@@ -1,3 +1,5 @@
+name: fcfs
+
 networks:
   fcfs-net:
     driver: bridge
@@ -41,16 +43,16 @@ services:
     networks:
       - fcfs-net
 
-  database:
-    container_name: database
-    image: postgres:17
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    ports:
-      - "5432:5432"
-    networks:
-      - fcfs-net
+  #database:
+  #  container_name: database
+  #  image: postgres:17
+  #  environment:
+  #    POSTGRES_USER: postgres
+  #    POSTGRES_PASSWORD: postgres
+  #    POSTGRES_DB: postgres
+  #  ports:
+  #    - "5432:5432"
+  #  networks:
+  #    - fcfs-net
 
 

@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	internal "github.com/openclimatefix/api/src/internal"
-	pb "github.com/openclimatefix/api/src/proto"
+	internal "github.com/devsjc/fcfs/api/src/internal"
+	pb "github.com/devsjc/fcfs/api/src/proto"
 	"github.com/rs/zerolog/log"
 )
 

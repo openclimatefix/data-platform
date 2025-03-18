@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/openclimatefix/api/src/internal"
+	"github.com/devsjc/fcfs/api/src/internal"
 )
 
 // step defines the time step of the timeseries data

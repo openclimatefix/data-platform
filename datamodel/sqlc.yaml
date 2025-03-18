@@ -1,0 +1,11 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "sql/queries/locations.sql"
+    schema: "sql/migrations"
+    gen:
+      go:
+        out: "sdk/locations"
+        sql_package: "pgx/v5"
+        emit_pointers_for_null_types: true
+        emit_sql_as_comment: true
