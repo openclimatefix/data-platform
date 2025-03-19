@@ -1,20 +1,19 @@
-FROM node:22-alpine AS build-deps
-
+FROM node:22-alpine AS build-static
 WORKDIR /app
-COPY package.json .
 
+COPY package.json package-lock.json .
 RUN npm install
 
-FROM build-deps AS build
-
-ENV PATH=/app/node_modules/.bin:$PATH
 COPY . .
-
 RUN npm run build
 
-FROM busybox:latest AS app
-COPY --from=build /app/dist .
+FROM busybox:1.37
 
-EXPOSE 5173
-ENTRYPOINT ["httpd", "-f", "-v", "-p", "5173"]
+RUN adduser -D app
+USER app
+WORKDIR /home/app
+
+COPY --from=build-static /app/dist .
+
+CMD ["busybox", "httpd", "-f", "-v", "-p", "5173"]
 

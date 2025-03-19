@@ -35,7 +35,7 @@ services:
       context: ./frontend
       dockerfile: Containerfile
     ports:
-      - "5713:5713"
+      - "5173:5173"
     image: frontend:local
     environment:
       - GRPCWEB_URL=http://envoy-proxy:8088
