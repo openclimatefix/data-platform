@@ -4,13 +4,14 @@ import (
 	"context"
 
 	internal "github.com/devsjc/fcfs/api/src/internal"
-	pb "github.com/devsjc/fcfs/api/src/proto"
+	pb "github.com/devsjc/fcfs/api/src/gen"
 	"github.com/rs/zerolog/log"
 )
 
+
 type APIServer struct {
 	pb.UnimplementedQuartzAPIServer
-	DBS internal.DatabaseService
+	DBS internal.DatabaseRepository
 }
 
 func (s *APIServer) GetPredictedTimeseries(req *pb.GetPredictedTimeseriesRequest, stream pb.QuartzAPI_GetPredictedTimeseriesServer) (err error) {
@@ -137,3 +138,7 @@ func (s *APIServer) GetLocationMetadata(ctx context.Context, req *pb.GetLocation
 	log.Info().Msg("GetLocationMetadata called")
 	return &pb.GetLocationMetadataResponse{}, nil
 }
+
+// Compile check that APIServer implements the pb.QuartzAPIServer interface
+var _ pb.QuartzAPIServer = (*APIServer)(nil) 
+

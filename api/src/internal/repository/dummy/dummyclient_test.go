@@ -1,4 +1,4 @@
-package repository
+package dummy
 
 import (
 	"log"
@@ -46,7 +46,7 @@ func TestBasicYieldFunc(t *testing.T) {
 		ti := windowStart.Add(time.Duration(i) * step)
 
 		pts[i].X = float64(ti.Unix())
-		pts[i].Y = BasicYieldFunc(ti.Unix(), 10000.0).Yield
+		pts[i].Y = basicYieldFunc(ti.Unix(), 10000.0).Yield
 	}
 	numZero := 0
 	for i := range pts {

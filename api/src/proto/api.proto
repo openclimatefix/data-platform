@@ -112,7 +112,6 @@ enum LocationType {
   UNKNOWN = 0;
   SITE = 1;
   REGION = 2;
-  NATION = 3;
 }
 
 message SiteLocationMetadata {

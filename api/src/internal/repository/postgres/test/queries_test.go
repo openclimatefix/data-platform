@@ -1,19 +1,15 @@
-package test
+package main
 
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/pressly/goose"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/devsjc/fcfs/datamodel/sdk/locations"
+	"github.com/devsjc/fcfs/datamodel/gen/datamodel"
 )
 
 // setupPostgres starts a postgres container to run tests against.
@@ -26,11 +22,7 @@ func setupPostgres(t *testing.T, ctx context.Context) (*pgx.Conn, func(*testing.
 		postgres.WithUsername("postgres"),
 		postgres.WithPassword("postgres"),
 		postgres.WithInitScripts("sql/migrations/*.sql"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-			WithOccurrence(2).
-			WithStartupTimeout(45*time.Second),
-		),
+		postgres.BasicWaitStrategies(),
 	)
 	require.NoErrorf(t, err, "failed to start postgres container: %s", err)
 	conn, err := pgx.Connect(ctx, postgresContainer.MustConnectionString(ctx))
@@ -49,29 +41,26 @@ func setupPostgres(t *testing.T, ctx context.Context) (*pgx.Conn, func(*testing.
 func TestQueries(t *testing.T) {
 	ctx := context.Background()
 	conn, teardown := setupPostgres(t, ctx)
+	require.Contains(t, "postgres://postgres:postgres@localhost", conn)
 	defer teardown(t)
 
-	locationQuerier, err := locations.New(conn)
+	querier := datamodel.New(conn)
 
 	// List all locations
-	locations, err := queries.GetLocationByID(ctx, conn, 1)
-	require.NoError(t, err)
-	require.Equal(t, 0, locations.ID)
+	results, err := querier.ListSites(ctx)
+	require.Equal(t, 0, len(results))
 
 	// Add a site location
-	result, err := queries.CreateLocationSite(ctx, conn, sdk.CreateLocationSiteParams{
+	result, err := querier.CreateLocationSite(ctx, datamodel.CreateLocationSiteParams{
 		Name: "Site 1",
 		Latitude: 66.6,
 		Longitude: 77.7,
-		CapacityKw: 100,
+		Capacity: 100,
 		ClientName: "acme-solar",
 		ClientSiteID: "test-site-1",
 		EnergySource: 1,
 	})
 	require.NoError(t, err)
-	require.Equal(t, result.LocationID, 1)
-	require.Equal(t, result.SiteID, 1)
-		
+	require.Equal(t, result, 1)	
 
-	require.Contains(t, "postgres://postgres:postgres@localhost", conn)
 }

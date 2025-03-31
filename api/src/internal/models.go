@@ -1,5 +1,7 @@
 package internal
 
+// --- Structs and interfaces for connecting to a database service --- //
+
 type DBPredictedYield struct {
 	YieldKW  int
 	TimeUnix int64
@@ -24,7 +26,7 @@ type DBActualLocalisedYield struct {
 	YieldKW    int
 }
 
-type DatabaseService interface {
+type DatabaseRepository interface {
 	GetPredictedYieldsForLocation(locID string) ([]DBPredictedYield, error)
 	GetActualYieldsForLocation(locID string) ([]DBActualYield, error)
 	GetPredictedYieldForLocations(locIDs []string, timeUnix int64) ([]DBPredictedLocalisedYield, error)

@@ -1,4 +1,4 @@
-package repository
+package dummy
 
 import (
 	"math"
@@ -27,12 +27,12 @@ func getWindow() (time.Time, time.Time) {
 	return windowStart, windowEnd
 }
 
-// BasicYieldFunc returns a fake yield value for a given time and scale factor.
+// basicYieldFunc returns a fake yield value for a given time and scale factor.
 // The scale factor is used to scale the output value. A scale factor of 10000
 // will result in a yield of 10kW at the peak of the curve.
 // The output value is a function of the time of day and the time of year.
 // The base sin function has a period of 24 hours, and peaks at 12 hours.
-func BasicYieldFunc(timeUnix int64, scaleFactor float64) FakeYield {
+func basicYieldFunc(timeUnix int64, scaleFactor float64) FakeYield {
 
 	// Convert the time to a time.Time object
 	ti := time.Unix(timeUnix, 0)
@@ -87,7 +87,7 @@ func (*DummyClient) GetActualYieldForLocations(locIDs []string, timeUnix int64) 
 	for i, id := range locIDs {
 		yields[i] = internal.DBActualLocalisedYield{
 			LocationID: id,
-			YieldKW:    int(BasicYieldFunc(int64(timeUnix), 10000.0).Yield),
+			YieldKW:    int(basicYieldFunc(int64(timeUnix), 10000.0).Yield),
 		}
 	}
 	return yields, nil
@@ -106,7 +106,7 @@ func (*DummyClient) GetActualYieldsForLocation(locID string) ([]internal.DBActua
 		ti := windowStart.Add(time.Duration(i) * step)
 		yields[i] = internal.DBActualYield{
 			TimeUnix: ti.Unix(),
-			YieldKW:  int(BasicYieldFunc(ti.Unix(), 10000.0).Yield),
+			YieldKW:  int(basicYieldFunc(ti.Unix(), 10000.0).Yield),
 		}
 	}
 
@@ -118,7 +118,7 @@ func (*DummyClient) GetActualYieldsForLocation(locID string) ([]internal.DBActua
 func (*DummyClient) GetPredictedYieldForLocations(locIDs []string, timeUnix int64) ([]internal.DBPredictedLocalisedYield, error) {
 	yields := make([]internal.DBPredictedLocalisedYield, len(locIDs))
 	for i, id := range locIDs {
-		yield := BasicYieldFunc(int64(timeUnix), 10000.0)
+		yield := basicYieldFunc(int64(timeUnix), 10000.0)
 		yields[i] = internal.DBPredictedLocalisedYield{
 			LocationID: id,
 			YieldKW:    int(yield.Yield),
@@ -140,7 +140,7 @@ func (*DummyClient) GetPredictedYieldsForLocation(locID string) ([]internal.DBPr
 		// but rather a conversion of the integer i to a duration type in order
 		// for Go to allow it to be multiplied by step, which is a duration type.
 		ti := windowStart.Add(time.Duration(i) * step)
-		yield := BasicYieldFunc(ti.Unix(), 10000.0)
+		yield := basicYieldFunc(ti.Unix(), 10000.0)
 		yields[i] = internal.DBPredictedYield{
 			TimeUnix: ti.Unix(),
 			YieldKW:  int(yield.Yield),
@@ -152,4 +152,5 @@ func (*DummyClient) GetPredictedYieldsForLocation(locID string) ([]internal.DBPr
 	return yields, nil
 }
 
-var _ internal.DatabaseService = &DummyClient{}
+// Compile check to ensure that the DummyClient implements the DatabaseService interface.
+var _ internal.DatabaseRepository = &DummyClient{}

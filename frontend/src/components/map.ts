@@ -182,7 +182,7 @@ class UKMap extends Map {
         this.pmtilesLayer = leafletLayer({
             url: '/uk-gsp.pmtiles',
             // @ts-ignore: Unknown parameter "edgeBufferTiles" from leaflet-edgebuffer
-            edgeBufferTiles: 2,
+            edgeBufferTiles: 4,
             paint_rules: [
                 {
                     dataLayer: "gspregions",
