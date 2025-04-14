@@ -21,6 +21,8 @@ jobs:
             image: ghcr.io/devsjc/fcfs-frontend
           - folder: api
             image: ghcr.io/devsjc/fcfs-api
+          - folder: api/src/internal/repository/postgres/infra
+            image: ghcr.io/devsjc/fcfs-pgdb
 
     steps:
       - name: Checkout repository

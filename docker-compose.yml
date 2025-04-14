@@ -4,10 +4,28 @@ networks:
   fcfs-net:
     driver: bridge
 
+volumes:
+  pgdata:
+
 services:
 
+  api:
+     build:
+       context: ./api
+       dockerfile: Containerfile
+     ports:
+       - "50051:50051"
+     environment:
+       DATABASE_URL: postgresql://postgres:postgres@database:5432/postgres
+       DATABASE_TYPE: postgres
+     depends_on:
+       database:
+         condition: service_healthy
+         restart: true
+     networks:
+       - fcfs-net
+
   envoy-proxy:
-    container_name: envoy-proxy
     ports:
       - "80:80"
       - "8088:8088"
@@ -18,41 +36,57 @@ services:
     networks:
       - fcfs-net
 
-  api:
-    container_name: api
-    build:
-      context: ./api
-      dockerfile: Containerfile
-    ports:
-      - "50051:50051"
-    image: api:local
-    networks:
-      - fcfs-net
-
   frontend:
-    container_name: frontend
     build:
       context: ./frontend
       dockerfile: Containerfile
     ports:
       - "5173:5173"
-    image: frontend:local
     environment:
       - GRPCWEB_URL=http://envoy-proxy:8088
     depends_on: ["envoy-proxy"]
     networks:
       - fcfs-net
 
-  #database:
-  #  container_name: database
-  #  image: postgres:17
-  #  environment:
-  #    POSTGRES_USER: postgres
-  #    POSTGRES_PASSWORD: postgres
-  #    POSTGRES_DB: postgres
-  #  ports:
-  #    - "5432:5432"
-  #  networks:
-  #    - fcfs-net
+  database:
+    build:
+      context: ./api/src/internal/repository/postgres/infra
+      dockerfile: Containerfile
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    configs:
+      - source: postgresql.conf
+        target: /etc/postgresql.conf
+        mode: 0644
+    ports:
+      - "5400:5432"
+    networks:
+      - fcfs-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      retries: 5
+      start_period: 15s
+      timeout: 10s
 
+configs:
+  postgresql.conf:
+    content: |
+      listen_addresses = '*'
+      max_connections = 100                   # (change requires restart)
+      shared_buffers = 128MB                  # min 128kB
+      dynamic_shared_memory_type = posix
+      max_wal_size = 1GB
+      min_wal_size = 80MB
+      log_timezone = 'Etc/UTC'
+      datestyle = 'iso, mdy'
+      timezone = 'Etc/UTC'
+      lc_messages = 'en_US.utf8'              # locale for system error message
+      lc_monetary = 'en_US.utf8'              # locale for monetary formatting
+      lc_numeric = 'en_US.utf8'               # locale for number formatting
+      lc_time = 'en_US.utf8'                  # locale for time formatting
+      default_text_search_config = 'pg_catalog.english'
+      shared_preload_libraries = 'pg_partman_bgw'
 

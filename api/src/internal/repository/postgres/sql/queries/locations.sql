@@ -1,42 +1,122 @@
--- name: CreateLocationSite :one
-WITH new_loc_id AS (
-    INSERT INTO loc.locations (
-        name, latitude, longitude, capacity, capicity_unit_prefix_factor
-    ) VALUES (
-        $1, $2, $3, $4, $5
-    ) RETURNING location_id
-)
-INSERT INTO loc.site_metadata (
-    location_id, client_name, client_site_id, yaw_degrees, pitch_degrees, energy_source
-) VALUES (
-    new_loc_id, $5, $6, $7, $8, $9
-) RETURNING location_id;
+/*- Queries for the locations table ------------------------------ */
 
--- name: CreateLocationRegion :one
-WITH new_loc_id AS (
-    INSERT INTO loc.locations (
-        name, latitude, longitude, capacity, capacity_unit_prefix_factor
-    ) VALUES (
-        $1, $2, $3, $4, $5
-    ) RETURNING location_id
+-- name: CreateLocation :one
+WITH location_type_id AS (
+    SELECT location_type_id FROM loc.location_types AS lt
+    WHERE lt.name = $1
 )
-INSERT INTO loc.region_metadata (
-    location_id, region_name, boundary_geojson
+INSERT INTO loc.locations AS l (
+    name, geom, location_type_id 
 ) VALUES (
-    new_loc_id, $6, $7
-) RETURNING location_id;
+    $2, $3, location_type_id
+) RETURNING l.location_id;
 
--- name: ListLocations :many
+-- name: ListLocationIdsByType :many
+WITH location_type_id AS (
+    SELECT location_type_id FROM loc.location_types AS lt
+    WHERE lt.name = $1
+)
+SELECT location_id, name FROM loc.locations AS l
+WHERE l.location_type_id = location_type_id
+ORDER BY l.location_id;
+
+-- name: ListLocationsByType :many
+WITH location_type_id AS (
+    SELECT location_type_id FROM loc.location_types AS lt
+    WHERE lt.name = $1
+)
+SELECT * FROM loc.locations AS l
+WHERE l.location_type_id = location_type_id
+ORDER BY l.location_id;
+
+-- name: ListLocationGeometryByType :many
+WITH location_type_id AS (
+    SELECT location_type_id FROM loc.location_types AS lt
+    WHERE lt.name = $1
+)
+SELECT name, ST_AsText(geom) FROM loc.locations AS l
+WHERE l.location_type_id = location_type_id;
+
+-- name: GetLocationById :one
 SELECT * FROM loc.locations
-ORDER BY location_id;
+WHERE location_id = $1;
 
--- name: ListRegions :many
-SELECT * FROM loc.locations as l
-LEFT OUTER JOIN loc.region_metadata USING (location_id)
-ORDER BY l.location_id;
 
--- name: ListSites :many
-SELECT * FROM loc.locations as l
-LEFT OUTER JOIN loc.site_metadata USING (location_id)
-ORDER BY l.location_id;
+/*- Queries for the location_sources table --------------------------- */
+
+-- name: CreateLocationSource :one
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+INSERT INTO loc.location_sources (
+    location_id, source_type_id, capacity,
+    capacity_unit_prefix_factor, metadata
+) VALUES (
+    $1, source_type_id, $3,
+    $4, $5
+) RETURNING record_id;
+
+-- name: UpdateLocationSourceCapacity :exec
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+UPDATE loc.location_sources SET
+    capacity = $3,
+    capacity_unit_prefix_factor = $4
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    AND UPPER(sys_period) IS NULL; -- Currently active record
+
+-- name: UpdateLocationSourceMetadata :exec
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+UPDATE loc.location_sources SET
+    metadata = $3
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    AND UPPER(sys_period) IS NULL; -- Currently active record
+    
+-- name: UpdateLocationSource :exec
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+UPDATE loc.location_sources SET
+    capacity = $3,
+    capacity_unit_prefix_factor = $4,
+    metadata = $5
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    AND UPPER(sys_period) IS NULL; -- Currently active record
+    
+-- name: DecomissionLocationSource :exec
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+DELETE FROM loc.location_sources
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    AND UPPER(sys_period) IS NULL; -- Currently active record
+
+-- name: ListLocationSourceHistoryByType :many
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+SELECT (
+    record_id, capacity, capacity_unit_prefix_factor, metadata, sys_period
+) FROM loc.location_sources
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    ORDER BY LOWER(sys_period) DESC;
 

@@ -8,143 +8,75 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// Energy sources
-type LocEnergySource struct {
-	// Unique identifier for energy source
-	SourceID int16
-	// Representation of the energy source
-	Source string
-}
-
-// Supertype table for locations.
 type LocLocation struct {
-	// Primary key for the location.
-	LocationID int32
-	// Name of the location.
-	Name string
-	// Latitude associated with the location.
-	Latitude float32
-	// Longitude associated with the location.
-	Longitude float32
-	// Capacity of the location in factors of Watts. Multiply by 10 to the power of unit_prefix_factor to get the actual value.
-	Capacity int16
-	// Factor defining the metric prefix of the capacity value. Raise 10 to the power of this value to get the prefix.
+	LocationID     int32
+	Name           string
+	Geom           interface{}
+	LocationTypeID int16
+}
+
+type LocLocationSource struct {
+	RecordID                 int32
+	LocationID               int32
+	SourceTypeID             int16
+	Capacity                 int16
 	CapacityUnitPrefixFactor int16
-	SysPeriod                pgtype.Range[pgtype.Timestamptz]
+	CapacityLimit            *int16
+	Metadata                 []byte
+	SysPeriod                pgtype.Range[pgtype.Timestamp]
 }
 
-// History table for the locations supertype table.
-type LocLocationsHistory struct {
-	// Primary key for the location.
-	LocationID int32
-	// Name of the location.
-	Name string
-	// Latitude associated with the location.
-	Latitude float32
-	// Longitude associated with the location.
-	Longitude float32
-	// Capacity of the location in factors of Watts. Multiply by 10 to the power of unit_prefix_factor to get the actual value.
-	Capacity int16
-	// Factor defining the metric prefix of the capacity value. Raise 10 to the power of this value to get the prefix.
-	CapacityUnitPrefixFactor int16
-	SysPeriod                pgtype.Range[pgtype.Timestamptz]
+type LocLocationType struct {
+	LocationTypeID int16
+	Name           string
 }
 
-// Subtype table for region-level locations.
-//
-//	These are bounded locations containing multiple sources such as DNOs or even whole countries.
-//	The supertype lat/long refers to their center point.
-type LocRegionMetadatum struct {
-	// Foreign key to the location table.
-	LocationID int32
-	// Name of the region.
-	RegionName string
-	// GeoJSON representation of the region boundary.
-	BoundaryGeojson []byte
+type LocSourceType struct {
+	SourceTypeID int16
+	Name         string
 }
 
-// Subtype table for site-level locations.
-//
-//	These are typically single renewable generation sources identifiable via their lat/long.
-type LocSiteMetadatum struct {
-	// Foreign key to the location table.
-	LocationID int32
-	// Name of the client associated with the site.
-	ClientName string
-	// ID of the site as given by the client.
-	ClientSiteID string
-	// Yaw of the site in degrees (0: N, 90: E, 180: S, 270: W)
-	YawDegrees *int16
-	// Pitch of the site in degrees (0: Points directly downwards, 180: Points directly upwards)
-	PitchDegrees *int16
-	EnergySource int16
-}
-
-// Observed generation data, in factors of Watts.
-type ObsObservation struct {
-	// Unique identifier for the observation.
+type ObsObservedGenerationValue struct {
+	Value         int16
+	SourceTypeID  int16
 	ObservationID int32
-	// Location of the observed generation.
-	LocationID int32
-	// Time of the observation in UTC.
-	TimeUtc pgtype.Timestamp
-	// Numeric value associated with generation. Multiply by 10 to the power of unit_prefix_factor to get the actual value.
-	Generation int16
-	// Factor defining the metric prefix of the generation value. Raise 10 to the power of this value to get the prefix.
-	GenerationUnitPrefixFactor int16
+	LocationID    int32
+	TimeUtc       pgtype.Timestamp
 }
 
-// Metadata for a forecast
 type PredForecast struct {
-	// Unique identifier for a forecast
-	ForecastID int32
-	// Location the forecast is for
-	LocationID int32
-	// Initialization time of the forecast
-	InitTimeUtc pgtype.Timestamp
-	// Model used to generate the forecast
-	ModelID int32
+	SourceTypeID int16
+	ForecastID   int32
+	LocationID   int32
+	ModelID      int32
+	InitTimeUtc  pgtype.Timestamp
 }
 
-// Model used to generate a forecast
+type PredFutureTimeseriesHorizonView struct {
+	LocationID    int32
+	ForecastID    int32
+	TargetTimeUtc pgtype.Timestamp
+	HorizonMins   int16
+	P10           *int16
+	P50           int16
+	P90           *int16
+	Metadata      []byte
+}
+
 type PredModel struct {
-	// Unique identifier for a forecast model
-	ModelID int32
-	// Name of the forecast model
-	Name string
-	// Version of the forecast model
-	Version string
-	// Time the model was created
+	ModelID      int32
+	Name         string
+	Version      string
 	CreatedAtUtc pgtype.Timestamp
 }
 
-// Cross-section of predicted generation data for locations
-type PredPredictedGenerationCrosssection struct {
-	// Unique identifier for a forecast
-	ForecastID int32
-	// Location the forecast is for
-	LocationID int32
-	// Time the generation was predicted for
-	TargetTimeUtc pgtype.Timestamp
-	// Time horizon in mins for generation value
-	HorizonMins int16
-	// Numeric value associated with predicted generation. Multiply by 10 raised to the power of unit_prefix_factor to get the actual value in Watts
-	Generation int16
-	// Factor defining the metric prefix of the generation value. Raise 10 to the power of this value to get the metric prefix.
-	GenerationUnitPrefixFactor int16
-	// Model used to generate the forecast
-	ModelID int32
-}
-
-// Predicted generation data, in factors of Watts
 type PredPredictedGenerationValue struct {
-	// Unique identifier for a forecast
+	HorizonMins   int16
+	P10           *int16
+	P50           int16
+	P90           *int16
 	ForecastID    int32
+	LocationID    int32
 	TargetTimeUtc pgtype.Timestamp
-	// Time horizon in mins for generation value
-	HorizonMins int16
-	// Numeric value associated with predicted generation. Multiply by 10 raised to the power of unit_prefix_factor to get the actual value in Watts
-	Generation int16
-	// Factor defining the metric prefix of the generation value. Raise 10 to the power of this value to get the metric prefix.
-	GenerationUnitPrefixFactor int16
+	Metadata      []byte
 }

@@ -9,14 +9,26 @@ import (
 )
 
 type Querier interface {
-	CreateLocationRegion(ctx context.Context, arg CreateLocationRegionParams) (int32, error)
-	CreateLocationSite(ctx context.Context, arg CreateLocationSiteParams) (int32, error)
+	//- Queries for the locations table ------------------------------
+	CreateLocation(ctx context.Context, arg CreateLocationParams) (int32, error)
+	//- Queries for the location_sources table ---------------------------
+	CreateLocationSource(ctx context.Context, arg CreateLocationSourceParams) (int32, error)
 	CreateObservation(ctx context.Context, arg CreateObservationParams) (int32, error)
 	CreateObservations(ctx context.Context, arg []CreateObservationsParams) (int64, error)
-	ListLocations(ctx context.Context) ([]LocLocation, error)
-	ListObservations(ctx context.Context) ([]ObsObservation, error)
-	ListRegions(ctx context.Context) ([]ListRegionsRow, error)
-	ListSites(ctx context.Context) ([]ListSitesRow, error)
+	// Currently active record
+	DecomissionLocationSource(ctx context.Context, arg DecomissionLocationSourceParams) error
+	GetLocationById(ctx context.Context, locationID int32) (LocLocation, error)
+	ListLocationGeometryByType(ctx context.Context, name string) ([]ListLocationGeometryByTypeRow, error)
+	ListLocationIdsByType(ctx context.Context, name string) ([]ListLocationIdsByTypeRow, error)
+	// Currently active record
+	ListLocationSourceHistoryByType(ctx context.Context, arg ListLocationSourceHistoryByTypeParams) ([]interface{}, error)
+	ListLocationsByType(ctx context.Context, name string) ([]LocLocation, error)
+	ListObservationsByLocationId(ctx context.Context, locationID int32) ([]ObsObservedGenerationValue, error)
+	// Currently active record
+	UpdateLocationSource(ctx context.Context, arg UpdateLocationSourceParams) error
+	UpdateLocationSourceCapacity(ctx context.Context, arg UpdateLocationSourceCapacityParams) error
+	// Currently active record
+	UpdateLocationSourceMetadata(ctx context.Context, arg UpdateLocationSourceMetadataParams) error
 }
 
 var _ Querier = (*Queries)(nil)

@@ -9,17 +9,29 @@ import (
 )
 
 
-type APIServer struct {
+type QuartzAPIServer struct {
 	pb.UnimplementedQuartzAPIServer
 	DBS internal.DatabaseRepository
 }
 
-func (s *APIServer) GetPredictedTimeseries(req *pb.GetPredictedTimeseriesRequest, stream pb.QuartzAPI_GetPredictedTimeseriesServer) (err error) {
+func NewQuartzAPIServer(dbs internal.DatabaseRepository) *QuartzAPIServer {
+	err := dbs.Migrate()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to migrate database")
+	}
+	log.Debug().Msg("Backend up to date")
+	return &QuartzAPIServer{
+		DBS: dbs,
+	}
+}
+
+func (s *QuartzAPIServer) GetPredictedTimeseries(req *pb.GetPredictedTimeseriesRequest, stream pb.QuartzAPI_GetPredictedTimeseriesServer) (err error) {
 	log.Info().Msg("GetPredictedTimeseries called")
 
 	for _, locID := range req.GetLocationIDs() {
 		// Fetch yields using database service
 		fetchedYields, err := s.DBS.GetPredictedYieldsForLocation(locID)
+		log.Debug().Str("locationID", locID).Int("numYields", len(fetchedYields)).Msg("Fetched predicted yields")
 
 		// Map fetched yields to protobuf yields
 		returnYields := make([]*pb.PredictedYield, len(fetchedYields))
@@ -48,7 +60,7 @@ func (s *APIServer) GetPredictedTimeseries(req *pb.GetPredictedTimeseriesRequest
 }
 
 
-func (s *APIServer) GetActualTimeseries(req *pb.GetActualTimeseriesRequest, stream pb.QuartzAPI_GetActualTimeseriesServer) (err error) {
+func (s *QuartzAPIServer) GetActualTimeseries(req *pb.GetActualTimeseriesRequest, stream pb.QuartzAPI_GetActualTimeseriesServer) (err error) {
 	log.Info().Msg("GetActualTimeseries called")
 
 	for _, locID := range req.GetLocationIDs() {
@@ -80,7 +92,7 @@ func (s *APIServer) GetActualTimeseries(req *pb.GetActualTimeseriesRequest, stre
 	return nil
 }
 
-func (s *APIServer) GetPredictedCrossSection(ctx context.Context, req *pb.GetPredictedCrossSectionRequest) (*pb.GetPredictedCrossSectionResponse, error) {
+func (s *QuartzAPIServer) GetPredictedCrossSection(ctx context.Context, req *pb.GetPredictedCrossSectionRequest) (*pb.GetPredictedCrossSectionResponse, error) {
 	log.Info().Msg("GetPredictedCrossSection called")
 
 	// Fetch data using database service
@@ -109,7 +121,7 @@ func (s *APIServer) GetPredictedCrossSection(ctx context.Context, req *pb.GetPre
 	}, nil
 }
 
-func (s *APIServer) GetActualCrossSection(ctx context.Context, req *pb.GetActualCrossSectionRequest) (*pb.GetActualCrossSectionResponse, error) {
+func (s *QuartzAPIServer) GetActualCrossSection(ctx context.Context, req *pb.GetActualCrossSectionRequest) (*pb.GetActualCrossSectionResponse, error) {
 	log.Info().Msg("GetActualCrossSection called")
 
 	// Fetch data using database service
@@ -134,11 +146,11 @@ func (s *APIServer) GetActualCrossSection(ctx context.Context, req *pb.GetActual
 	}, nil
 }
 
-func (s *APIServer) GetLocationMetadata(ctx context.Context, req *pb.GetLocationMetadataRequest) (*pb.GetLocationMetadataResponse, error) {
+func (s *QuartzAPIServer) GetLocationMetadata(ctx context.Context, req *pb.GetLocationMetadataRequest) (*pb.GetLocationMetadataResponse, error) {
 	log.Info().Msg("GetLocationMetadata called")
 	return &pb.GetLocationMetadataResponse{}, nil
 }
 
 // Compile check that APIServer implements the pb.QuartzAPIServer interface
-var _ pb.QuartzAPIServer = (*APIServer)(nil) 
+var _ pb.QuartzAPIServer = (*QuartzAPIServer)(nil) 
 

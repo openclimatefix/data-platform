@@ -28,11 +28,11 @@ service QuartzAPI {
 
 // --- GetPredictedTimeseries --------------------------------------------------------
 message GetPredictedTimeseriesRequest {
-  repeated string locationIDs = 1;
+  repeated string location_ids = 1;
 }
 
 message GetPredictedTimeseriesResponse {
-  string locationID = 1;
+  string location_id = 1;
   repeated PredictedYield yields = 2;
 }
 
@@ -49,11 +49,11 @@ message PredictedYieldUncertainty {
 
 // --- GetActualTimeseries -----------------------------------------------------------
 message GetActualTimeseriesRequest {
-  repeated string locationIDs = 1;
+  repeated string location_ids = 1;
 }
 
 message GetActualTimeseriesResponse {
-  string locationID = 1;
+  string location_id = 1;
   repeated ActualYield yields = 2;
 }
 
@@ -64,7 +64,7 @@ message ActualYield {
 
 // --- GetPredictedCrossSection ------------------------------------------------------
 message GetPredictedCrossSectionRequest {
-  repeated string locationIDs = 1;
+  repeated string location_ids = 1;
   int64 timestamp_unix = 2;
 }
 
@@ -74,14 +74,14 @@ message GetPredictedCrossSectionResponse {
 }
 
 message PredictedYieldAtLocation {
-  string locationID = 1;
+  string location_id = 1;
   int32 yield_kw = 2;
   PredictedYieldUncertainty uncertainty = 3;
 }
 
 // --- GetActualCrossSection ---------------------------------------------------------
 message GetActualCrossSectionRequest {
-  repeated string locationIDs = 1;
+  repeated string location_ids = 1;
   int64 timestamp_unix = 2;
 }
 
@@ -91,24 +91,12 @@ message GetActualCrossSectionResponse {
 }
 
 message ActualYieldAtLocation {
-  string locationID = 1;
+  string location_id = 1;
   int32 yield_kw = 2;
 }
 
-// --- GetLocationMetadata -----------------------------------------------------------
-message GetLocationMetadataRequest {
-  string locationID = 1;
-}
-
-message GetLocationMetadataResponse {
-  string locationID = 1;
-  LocationType locationType = 2;
-  SiteLocationMetadata siteMetadata = 3;
-  RegionLocationMetadata regionMetadata = 4;
-  NationLocationMetadata nationMetadata = 5;
-}
-
-enum LocationType {
+// --- GetLocations -----------------------------------------------------------
+enum EnergySource  {
   UNKNOWN = 0;
   SITE = 1;
   REGION = 2;

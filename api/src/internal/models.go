@@ -27,6 +27,7 @@ type DBActualLocalisedYield struct {
 }
 
 type DatabaseRepository interface {
+	Migrate() error
 	GetPredictedYieldsForLocation(locID string) ([]DBPredictedYield, error)
 	GetActualYieldsForLocation(locID string) ([]DBActualYield, error)
 	GetPredictedYieldForLocations(locIDs []string, timeUnix int64) ([]DBPredictedLocalisedYield, error)

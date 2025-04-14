@@ -81,6 +81,15 @@ func basicYieldFunc(timeUnix int64, scaleFactor float64) FakeYield {
 
 type DummyClient struct{}
 
+func NewDummyClient() *DummyClient {
+	return &DummyClient{}
+}
+
+func (*DummyClient) Migrate() error {
+	// No-op
+	return nil
+}
+
 // GetActualYieldForLocations implements main.DatabaseService.
 func (*DummyClient) GetActualYieldForLocations(locIDs []string, timeUnix int64) ([]internal.DBActualLocalisedYield, error) {
 	yields := make([]internal.DBActualLocalisedYield, len(locIDs))

@@ -7,101 +7,235 @@ package gen
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createLocationRegion = `-- name: CreateLocationRegion :one
-WITH new_loc_id AS (
-    INSERT INTO loc.locations (
-        name, latitude, longitude, capacity, capacity_unit_prefix_factor
-    ) VALUES (
-        $1, $2, $3, $4, $5
-    ) RETURNING location_id
+const createLocation = `-- name: CreateLocation :one
+
+WITH location_type_id AS (
+    SELECT location_type_id FROM loc.location_types AS lt
+    WHERE lt.name = $1
 )
-INSERT INTO loc.region_metadata (
-    location_id, region_name, boundary_geojson
+INSERT INTO loc.locations AS l (
+    name, geom, location_type_id 
 ) VALUES (
-    new_loc_id, $6, $7
-) RETURNING location_id
+    $2, $3, location_type_id
+) RETURNING l.location_id
 `
 
-type CreateLocationRegionParams struct {
+type CreateLocationParams struct {
+	Name   string
+	Name_2 string
+	Geom   interface{}
+}
+
+// - Queries for the locations table ------------------------------
+func (q *Queries) CreateLocation(ctx context.Context, arg CreateLocationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, createLocation, arg.Name, arg.Name_2, arg.Geom)
+	var location_id int32
+	err := row.Scan(&location_id)
+	return location_id, err
+}
+
+const createLocationSource = `-- name: CreateLocationSource :one
+
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+INSERT INTO loc.location_sources (
+    location_id, source_type_id, capacity,
+    capacity_unit_prefix_factor, metadata
+) VALUES (
+    $1, source_type_id, $3,
+    $4, $5
+) RETURNING record_id
+`
+
+type CreateLocationSourceParams struct {
+	LocationID               int32
 	Name                     string
-	Latitude                 float32
-	Longitude                float32
 	Capacity                 int16
 	CapacityUnitPrefixFactor int16
-	RegionName               string
-	BoundaryGeojson          []byte
+	Metadata                 []byte
 }
 
-func (q *Queries) CreateLocationRegion(ctx context.Context, arg CreateLocationRegionParams) (int32, error) {
-	row := q.db.QueryRow(ctx, createLocationRegion,
+// - Queries for the location_sources table ---------------------------
+func (q *Queries) CreateLocationSource(ctx context.Context, arg CreateLocationSourceParams) (int32, error) {
+	row := q.db.QueryRow(ctx, createLocationSource,
+		arg.LocationID,
 		arg.Name,
-		arg.Latitude,
-		arg.Longitude,
 		arg.Capacity,
 		arg.CapacityUnitPrefixFactor,
-		arg.RegionName,
-		arg.BoundaryGeojson,
+		arg.Metadata,
 	)
-	var location_id int32
-	err := row.Scan(&location_id)
-	return location_id, err
+	var record_id int32
+	err := row.Scan(&record_id)
+	return record_id, err
 }
 
-const createLocationSite = `-- name: CreateLocationSite :one
-WITH new_loc_id AS (
-    INSERT INTO loc.locations (
-        name, latitude, longitude, capacity, capicity_unit_prefix_factor
-    ) VALUES (
-        $1, $2, $3, $4, $5
-    ) RETURNING location_id
+const decomissionLocationSource = `-- name: DecomissionLocationSource :exec
+    
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
 )
-INSERT INTO loc.site_metadata (
-    location_id, client_name, client_site_id, yaw_degrees, pitch_degrees, energy_source
-) VALUES (
-    new_loc_id, $5, $6, $7, $8, $9
-) RETURNING location_id
+DELETE FROM loc.location_sources
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    AND UPPER(sys_period) IS NULL
 `
 
-type CreateLocationSiteParams struct {
-	Name         string
-	Latitude     float32
-	Longitude    float32
-	Capacity     int16
-	ClientName   string
-	ClientSiteID string
-	YawDegrees   *int16
-	PitchDegrees *int16
-	EnergySource int16
+type DecomissionLocationSourceParams struct {
+	LocationID int32
+	Name       string
 }
 
-func (q *Queries) CreateLocationSite(ctx context.Context, arg CreateLocationSiteParams) (int32, error) {
-	row := q.db.QueryRow(ctx, createLocationSite,
-		arg.Name,
-		arg.Latitude,
-		arg.Longitude,
-		arg.Capacity,
-		arg.ClientName,
-		arg.ClientSiteID,
-		arg.YawDegrees,
-		arg.PitchDegrees,
-		arg.EnergySource,
+// Currently active record
+func (q *Queries) DecomissionLocationSource(ctx context.Context, arg DecomissionLocationSourceParams) error {
+	_, err := q.db.Exec(ctx, decomissionLocationSource, arg.LocationID, arg.Name)
+	return err
+}
+
+const getLocationById = `-- name: GetLocationById :one
+SELECT location_id, name, geom, location_type_id FROM loc.locations
+WHERE location_id = $1
+`
+
+func (q *Queries) GetLocationById(ctx context.Context, locationID int32) (LocLocation, error) {
+	row := q.db.QueryRow(ctx, getLocationById, locationID)
+	var i LocLocation
+	err := row.Scan(
+		&i.LocationID,
+		&i.Name,
+		&i.Geom,
+		&i.LocationTypeID,
 	)
-	var location_id int32
-	err := row.Scan(&location_id)
-	return location_id, err
+	return i, err
 }
 
-const listLocations = `-- name: ListLocations :many
-SELECT location_id, name, latitude, longitude, capacity, capacity_unit_prefix_factor, sys_period FROM loc.locations
-ORDER BY location_id
+const listLocationGeometryByType = `-- name: ListLocationGeometryByType :many
+WITH location_type_id AS (
+    SELECT location_type_id FROM loc.location_types AS lt
+    WHERE lt.name = $1
+)
+SELECT name, ST_AsText(geom) FROM loc.locations AS l
+WHERE l.location_type_id = location_type_id
 `
 
-func (q *Queries) ListLocations(ctx context.Context) ([]LocLocation, error) {
-	rows, err := q.db.Query(ctx, listLocations)
+type ListLocationGeometryByTypeRow struct {
+	Name     string
+	StAstext interface{}
+}
+
+func (q *Queries) ListLocationGeometryByType(ctx context.Context, name string) ([]ListLocationGeometryByTypeRow, error) {
+	rows, err := q.db.Query(ctx, listLocationGeometryByType, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLocationGeometryByTypeRow{}
+	for rows.Next() {
+		var i ListLocationGeometryByTypeRow
+		if err := rows.Scan(&i.Name, &i.StAstext); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationIdsByType = `-- name: ListLocationIdsByType :many
+WITH location_type_id AS (
+    SELECT location_type_id FROM loc.location_types AS lt
+    WHERE lt.name = $1
+)
+SELECT location_id, name FROM loc.locations AS l
+WHERE l.location_type_id = location_type_id
+ORDER BY l.location_id
+`
+
+type ListLocationIdsByTypeRow struct {
+	LocationID int32
+	Name       string
+}
+
+func (q *Queries) ListLocationIdsByType(ctx context.Context, name string) ([]ListLocationIdsByTypeRow, error) {
+	rows, err := q.db.Query(ctx, listLocationIdsByType, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLocationIdsByTypeRow{}
+	for rows.Next() {
+		var i ListLocationIdsByTypeRow
+		if err := rows.Scan(&i.LocationID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationSourceHistoryByType = `-- name: ListLocationSourceHistoryByType :many
+
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+SELECT (
+    record_id, capacity, capacity_unit_prefix_factor, metadata, sys_period
+) FROM loc.location_sources
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    ORDER BY LOWER(sys_period) DESC
+`
+
+type ListLocationSourceHistoryByTypeParams struct {
+	LocationID int32
+	Name       string
+}
+
+// Currently active record
+func (q *Queries) ListLocationSourceHistoryByType(ctx context.Context, arg ListLocationSourceHistoryByTypeParams) ([]interface{}, error) {
+	rows, err := q.db.Query(ctx, listLocationSourceHistoryByType, arg.LocationID, arg.Name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []interface{}{}
+	for rows.Next() {
+		var column_1 interface{}
+		if err := rows.Scan(&column_1); err != nil {
+			return nil, err
+		}
+		items = append(items, column_1)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationsByType = `-- name: ListLocationsByType :many
+WITH location_type_id AS (
+    SELECT location_type_id FROM loc.location_types AS lt
+    WHERE lt.name = $1
+)
+SELECT location_id, name, geom, location_type_id FROM loc.locations AS l
+WHERE l.location_type_id = location_type_id
+ORDER BY l.location_id
+`
+
+func (q *Queries) ListLocationsByType(ctx context.Context, name string) ([]LocLocation, error) {
+	rows, err := q.db.Query(ctx, listLocationsByType, name)
 	if err != nil {
 		return nil, err
 	}
@@ -112,11 +246,8 @@ func (q *Queries) ListLocations(ctx context.Context) ([]LocLocation, error) {
 		if err := rows.Scan(
 			&i.LocationID,
 			&i.Name,
-			&i.Latitude,
-			&i.Longitude,
-			&i.Capacity,
-			&i.CapacityUnitPrefixFactor,
-			&i.SysPeriod,
+			&i.Geom,
+			&i.LocationTypeID,
 		); err != nil {
 			return nil, err
 		}
@@ -128,108 +259,95 @@ func (q *Queries) ListLocations(ctx context.Context) ([]LocLocation, error) {
 	return items, nil
 }
 
-const listRegions = `-- name: ListRegions :many
-SELECT l.location_id, name, latitude, longitude, capacity, capacity_unit_prefix_factor, sys_period, region_metadata.location_id, region_name, boundary_geojson FROM loc.locations as l
-LEFT OUTER JOIN loc.region_metadata USING (location_id)
-ORDER BY l.location_id
+const updateLocationSource = `-- name: UpdateLocationSource :exec
+    
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+UPDATE loc.location_sources SET
+    capacity = $3,
+    capacity_unit_prefix_factor = $4,
+    metadata = $5
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    AND UPPER(sys_period) IS NULL
 `
 
-type ListRegionsRow struct {
+type UpdateLocationSourceParams struct {
 	LocationID               int32
 	Name                     string
-	Latitude                 float32
-	Longitude                float32
 	Capacity                 int16
 	CapacityUnitPrefixFactor int16
-	SysPeriod                pgtype.Range[pgtype.Timestamptz]
-	LocationID_2             *int32
-	RegionName               *string
-	BoundaryGeojson          []byte
+	Metadata                 []byte
 }
 
-func (q *Queries) ListRegions(ctx context.Context) ([]ListRegionsRow, error) {
-	rows, err := q.db.Query(ctx, listRegions)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListRegionsRow{}
-	for rows.Next() {
-		var i ListRegionsRow
-		if err := rows.Scan(
-			&i.LocationID,
-			&i.Name,
-			&i.Latitude,
-			&i.Longitude,
-			&i.Capacity,
-			&i.CapacityUnitPrefixFactor,
-			&i.SysPeriod,
-			&i.LocationID_2,
-			&i.RegionName,
-			&i.BoundaryGeojson,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+// Currently active record
+func (q *Queries) UpdateLocationSource(ctx context.Context, arg UpdateLocationSourceParams) error {
+	_, err := q.db.Exec(ctx, updateLocationSource,
+		arg.LocationID,
+		arg.Name,
+		arg.Capacity,
+		arg.CapacityUnitPrefixFactor,
+		arg.Metadata,
+	)
+	return err
 }
 
-const listSites = `-- name: ListSites :many
-SELECT l.location_id, name, latitude, longitude, capacity, capacity_unit_prefix_factor, sys_period, site_metadata.location_id, client_name, client_site_id, yaw_degrees, pitch_degrees, energy_source FROM loc.locations as l
-LEFT OUTER JOIN loc.site_metadata USING (location_id)
-ORDER BY l.location_id
+const updateLocationSourceCapacity = `-- name: UpdateLocationSourceCapacity :exec
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+UPDATE loc.location_sources SET
+    capacity = $3,
+    capacity_unit_prefix_factor = $4
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    AND UPPER(sys_period) IS NULL
 `
 
-type ListSitesRow struct {
+type UpdateLocationSourceCapacityParams struct {
 	LocationID               int32
 	Name                     string
-	Latitude                 float32
-	Longitude                float32
 	Capacity                 int16
 	CapacityUnitPrefixFactor int16
-	SysPeriod                pgtype.Range[pgtype.Timestamptz]
-	LocationID_2             *int32
-	ClientName               *string
-	ClientSiteID             *string
-	YawDegrees               *int16
-	PitchDegrees             *int16
-	EnergySource             *int16
 }
 
-func (q *Queries) ListSites(ctx context.Context) ([]ListSitesRow, error) {
-	rows, err := q.db.Query(ctx, listSites)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListSitesRow{}
-	for rows.Next() {
-		var i ListSitesRow
-		if err := rows.Scan(
-			&i.LocationID,
-			&i.Name,
-			&i.Latitude,
-			&i.Longitude,
-			&i.Capacity,
-			&i.CapacityUnitPrefixFactor,
-			&i.SysPeriod,
-			&i.LocationID_2,
-			&i.ClientName,
-			&i.ClientSiteID,
-			&i.YawDegrees,
-			&i.PitchDegrees,
-			&i.EnergySource,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) UpdateLocationSourceCapacity(ctx context.Context, arg UpdateLocationSourceCapacityParams) error {
+	_, err := q.db.Exec(ctx, updateLocationSourceCapacity,
+		arg.LocationID,
+		arg.Name,
+		arg.Capacity,
+		arg.CapacityUnitPrefixFactor,
+	)
+	return err
+}
+
+const updateLocationSourceMetadata = `-- name: UpdateLocationSourceMetadata :exec
+
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types AS st
+    WHERE st.name = $2
+)
+UPDATE loc.location_sources SET
+    metadata = $3
+WHERE 
+    location_id = $1
+    AND source_type_id = source_type_id
+    AND UPPER(sys_period) IS NULL
+`
+
+type UpdateLocationSourceMetadataParams struct {
+	LocationID int32
+	Name       string
+	Metadata   []byte
+}
+
+// Currently active record
+func (q *Queries) UpdateLocationSourceMetadata(ctx context.Context, arg UpdateLocationSourceMetadataParams) error {
+	_, err := q.db.Exec(ctx, updateLocationSourceMetadata, arg.LocationID, arg.Name, arg.Metadata)
+	return err
 }

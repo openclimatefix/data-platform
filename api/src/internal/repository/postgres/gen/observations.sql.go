@@ -12,26 +12,30 @@ import (
 )
 
 const createObservation = `-- name: CreateObservation :one
-INSERT INTO obs.observations (
-    location_id, time_utc, generation, generation_unit_prefix_factor
+WITH source_type_id AS (
+    SELECT source_type_id FROM loc.source_types
+    WHERE name = $2
+)
+INSERT INTO obs.observed_generation_values (
+    location_id, source_type_id, time_utc, value
 ) VALUES (
-    $1, $2, $3, $4
+    $1, source_type_id, $3, $4
 ) RETURNING observation_id
 `
 
 type CreateObservationParams struct {
-	LocationID                 int32
-	TimeUtc                    pgtype.Timestamp
-	Generation                 int16
-	GenerationUnitPrefixFactor int16
+	LocationID int32
+	Name       string
+	TimeUtc    pgtype.Timestamp
+	Value      int16
 }
 
 func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationParams) (int32, error) {
 	row := q.db.QueryRow(ctx, createObservation,
 		arg.LocationID,
+		arg.Name,
 		arg.TimeUtc,
-		arg.Generation,
-		arg.GenerationUnitPrefixFactor,
+		arg.Value,
 	)
 	var observation_id int32
 	err := row.Scan(&observation_id)
@@ -39,37 +43,32 @@ func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationPa
 }
 
 type CreateObservationsParams struct {
-	LocationID                 int32
-	TimeUtc                    pgtype.Timestamp
-	Generation                 int16
-	GenerationUnitPrefixFactor int16
+	LocationID   int32
+	SourceTypeID int16
+	TimeUtc      pgtype.Timestamp
+	Value        int16
 }
 
-const listObservations = `-- name: ListObservations :many
-SELECT
-    obs.observations.observation_id,
-    obs.observations.location_id,
-    obs.observations.time_utc,
-    obs.observations.generation,
-    obs.observations.generation_unit_prefix_factor
-FROM obs.observations
+const listObservationsByLocationId = `-- name: ListObservationsByLocationId :many
+SELECT value, source_type_id, observation_id, location_id, time_utc FROM obs.observed_generation_values
+WHERE location_id = $1
 `
 
-func (q *Queries) ListObservations(ctx context.Context) ([]ObsObservation, error) {
-	rows, err := q.db.Query(ctx, listObservations)
+func (q *Queries) ListObservationsByLocationId(ctx context.Context, locationID int32) ([]ObsObservedGenerationValue, error) {
+	rows, err := q.db.Query(ctx, listObservationsByLocationId, locationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ObsObservation{}
+	items := []ObsObservedGenerationValue{}
 	for rows.Next() {
-		var i ObsObservation
+		var i ObsObservedGenerationValue
 		if err := rows.Scan(
+			&i.Value,
+			&i.SourceTypeID,
 			&i.ObservationID,
 			&i.LocationID,
 			&i.TimeUtc,
-			&i.Generation,
-			&i.GenerationUnitPrefixFactor,
 		); err != nil {
 			return nil, err
 		}

@@ -30,9 +30,9 @@ func (r *iteratorForCreateObservations) Next() bool {
 func (r iteratorForCreateObservations) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].LocationID,
+		r.rows[0].SourceTypeID,
 		r.rows[0].TimeUtc,
-		r.rows[0].Generation,
-		r.rows[0].GenerationUnitPrefixFactor,
+		r.rows[0].Value,
 	}, nil
 }
 
@@ -41,5 +41,5 @@ func (r iteratorForCreateObservations) Err() error {
 }
 
 func (q *Queries) CreateObservations(ctx context.Context, arg []CreateObservationsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"obs", "observations"}, []string{"location_id", "time_utc", "generation", "generation_unit_prefix_factor"}, &iteratorForCreateObservations{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"obs", "observed_generation_values"}, []string{"location_id", "source_type_id", "time_utc", "value"}, &iteratorForCreateObservations{rows: arg})
 }
