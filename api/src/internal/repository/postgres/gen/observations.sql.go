@@ -14,7 +14,7 @@ import (
 const createObservation = `-- name: CreateObservation :one
 WITH source_type_id AS (
     SELECT source_type_id FROM loc.source_types
-    WHERE name = $2
+    WHERE source_type_name = $2
 )
 INSERT INTO obs.observed_generation_values (
     location_id, source_type_id, time_utc, value
@@ -24,16 +24,16 @@ INSERT INTO obs.observed_generation_values (
 `
 
 type CreateObservationParams struct {
-	LocationID int32
-	Name       string
-	TimeUtc    pgtype.Timestamp
-	Value      int16
+	LocationID     int32
+	SourceTypeName string
+	TimeUtc        pgtype.Timestamp
+	Value          int16
 }
 
 func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationParams) (int32, error) {
 	row := q.db.QueryRow(ctx, createObservation,
 		arg.LocationID,
-		arg.Name,
+		arg.SourceTypeName,
 		arg.TimeUtc,
 		arg.Value,
 	)

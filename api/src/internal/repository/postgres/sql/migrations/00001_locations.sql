@@ -21,22 +21,22 @@ CREATE EXTENSION IF NOT EXISTS "postgis";
 -- Lookup table to store different source types
 CREATE TABLE loc.source_types(
     source_type_id SMALLINT GENERATED ALWAYS AS IDENTITY NOT NULL,
-    name TEXT NOT NULL
-        CHECK ( LENGTH(name) <= 24 AND name = LOWER(name) ),
+    source_type_name TEXT NOT NULL
+        CHECK ( LENGTH(source_type_name) <= 24 AND source_type_name = LOWER(source_type_name) ),
     PRIMARY KEY (source_type_id),
-    UNIQUE (name)
+    UNIQUE (source_type_name)
 );
-INSERT INTO loc.source_types (name) VALUES ('solar'), ('wind');
+INSERT INTO loc.source_types (source_type_name) VALUES ('solar'), ('wind');
 
 -- Lookup table to store different location types
 CREATE TABLE loc.location_types(
     location_type_id SMALLINT GENERATED ALWAYS AS IDENTITY NOT NULL,
-    name TEXT NOT NULL
-        CHECK ( LENGTH(name) <= 24 AND name = LOWER(name) ),
+    location_type_name TEXT NOT NULL
+        CHECK ( LENGTH(location_type_name) <= 24 AND location_type_name = LOWER(location_type_name) ),
     PRIMARY KEY (location_type_id),
-    UNIQUE (name)
+    UNIQUE (location_type_name)
 );
-INSERT INTO loc.location_types (name) VALUES ('site'), ('gsp'), ('dno');
+INSERT INTO loc.location_types (location_type_name) VALUES ('site'), ('gsp'), ('dno'), ('nation');
 
 
 /*- Tables ----------------------------------------------------------------------------------*/
@@ -44,14 +44,21 @@ INSERT INTO loc.location_types (name) VALUES ('site'), ('gsp'), ('dno');
 -- Table to store spatial data for locations
 CREATE TABLE loc.locations (
     location_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    name TEXT NOT NULL,
-    geom GEOMETRY NOT NULL
-        CHECK ( ST_GeometryType(geom) IN ('ST_Point', 'ST_Polygon', 'ST_MultiPolygon') ),
+    location_name TEXT NOT NULL,
+    geom GEOMETRY(GEOMETRY, 4326) NOT NULL
+        CHECK (
+            ST_GeometryType(geom) IN ('ST_Point', 'ST_Polygon', 'ST_MultiPolygon')
+            AND ST_SRID(geom) = 4326
+            AND ST_NDIMS(geom) = 2
+            AND ST_ISVALID(geom)
+            AND ST_XMin(geom) >= -180 AND ST_XMax(geom) <= 180
+            AND ST_YMin(geom) >= -90 AND ST_YMax(geom) <= 90
+        ),
     location_type_id SMALLINT NOT NULL
         REFERENCES loc.location_types(location_type_id)
         ON DELETE RESTRICT,
     PRIMARY KEY (location_id),
-    UNIQUE (name, geom)
+    UNIQUE (location_name, geom)
 );
 -- Required index for efficient spatial-based queries
 CREATE INDEX ON loc.locations USING GIST (geom);
@@ -75,10 +82,11 @@ CREATE TABLE loc.location_sources (
     -- Factor defining power of 10 to multiply the capacity by
     capacity_unit_prefix_factor SMALLINT DEFAULT (0) NOT NULL
         CHECK ( capacity_unit_prefix_factor IN (0, 3, 6, 9, 12, 15) ),
-    -- Capacity cap, measured in same units as capacity (e.g. curtailment)
+    -- Capacity cap, measured in percent of the capacity (e.g. curtailment)
     capacity_limit SMALLINT
-        CHECK ( capacity_limit IS NULL OR capacity_limit >= 0 ),
-    metadata JSONB,
+        CHECK ( capacity_limit IS NULL OR (capacity_limit >= 0 AND capacity_limit < 100) ),
+    metadata JSONB
+        CHECK ( metadata IS NULL OR metadata <> '{}'::jsonb ),
     sys_period TSRANGE NOT NULL
         DEFAULT TSRANGE(NOW()::TIMESTAMP, NULL, '[)')
         CHECK ( sys_period <> 'empty'::tsrange ),
@@ -109,6 +117,7 @@ BEGIN
     -- Handle UPDATE operations representing source improvements
     IF (TG_OP = 'UPDATE') THEN
         -- Check if the capacity, capacity_unit_prefix_factor, or metadata have changed
+        -- without an explicit change to the sys_period
         IF (
             OLD.capacity IS DISTINCT FROM NEW.capacity OR
             OLD.capacity_unit_prefix_factor IS DISTINCT FROM NEW.capacity_unit_prefix_factor OR

@@ -1,0 +1,41 @@
+// Messages for the location procedures of the QuartzAPI service
+
+syntax = "proto3";
+
+package fcfsapi;
+
+option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
+
+// --- Locations ----------------------------------------------------------------
+message CreateSiteRequest {
+  string name = 1;
+  float latitude = 2;
+  float longitude = 3;
+  int32 capacity_kw = 4;
+  string metadata = 5;
+}
+
+message CreateGspRequest {
+  string name = 1;
+  string geometry = 2;
+  int32 capacity_mw = 3;
+  string metadata = 4;
+}
+
+message CreateLocationResponse {
+  int64 location_id = 1;
+}
+
+message GetLocationRequest {
+  int64 location_id = 1;
+}
+
+message GetLocationResponse {
+  string location_id = 1;
+  string name = 2;
+  float latitude = 3;
+  float longitude = 4;
+  int32 capacity_kw = 5;
+  string metadata = 6;
+}
+

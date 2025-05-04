@@ -8,14 +8,14 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	pb "github.com/devsjc/fcfs/api/src/gen"
+	"github.com/devsjc/fcfs/api/src/internal/models/fcfsapi"
 	rpgx "github.com/devsjc/fcfs/api/src/internal/repository/postgres"
-	service "github.com/devsjc/fcfs/api/src/internal/service"
 )
 
 func main() {
 	log.Debug().Str("type", os.Getenv("DATABASE_TYPE")).Msg("Connecting to backend")
-	apiServer := service.NewQuartzAPIServer(rpgx.NewPostgresClient())
+	connString := os.Getenv("DATABASE_URL"),
+	apiServer := rpgx.NewQuartzAPIPostgresServer(connString)
 	log.Info().Msg("ApiServer created")
 
 	log.Info().Int("port", 50051).Msg("Starting GRPC server")
@@ -24,7 +24,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to listen")
 	}
 	s := grpc.NewServer()
-	pb.RegisterQuartzAPIServer(s, apiServer)
+	fcfsapi.RegisterQuartzAPIServer(s, apiServer)
 	reflection.Register(s)
 	log.Info().Msg("Listening on :50051")
 	s.Serve(lis)

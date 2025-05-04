@@ -1,7 +1,7 @@
 -- name: CreateObservation :one
 WITH source_type_id AS (
     SELECT source_type_id FROM loc.source_types
-    WHERE name = $2
+    WHERE source_type_name = $2
 )
 INSERT INTO obs.observed_generation_values (
     location_id, source_type_id, time_utc, value

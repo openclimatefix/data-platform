@@ -10,7 +10,7 @@ import (
 
 type LocLocation struct {
 	LocationID     int32
-	Name           string
+	LocationName   string
 	Geom           interface{}
 	LocationTypeID int16
 }
@@ -27,13 +27,13 @@ type LocLocationSource struct {
 }
 
 type LocLocationType struct {
-	LocationTypeID int16
-	Name           string
+	LocationTypeID   int16
+	LocationTypeName string
 }
 
 type LocSourceType struct {
-	SourceTypeID int16
-	Name         string
+	SourceTypeID   int16
+	SourceTypeName string
 }
 
 type ObsObservedGenerationValue struct {

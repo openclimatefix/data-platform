@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package fcfsapi;
+
+import "fcfsapi/location.proto";
+import "fcfsapi/forecast.proto";
+import "fcfsapi/quartzui.proto";
+
+option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
+
+service QuartzAPI {
+
+  // --- QuartzUI ----------------------------------------------------------------
+
+  rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesResponse) {}
+  rpc GetActualTimeseries(GetActualTimeseriesRequest) returns (stream GetActualTimeseriesResponse) {}
+  rpc GetActualCrossSection(GetActualCrossSectionRequest) returns (GetActualCrossSectionResponse) {}
+  rpc GetPredictedCrossSection(GetPredictedCrossSectionRequest) returns (GetPredictedCrossSectionResponse) {}
+
+  // --- Locations ----------------------------------------------------------------
+  // These could be split as they are, with a procedure for each type of location
+  // or, they could be combined into a single procedure with a type field in the message
+
+  rpc CreateSolarSite(CreateSiteRequest) returns (CreateLocationResponse) {}
+  rpc CreateSolarGsp(CreateGspRequest) returns (CreateLocationResponse) {}
+
+  rpc GetSolarSite(GetLocationRequest) returns (GetLocationResponse) {}
+  rpc GetSolarGsp(GetLocationRequest) returns (GetLocationResponse) {}
+
+  // --- Predictions ---------------------------------------------------------------
+
+  rpc CreateModel(CreateModelRequest) returns (CreateModelResponse) {}
+
+  rpc CreateSolarForecast(CreateForecastRequest) returns (CreateForecastResponse) {}
+}
+
+

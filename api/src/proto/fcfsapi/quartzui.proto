@@ -1,0 +1,77 @@
+// Messages for the QuartzUI procedures of the QuartzAPI service.
+
+syntax = "proto3";
+
+package fcfsapi;
+
+option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
+
+// --- GetPredictedTimeseries --------------------------------------------------------
+message GetPredictedTimeseriesRequest {
+  repeated string location_ids = 1;
+}
+
+message GetPredictedTimeseriesResponse {
+  string location_id = 1;
+  repeated PredictedYield yields = 2;
+}
+
+message PredictedYield {
+  int32 yield_kw = 1;
+  int64 timestamp_unix = 2;
+  PredictedYieldUncertainty uncertainty = 3;
+}
+
+message PredictedYieldUncertainty {
+  int32 lower_kw = 1;
+  int32 upper_kw = 2;
+}
+
+// --- GetActualTimeseries -----------------------------------------------------------
+message GetActualTimeseriesRequest {
+  repeated string location_ids = 1;
+}
+
+message GetActualTimeseriesResponse {
+  string location_id = 1;
+  repeated ActualYield yields = 2;
+}
+
+message ActualYield {
+  int32 yield_kw = 1;
+  int64 timestamp_unix = 2;
+}
+
+// --- GetPredictedCrossSection ------------------------------------------------------
+message GetPredictedCrossSectionRequest {
+  repeated string location_ids = 1;
+  int64 timestamp_unix = 2;
+}
+
+message GetPredictedCrossSectionResponse {
+  int64 timestamp_unix = 1;
+  repeated PredictedYieldAtLocation yields = 2;
+}
+
+message PredictedYieldAtLocation {
+  string location_id = 1;
+  int32 yield_kw = 2;
+  PredictedYieldUncertainty uncertainty = 3;
+}
+
+// --- GetActualCrossSection ---------------------------------------------------------
+message GetActualCrossSectionRequest {
+  repeated string location_ids = 1;
+  int64 timestamp_unix = 2;
+}
+
+message GetActualCrossSectionResponse {
+  int64 timestamp_unix = 1;
+  repeated ActualYieldAtLocation yields = 2;
+}
+
+message ActualYieldAtLocation {
+  string location_id = 1;
+  int32 yield_kw = 2;
+}
+

@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.29.3
-// source: api.proto
+// source: fcfsapi/service.proto
 
-package proto
+package fcfsapi
 
 import (
 	context "context"
@@ -19,36 +19,32 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	QuartzAPI_GetPredictedTimeseries_FullMethodName   = "/api.QuartzAPI/GetPredictedTimeseries"
-	QuartzAPI_GetActualTimeseries_FullMethodName      = "/api.QuartzAPI/GetActualTimeseries"
-	QuartzAPI_GetActualCrossSection_FullMethodName    = "/api.QuartzAPI/GetActualCrossSection"
-	QuartzAPI_GetPredictedCrossSection_FullMethodName = "/api.QuartzAPI/GetPredictedCrossSection"
-	QuartzAPI_GetLocationMetadata_FullMethodName      = "/api.QuartzAPI/GetLocationMetadata"
+	QuartzAPI_GetPredictedTimeseries_FullMethodName   = "/fcfsapi.QuartzAPI/GetPredictedTimeseries"
+	QuartzAPI_GetActualTimeseries_FullMethodName      = "/fcfsapi.QuartzAPI/GetActualTimeseries"
+	QuartzAPI_GetActualCrossSection_FullMethodName    = "/fcfsapi.QuartzAPI/GetActualCrossSection"
+	QuartzAPI_GetPredictedCrossSection_FullMethodName = "/fcfsapi.QuartzAPI/GetPredictedCrossSection"
+	QuartzAPI_CreateSolarSite_FullMethodName          = "/fcfsapi.QuartzAPI/CreateSolarSite"
+	QuartzAPI_CreateSolarGsp_FullMethodName           = "/fcfsapi.QuartzAPI/CreateSolarGsp"
+	QuartzAPI_GetSolarSite_FullMethodName             = "/fcfsapi.QuartzAPI/GetSolarSite"
+	QuartzAPI_GetSolarGsp_FullMethodName              = "/fcfsapi.QuartzAPI/GetSolarGsp"
+	QuartzAPI_CreateModel_FullMethodName              = "/fcfsapi.QuartzAPI/CreateModel"
+	QuartzAPI_CreateSolarForecast_FullMethodName      = "/fcfsapi.QuartzAPI/CreateSolarForecast"
 )
 
 // QuartzAPIClient is the client API for QuartzAPI service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type QuartzAPIClient interface {
-	// GetPredictedTimeseriesRequest is a request for a set of predicted yields for one or more locations.
-	// The response is a stream of GetPredictedTimeseriesResponse messages.
-	// each containing the predicted yields for a single location.
 	GetPredictedTimeseries(ctx context.Context, in *GetPredictedTimeseriesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetPredictedTimeseriesResponse], error)
-	// GetActualTimeseriesRequest is a request for a set of actual yields for one or more locations.
-	// The response is a stream of GetActualTimeseriesResponse messages.
-	// each containing the actual yields for a single location.
 	GetActualTimeseries(ctx context.Context, in *GetActualTimeseriesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetActualTimeseriesResponse], error)
-	// GetPredictedCrossSectionRequest is a request for a specific predicted yield for one or more locations
-	// at a single timestamp. The response is a GetPredictedCrossSectionResponse message containing the
-	// predicted yields for each location.
 	GetActualCrossSection(ctx context.Context, in *GetActualCrossSectionRequest, opts ...grpc.CallOption) (*GetActualCrossSectionResponse, error)
-	// GetActualCrossSectionRequest is a request for a specific actual yield for one or more locations
-	// at a single timestamp. The response is a GetActualCrossSectionResponse message containing the
-	// actual yields for each location.
 	GetPredictedCrossSection(ctx context.Context, in *GetPredictedCrossSectionRequest, opts ...grpc.CallOption) (*GetPredictedCrossSectionResponse, error)
-	// GetLocationMetadataRequest is a request for the metadata for a single location.
-	// The response is a GetLocationMetadataResponse message containing the metadata for the location.
-	GetLocationMetadata(ctx context.Context, in *GetLocationMetadataRequest, opts ...grpc.CallOption) (*GetLocationMetadataResponse, error)
+	CreateSolarSite(ctx context.Context, in *CreateSiteRequest, opts ...grpc.CallOption) (*CreateLocationResponse, error)
+	CreateSolarGsp(ctx context.Context, in *CreateGspRequest, opts ...grpc.CallOption) (*CreateLocationResponse, error)
+	GetSolarSite(ctx context.Context, in *GetLocationRequest, opts ...grpc.CallOption) (*GetLocationResponse, error)
+	GetSolarGsp(ctx context.Context, in *GetLocationRequest, opts ...grpc.CallOption) (*GetLocationResponse, error)
+	CreateModel(ctx context.Context, in *CreateModelRequest, opts ...grpc.CallOption) (*CreateModelResponse, error)
+	CreateSolarForecast(ctx context.Context, in *CreateForecastRequest, opts ...grpc.CallOption) (*CreateForecastResponse, error)
 }
 
 type quartzAPIClient struct {
@@ -117,10 +113,60 @@ func (c *quartzAPIClient) GetPredictedCrossSection(ctx context.Context, in *GetP
 	return out, nil
 }
 
-func (c *quartzAPIClient) GetLocationMetadata(ctx context.Context, in *GetLocationMetadataRequest, opts ...grpc.CallOption) (*GetLocationMetadataResponse, error) {
+func (c *quartzAPIClient) CreateSolarSite(ctx context.Context, in *CreateSiteRequest, opts ...grpc.CallOption) (*CreateLocationResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetLocationMetadataResponse)
-	err := c.cc.Invoke(ctx, QuartzAPI_GetLocationMetadata_FullMethodName, in, out, cOpts...)
+	out := new(CreateLocationResponse)
+	err := c.cc.Invoke(ctx, QuartzAPI_CreateSolarSite_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *quartzAPIClient) CreateSolarGsp(ctx context.Context, in *CreateGspRequest, opts ...grpc.CallOption) (*CreateLocationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateLocationResponse)
+	err := c.cc.Invoke(ctx, QuartzAPI_CreateSolarGsp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *quartzAPIClient) GetSolarSite(ctx context.Context, in *GetLocationRequest, opts ...grpc.CallOption) (*GetLocationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLocationResponse)
+	err := c.cc.Invoke(ctx, QuartzAPI_GetSolarSite_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *quartzAPIClient) GetSolarGsp(ctx context.Context, in *GetLocationRequest, opts ...grpc.CallOption) (*GetLocationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLocationResponse)
+	err := c.cc.Invoke(ctx, QuartzAPI_GetSolarGsp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *quartzAPIClient) CreateModel(ctx context.Context, in *CreateModelRequest, opts ...grpc.CallOption) (*CreateModelResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateModelResponse)
+	err := c.cc.Invoke(ctx, QuartzAPI_CreateModel_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *quartzAPIClient) CreateSolarForecast(ctx context.Context, in *CreateForecastRequest, opts ...grpc.CallOption) (*CreateForecastResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateForecastResponse)
+	err := c.cc.Invoke(ctx, QuartzAPI_CreateSolarForecast_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -128,32 +174,22 @@ func (c *quartzAPIClient) GetLocationMetadata(ctx context.Context, in *GetLocati
 }
 
 // QuartzAPIServer is the server API for QuartzAPI service.
-// All implementations must embed UnimplementedQuartzAPIServer
+// All implementations should embed UnimplementedQuartzAPIServer
 // for forward compatibility.
 type QuartzAPIServer interface {
-	// GetPredictedTimeseriesRequest is a request for a set of predicted yields for one or more locations.
-	// The response is a stream of GetPredictedTimeseriesResponse messages.
-	// each containing the predicted yields for a single location.
 	GetPredictedTimeseries(*GetPredictedTimeseriesRequest, grpc.ServerStreamingServer[GetPredictedTimeseriesResponse]) error
-	// GetActualTimeseriesRequest is a request for a set of actual yields for one or more locations.
-	// The response is a stream of GetActualTimeseriesResponse messages.
-	// each containing the actual yields for a single location.
 	GetActualTimeseries(*GetActualTimeseriesRequest, grpc.ServerStreamingServer[GetActualTimeseriesResponse]) error
-	// GetPredictedCrossSectionRequest is a request for a specific predicted yield for one or more locations
-	// at a single timestamp. The response is a GetPredictedCrossSectionResponse message containing the
-	// predicted yields for each location.
 	GetActualCrossSection(context.Context, *GetActualCrossSectionRequest) (*GetActualCrossSectionResponse, error)
-	// GetActualCrossSectionRequest is a request for a specific actual yield for one or more locations
-	// at a single timestamp. The response is a GetActualCrossSectionResponse message containing the
-	// actual yields for each location.
 	GetPredictedCrossSection(context.Context, *GetPredictedCrossSectionRequest) (*GetPredictedCrossSectionResponse, error)
-	// GetLocationMetadataRequest is a request for the metadata for a single location.
-	// The response is a GetLocationMetadataResponse message containing the metadata for the location.
-	GetLocationMetadata(context.Context, *GetLocationMetadataRequest) (*GetLocationMetadataResponse, error)
-	mustEmbedUnimplementedQuartzAPIServer()
+	CreateSolarSite(context.Context, *CreateSiteRequest) (*CreateLocationResponse, error)
+	CreateSolarGsp(context.Context, *CreateGspRequest) (*CreateLocationResponse, error)
+	GetSolarSite(context.Context, *GetLocationRequest) (*GetLocationResponse, error)
+	GetSolarGsp(context.Context, *GetLocationRequest) (*GetLocationResponse, error)
+	CreateModel(context.Context, *CreateModelRequest) (*CreateModelResponse, error)
+	CreateSolarForecast(context.Context, *CreateForecastRequest) (*CreateForecastResponse, error)
 }
 
-// UnimplementedQuartzAPIServer must be embedded to have
+// UnimplementedQuartzAPIServer should be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
@@ -172,11 +208,25 @@ func (UnimplementedQuartzAPIServer) GetActualCrossSection(context.Context, *GetA
 func (UnimplementedQuartzAPIServer) GetPredictedCrossSection(context.Context, *GetPredictedCrossSectionRequest) (*GetPredictedCrossSectionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPredictedCrossSection not implemented")
 }
-func (UnimplementedQuartzAPIServer) GetLocationMetadata(context.Context, *GetLocationMetadataRequest) (*GetLocationMetadataResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetLocationMetadata not implemented")
+func (UnimplementedQuartzAPIServer) CreateSolarSite(context.Context, *CreateSiteRequest) (*CreateLocationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSolarSite not implemented")
 }
-func (UnimplementedQuartzAPIServer) mustEmbedUnimplementedQuartzAPIServer() {}
-func (UnimplementedQuartzAPIServer) testEmbeddedByValue()                   {}
+func (UnimplementedQuartzAPIServer) CreateSolarGsp(context.Context, *CreateGspRequest) (*CreateLocationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSolarGsp not implemented")
+}
+func (UnimplementedQuartzAPIServer) GetSolarSite(context.Context, *GetLocationRequest) (*GetLocationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSolarSite not implemented")
+}
+func (UnimplementedQuartzAPIServer) GetSolarGsp(context.Context, *GetLocationRequest) (*GetLocationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSolarGsp not implemented")
+}
+func (UnimplementedQuartzAPIServer) CreateModel(context.Context, *CreateModelRequest) (*CreateModelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateModel not implemented")
+}
+func (UnimplementedQuartzAPIServer) CreateSolarForecast(context.Context, *CreateForecastRequest) (*CreateForecastResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSolarForecast not implemented")
+}
+func (UnimplementedQuartzAPIServer) testEmbeddedByValue() {}
 
 // UnsafeQuartzAPIServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to QuartzAPIServer will
@@ -254,20 +304,110 @@ func _QuartzAPI_GetPredictedCrossSection_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _QuartzAPI_GetLocationMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetLocationMetadataRequest)
+func _QuartzAPI_CreateSolarSite_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSiteRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(QuartzAPIServer).GetLocationMetadata(ctx, in)
+		return srv.(QuartzAPIServer).CreateSolarSite(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: QuartzAPI_GetLocationMetadata_FullMethodName,
+		FullMethod: QuartzAPI_CreateSolarSite_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(QuartzAPIServer).GetLocationMetadata(ctx, req.(*GetLocationMetadataRequest))
+		return srv.(QuartzAPIServer).CreateSolarSite(ctx, req.(*CreateSiteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QuartzAPI_CreateSolarGsp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateGspRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QuartzAPIServer).CreateSolarGsp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QuartzAPI_CreateSolarGsp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QuartzAPIServer).CreateSolarGsp(ctx, req.(*CreateGspRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QuartzAPI_GetSolarSite_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLocationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QuartzAPIServer).GetSolarSite(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QuartzAPI_GetSolarSite_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QuartzAPIServer).GetSolarSite(ctx, req.(*GetLocationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QuartzAPI_GetSolarGsp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLocationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QuartzAPIServer).GetSolarGsp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QuartzAPI_GetSolarGsp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QuartzAPIServer).GetSolarGsp(ctx, req.(*GetLocationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QuartzAPI_CreateModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateModelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QuartzAPIServer).CreateModel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QuartzAPI_CreateModel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QuartzAPIServer).CreateModel(ctx, req.(*CreateModelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QuartzAPI_CreateSolarForecast_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateForecastRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QuartzAPIServer).CreateSolarForecast(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QuartzAPI_CreateSolarForecast_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QuartzAPIServer).CreateSolarForecast(ctx, req.(*CreateForecastRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -276,7 +416,7 @@ func _QuartzAPI_GetLocationMetadata_Handler(srv interface{}, ctx context.Context
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var QuartzAPI_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "api.QuartzAPI",
+	ServiceName: "fcfsapi.QuartzAPI",
 	HandlerType: (*QuartzAPIServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -288,8 +428,28 @@ var QuartzAPI_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _QuartzAPI_GetPredictedCrossSection_Handler,
 		},
 		{
-			MethodName: "GetLocationMetadata",
-			Handler:    _QuartzAPI_GetLocationMetadata_Handler,
+			MethodName: "CreateSolarSite",
+			Handler:    _QuartzAPI_CreateSolarSite_Handler,
+		},
+		{
+			MethodName: "CreateSolarGsp",
+			Handler:    _QuartzAPI_CreateSolarGsp_Handler,
+		},
+		{
+			MethodName: "GetSolarSite",
+			Handler:    _QuartzAPI_GetSolarSite_Handler,
+		},
+		{
+			MethodName: "GetSolarGsp",
+			Handler:    _QuartzAPI_GetSolarGsp_Handler,
+		},
+		{
+			MethodName: "CreateModel",
+			Handler:    _QuartzAPI_CreateModel_Handler,
+		},
+		{
+			MethodName: "CreateSolarForecast",
+			Handler:    _QuartzAPI_CreateSolarForecast_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -304,5 +464,5 @@ var QuartzAPI_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "api.proto",
+	Metadata: "fcfsapi/service.proto",
 }

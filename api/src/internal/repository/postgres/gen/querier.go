@@ -9,25 +9,26 @@ import (
 )
 
 type Querier interface {
+	CreateForecast(ctx context.Context, arg CreateForecastParams) (int32, error)
 	//- Queries for the locations table ------------------------------
 	CreateLocation(ctx context.Context, arg CreateLocationParams) (int32, error)
-	//- Queries for the location_sources table ---------------------------
 	CreateLocationSource(ctx context.Context, arg CreateLocationSourceParams) (int32, error)
+	CreateModel(ctx context.Context, arg CreateModelParams) (int32, error)
 	CreateObservation(ctx context.Context, arg CreateObservationParams) (int32, error)
 	CreateObservations(ctx context.Context, arg []CreateObservationsParams) (int64, error)
-	// Currently active record
+	CreatePredictedGenerationValues(ctx context.Context, arg []CreatePredictedGenerationValuesParams) (int64, error)
 	DecomissionLocationSource(ctx context.Context, arg DecomissionLocationSourceParams) error
 	GetLocationById(ctx context.Context, locationID int32) (LocLocation, error)
-	ListLocationGeometryByType(ctx context.Context, name string) ([]ListLocationGeometryByTypeRow, error)
-	ListLocationIdsByType(ctx context.Context, name string) ([]ListLocationIdsByTypeRow, error)
-	// Currently active record
+	//- Queries for the location_sources table ---------------------------
+	// Get latest active record via the UPPER(sys_period) IS NULL condition
+	GetLocationSourceByType(ctx context.Context, arg GetLocationSourceByTypeParams) (interface{}, error)
+	ListLocationGeometryByType(ctx context.Context, locationTypeName string) ([]ListLocationGeometryByTypeRow, error)
+	ListLocationIdsByType(ctx context.Context, locationTypeName string) ([]ListLocationIdsByTypeRow, error)
 	ListLocationSourceHistoryByType(ctx context.Context, arg ListLocationSourceHistoryByTypeParams) ([]interface{}, error)
-	ListLocationsByType(ctx context.Context, name string) ([]LocLocation, error)
+	ListLocationsByType(ctx context.Context, locationTypeName string) ([]LocLocation, error)
 	ListObservationsByLocationId(ctx context.Context, locationID int32) ([]ObsObservedGenerationValue, error)
-	// Currently active record
 	UpdateLocationSource(ctx context.Context, arg UpdateLocationSourceParams) error
 	UpdateLocationSourceCapacity(ctx context.Context, arg UpdateLocationSourceCapacityParams) error
-	// Currently active record
 	UpdateLocationSourceMetadata(ctx context.Context, arg UpdateLocationSourceMetadataParams) error
 }
 
