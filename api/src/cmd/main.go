@@ -14,7 +14,7 @@ import (
 
 func main() {
 	log.Debug().Str("type", os.Getenv("DATABASE_TYPE")).Msg("Connecting to backend")
-	connString := os.Getenv("DATABASE_URL"),
+	connString := os.Getenv("DATABASE_URL")
 	apiServer := rpgx.NewQuartzAPIPostgresServer(connString)
 	log.Info().Msg("ApiServer created")
 

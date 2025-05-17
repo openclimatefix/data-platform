@@ -5,7 +5,7 @@ INSERT INTO loc.locations AS l (
     location_name, geom, location_type_id 
 ) VALUES (
     $2,
-    ST_GEOMFROMTEXT(sqlc.arg(geom)::text, 4326), --Ensure in WSG84
+    ST_GeomFromText(sqlc.arg(geom)::text, 4326), --Ensure in WSG84
     (SELECT location_type_id FROM loc.location_types AS lt WHERE lt.location_type_name = $1)
 ) RETURNING l.location_id;
 

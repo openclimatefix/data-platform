@@ -106,32 +106,23 @@ func TestCreateSolarSite(t *testing.T) {
 	s, cleanup := setupSuite(t, ctx)
 	defer cleanup(t)
 
-	resp, err := s.CreateSolarSite (ctx, &fcfsapi.CreateSiteRequest{
-		Name:       "testsite01",
-		Latitude:   55.5,
-		Longitude:  0.05,
+	resp, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
+		Name:       "GREENWICH OBSERVATORY",
+		Latitude:   51.4769,
+		Longitude:  -0.0005,
 		CapacityKw: 1280,
-		Metadata:   `{"group": "test"}`,
+		Metadata:   `{"group": "test-sites"}`,
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, int64(1), resp.LocationId)
+	// Expected to be insterted after the UK GSPs
+	require.Equal(t, int64(344), resp.LocationId)
 }
 
 func TestCreateForecast(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupSuite(t, ctx)
 	defer cleanup(t)
-
-	// Create a site
-	createSiteResponse, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
-		Name:       "testsite01",
-		Latitude:   55.5,
-		Longitude:  0.05,
-		CapacityKw: 1280,
-		Metadata:   `{"group": "test"}`,
-	})
-	require.NoError(t, err)
 
 	// Create a model
 	modelResp, err := s.CreateModel(ctx, &fcfsapi.CreateModelRequest{
@@ -155,7 +146,7 @@ func TestCreateForecast(t *testing.T) {
 		Forecast: &fcfsapi.Forecast{
 			ModelId: modelResp.ModelId,
 			InitTimeUtc: timestamppb.New(init_time),
-			LocationId: createSiteResponse.LocationId,
+			LocationId: 0,
 		},
 		PredictedGenerationValues: predictedGenerationValues,
 	}
@@ -176,9 +167,9 @@ func BenchmarkCreateForecast(b *testing.B) {
 	siteIds := make([]int64, num_sites)
 	for i := range siteIds {
 		createSiteResponse, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
-			Name:       fmt.Sprintf("testsite%03d", i),
+			Name:       fmt.Sprintf("TESTSITE%03d", i),
 			Latitude:   55.5,
-			Longitude:  0.05,
+			Longitude:  float32(0.05 * float64(i)),
 			CapacityKw: int32(i),
 			Metadata:   `{"group": "test"}`,
 		})
