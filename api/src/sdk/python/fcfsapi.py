@@ -98,12 +98,12 @@ class GetPredictedTimeseriesRequest(betterproto.Message):
     --------------------------------------------------------
     """
 
-    location_ids: List[str] = betterproto.string_field(1)
+    location_ids: List[int] = betterproto.int32_field(1)
 
 
 @dataclass
 class GetPredictedTimeseriesResponse(betterproto.Message):
-    location_id: str = betterproto.string_field(1)
+    location_id: int = betterproto.int32_field(1)
     yields: List["PredictedYield"] = betterproto.message_field(2)
 
 
@@ -132,7 +132,7 @@ class GetActualTimeseriesRequest(betterproto.Message):
 
 @dataclass
 class GetActualTimeseriesResponse(betterproto.Message):
-    location_id: str = betterproto.string_field(1)
+    location_id: int = betterproto.int32_field(1)
     yields: List["ActualYield"] = betterproto.message_field(2)
 
 
@@ -149,7 +149,7 @@ class GetPredictedCrossSectionRequest(betterproto.Message):
     ------------------------------------------------------
     """
 
-    location_ids: List[str] = betterproto.string_field(1)
+    location_ids: List[int] = betterproto.int32_field(1)
     timestamp_unix: int = betterproto.int64_field(2)
 
 
@@ -161,7 +161,7 @@ class GetPredictedCrossSectionResponse(betterproto.Message):
 
 @dataclass
 class PredictedYieldAtLocation(betterproto.Message):
-    location_id: str = betterproto.string_field(1)
+    location_id: int = betterproto.int32_field(1)
     yield_kw: int = betterproto.int32_field(2)
     uncertainty: "PredictedYieldUncertainty" = betterproto.message_field(3)
 
@@ -173,7 +173,7 @@ class GetActualCrossSectionRequest(betterproto.Message):
     ---------------------------------------------------------
     """
 
-    location_ids: List[str] = betterproto.string_field(1)
+    location_ids: List[int] = betterproto.int32_field(1)
     timestamp_unix: int = betterproto.int64_field(2)
 
 
@@ -185,13 +185,13 @@ class GetActualCrossSectionResponse(betterproto.Message):
 
 @dataclass
 class ActualYieldAtLocation(betterproto.Message):
-    location_id: str = betterproto.string_field(1)
+    location_id: int = betterproto.int32_field(1)
     yield_kw: int = betterproto.int32_field(2)
 
 
 class QuartzAPIStub(betterproto.ServiceStub):
     async def get_predicted_timeseries(
-        self, *, location_ids: List[str] = []
+        self, *, location_ids: List[int] = []
     ) -> AsyncGenerator[GetPredictedTimeseriesResponse, None]:
         request = GetPredictedTimeseriesRequest()
         request.location_ids = location_ids
@@ -217,7 +217,7 @@ class QuartzAPIStub(betterproto.ServiceStub):
             yield response
 
     async def get_actual_cross_section(
-        self, *, location_ids: List[str] = [], timestamp_unix: int = 0
+        self, *, location_ids: List[int] = [], timestamp_unix: int = 0
     ) -> GetActualCrossSectionResponse:
         request = GetActualCrossSectionRequest()
         request.location_ids = location_ids
@@ -230,7 +230,7 @@ class QuartzAPIStub(betterproto.ServiceStub):
         )
 
     async def get_predicted_cross_section(
-        self, *, location_ids: List[str] = [], timestamp_unix: int = 0
+        self, *, location_ids: List[int] = [], timestamp_unix: int = 0
     ) -> GetPredictedCrossSectionResponse:
         request = GetPredictedCrossSectionRequest()
         request.location_ids = location_ids

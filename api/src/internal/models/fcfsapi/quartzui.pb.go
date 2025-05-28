@@ -26,7 +26,7 @@ const (
 // --- GetPredictedTimeseries --------------------------------------------------------
 type GetPredictedTimeseriesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds   []string               `protobuf:"bytes,1,rep,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	LocationIds   []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -61,7 +61,7 @@ func (*GetPredictedTimeseriesRequest) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *GetPredictedTimeseriesRequest) GetLocationIds() []string {
+func (x *GetPredictedTimeseriesRequest) GetLocationIds() []int32 {
 	if x != nil {
 		return x.LocationIds
 	}
@@ -70,7 +70,7 @@ func (x *GetPredictedTimeseriesRequest) GetLocationIds() []string {
 
 type GetPredictedTimeseriesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationId    string                 `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	Yields        []*PredictedYield      `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -106,11 +106,11 @@ func (*GetPredictedTimeseriesResponse) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *GetPredictedTimeseriesResponse) GetLocationId() string {
+func (x *GetPredictedTimeseriesResponse) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
-	return ""
+	return 0
 }
 
 func (x *GetPredictedTimeseriesResponse) GetYields() []*PredictedYield {
@@ -279,7 +279,7 @@ func (x *GetActualTimeseriesRequest) GetLocationIds() []string {
 
 type GetActualTimeseriesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationId    string                 `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	Yields        []*ActualYield         `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -315,11 +315,11 @@ func (*GetActualTimeseriesResponse) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetActualTimeseriesResponse) GetLocationId() string {
+func (x *GetActualTimeseriesResponse) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
-	return ""
+	return 0
 }
 
 func (x *GetActualTimeseriesResponse) GetYields() []*ActualYield {
@@ -384,7 +384,7 @@ func (x *ActualYield) GetTimestampUnix() int64 {
 // --- GetPredictedCrossSection ------------------------------------------------------
 type GetPredictedCrossSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds   []string               `protobuf:"bytes,1,rep,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	LocationIds   []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
 	TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -420,7 +420,7 @@ func (*GetPredictedCrossSectionRequest) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *GetPredictedCrossSectionRequest) GetLocationIds() []string {
+func (x *GetPredictedCrossSectionRequest) GetLocationIds() []int32 {
 	if x != nil {
 		return x.LocationIds
 	}
@@ -488,7 +488,7 @@ func (x *GetPredictedCrossSectionResponse) GetYields() []*PredictedYieldAtLocati
 
 type PredictedYieldAtLocation struct {
 	state         protoimpl.MessageState     `protogen:"open.v1"`
-	LocationId    string                     `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	LocationId    int32                      `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	YieldKw       int32                      `protobuf:"varint,2,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
 	Uncertainty   *PredictedYieldUncertainty `protobuf:"bytes,3,opt,name=uncertainty,proto3" json:"uncertainty,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -525,11 +525,11 @@ func (*PredictedYieldAtLocation) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *PredictedYieldAtLocation) GetLocationId() string {
+func (x *PredictedYieldAtLocation) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
-	return ""
+	return 0
 }
 
 func (x *PredictedYieldAtLocation) GetYieldKw() int32 {
@@ -549,7 +549,7 @@ func (x *PredictedYieldAtLocation) GetUncertainty() *PredictedYieldUncertainty {
 // --- GetActualCrossSection ---------------------------------------------------------
 type GetActualCrossSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds   []string               `protobuf:"bytes,1,rep,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	LocationIds   []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
 	TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -585,7 +585,7 @@ func (*GetActualCrossSectionRequest) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *GetActualCrossSectionRequest) GetLocationIds() []string {
+func (x *GetActualCrossSectionRequest) GetLocationIds() []int32 {
 	if x != nil {
 		return x.LocationIds
 	}
@@ -653,7 +653,7 @@ func (x *GetActualCrossSectionResponse) GetYields() []*ActualYieldAtLocation {
 
 type ActualYieldAtLocation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationId    string                 `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	YieldKw       int32                  `protobuf:"varint,2,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -689,11 +689,11 @@ func (*ActualYieldAtLocation) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *ActualYieldAtLocation) GetLocationId() string {
+func (x *ActualYieldAtLocation) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
-	return ""
+	return 0
 }
 
 func (x *ActualYieldAtLocation) GetYieldKw() int32 {
@@ -709,9 +709,9 @@ const file_fcfsapi_quartzui_proto_rawDesc = "" +
 	"\n" +
 	"\x16fcfsapi/quartzui.proto\x12\afcfsapi\"B\n" +
 	"\x1dGetPredictedTimeseriesRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\tR\vlocationIds\"r\n" +
+	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\"r\n" +
 	"\x1eGetPredictedTimeseriesResponse\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12/\n" +
 	"\x06yields\x18\x02 \x03(\v2\x17.fcfsapi.PredictedYieldR\x06yields\"\x98\x01\n" +
 	"\x0ePredictedYield\x12\x19\n" +
@@ -724,31 +724,31 @@ const file_fcfsapi_quartzui_proto_rawDesc = "" +
 	"\x1aGetActualTimeseriesRequest\x12!\n" +
 	"\flocation_ids\x18\x01 \x03(\tR\vlocationIds\"l\n" +
 	"\x1bGetActualTimeseriesResponse\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12,\n" +
 	"\x06yields\x18\x02 \x03(\v2\x14.fcfsapi.ActualYieldR\x06yields\"O\n" +
 	"\vActualYield\x12\x19\n" +
 	"\byield_kw\x18\x01 \x01(\x05R\ayieldKw\x12%\n" +
 	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"k\n" +
 	"\x1fGetPredictedCrossSectionRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\tR\vlocationIds\x12%\n" +
+	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12%\n" +
 	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"\x84\x01\n" +
 	" GetPredictedCrossSectionResponse\x12%\n" +
 	"\x0etimestamp_unix\x18\x01 \x01(\x03R\rtimestampUnix\x129\n" +
 	"\x06yields\x18\x02 \x03(\v2!.fcfsapi.PredictedYieldAtLocationR\x06yields\"\x9c\x01\n" +
 	"\x18PredictedYieldAtLocation\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12\x19\n" +
 	"\byield_kw\x18\x02 \x01(\x05R\ayieldKw\x12D\n" +
 	"\vuncertainty\x18\x03 \x01(\v2\".fcfsapi.PredictedYieldUncertaintyR\vuncertainty\"h\n" +
 	"\x1cGetActualCrossSectionRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\tR\vlocationIds\x12%\n" +
+	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12%\n" +
 	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"~\n" +
 	"\x1dGetActualCrossSectionResponse\x12%\n" +
 	"\x0etimestamp_unix\x18\x01 \x01(\x03R\rtimestampUnix\x126\n" +
 	"\x06yields\x18\x02 \x03(\v2\x1e.fcfsapi.ActualYieldAtLocationR\x06yields\"S\n" +
 	"\x15ActualYieldAtLocation\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12\x19\n" +
 	"\byield_kw\x18\x02 \x01(\x05R\ayieldKwB@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
 

@@ -11,6 +11,9 @@ import (
 	"github.com/devsjc/fcfs/api/src/internal/models/fcfsapi"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/stretchr/testify/require"
@@ -49,8 +52,10 @@ func TestCapacityKWToMultiplier(t *testing.T) {
 	}
 }
 
-// Build a Postgres container with the relevant extensions and some test data
-func setupSuite(tb testing.TB, ctx context.Context) (fcfsapi.QuartzAPIServer, func(testing.TB)) {
+// Create a GRPC client for running tests with
+// * talks via an in-memory buffer to a Quartz Postgres Server instance
+// * this instance is backed with a Postgres container with the relevant extensions 
+func setupSuite(tb testing.TB, ctx context.Context) (fcfsapi.QuartzAPIClient, func(testing.TB)) {
 	req := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
 			Context:    filepath.Join(".", "infra"),
@@ -81,16 +86,39 @@ func setupSuite(tb testing.TB, ctx context.Context) (fcfsapi.QuartzAPIServer, fu
 	host, err := pgC.Host(ctx)
 	require.NoError(tb, err)
 
-	connString := fmt.Sprintf(
+	lis := bufconn.Listen(1024 * 1024)
+
+	// Create server using in-memory listener
+	s := grpc.NewServer()
+	pgConnString := fmt.Sprintf(
 		"postgres://postgres:postgres@%s/postgres",
 		net.JoinHostPort(host, containerPort.Port()),
 	)
+	fcfsapi.RegisterQuartzAPIServer(s, NewQuartzAPIPostgresServer(pgConnString))
+	go func() {
+        if err := s.Serve(lis); err != nil {
+            tb.Fatalf("Server exited with error: %v", err)
+        }
+    }()
+	tb.Logf("Created server backed by fully migrated postgres container at %s", pgConnString)
 
-	s := NewQuartzAPIPostgresServer(connString)
-	tb.Logf("Connected to fully migrated postgres container at %s", connString)
+	// Create client using same in-memory listener
+	bufDialer := func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}
+	cc, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(bufDialer),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(tb, err)
+	c := fcfsapi.NewQuartzAPIClient(cc)
+	tb.Logf("Created client for server")
 
-	return s, func(tb testing.TB) {
+	return c, func(tb testing.TB) {
 		tb.Logf("Cleaning up postgres container")
+		cc.Close()
+		s.GracefulStop()
 		testcontainers.CleanupContainer(tb, pgC)
 	}
 }
@@ -154,6 +182,74 @@ func TestCreateForecast(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 }
+
+func TestGetPredictedTimeseries(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupSuite(t, ctx)
+	defer cleanup(t)
+
+	// Create a model
+	modelResp, err := s.CreateModel(ctx, &fcfsapi.CreateModelRequest{
+		Name: "testmodel01",
+		Version: "0.1.0",
+	})
+	require.NoError(t, err)
+
+
+	// Make 10 forecasts created an hour apart from each other
+	init_time := time.Now().Truncate(24 * time.Hour)
+	for i := 9; i >= 0; i-- {
+
+		init_time_i := init_time.Add(-1 * time.Duration(i) * time.Hour)
+		predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, 0, 12 * 48) // 12 predictions per hour, 48 hours
+		for j, _ := range predictedGenerationValues {
+			// Each forecast predicts the value of its time offset as the generation value
+			predictedGenerationValues[i] = &fcfsapi.PredictedGenerationValue{
+					HorizonMins:       int64(j * 5),
+					P50:               int32(i),
+					P10:               int32(i),
+					P90:               int32(i),
+					Metadata:          `{"group": "test"}`,
+			}
+		}
+
+		req := &fcfsapi.CreateForecastRequest{
+			Forecast: &fcfsapi.Forecast{
+				ModelId: modelResp.ModelId,
+				InitTimeUtc: timestamppb.New(init_time_i),
+				LocationId: 0,
+			},
+			PredictedGenerationValues: predictedGenerationValues,
+		}
+		resp, err := s.CreateSolarForecast(ctx, req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+	}
+
+	// Now get the predicted timeseries for the last 10 hours
+	stream, err := s.GetPredictedTimeseries(ctx, &fcfsapi.GetPredictedTimeseriesRequest{
+		LocationIds: []int32{0},
+	})
+	
+	require.NoError(t, err)
+	var count int
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			break // End of stream
+		}
+		require.NotNil(t, resp)
+		require.Equal(t, int64(0), resp.LocationId)
+
+		for _, v := range resp.Yields {
+			count++
+			require.Equal(t, int32(10), v.YieldKw) // All forecasts should have P50 = 10
+		}
+	}
+
+}
+
+
 
 func BenchmarkCreateForecast(b *testing.B) {
 	ctx := context.Background()

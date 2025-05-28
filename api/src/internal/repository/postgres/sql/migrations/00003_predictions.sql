@@ -73,12 +73,15 @@ CREATE TABLE pred.predicted_generation_values (
     horizon_mins SMALLINT NOT NULL
         CHECK (horizon_mins >= 0),
     -- Predicted generation confidence level values, as a percentage of capacity
+    -- represented by the smallint range. Since it isn't impossible to predict a little
+    -- over capacity, 30000 represents 100% of capacity intead of the max smallint value
+    -- (32767). This is to allow for a little bit of leeway in the predictions.
     p10 SMALLINT
-        CHECK (p10 IS NULL or p10 >= 0 and p10 <= 110),
+        CHECK (p10 IS NULL or p10 >= 0),
     p50 SMALLINT NOT NULL
-        CHECK (p50 >= 0 and p50 <= 110),
+        CHECK (p50 >= 0),
     p90 SMALLINT
-        CHECK (p90 IS NULL or p90 >= 0 and p90 <= 110),
+        CHECK (p90 IS NULL or p90 >= 0),
     forecast_id INTEGER NOT NULL
         REFERENCES pred.forecasts(forecast_id)
         ON DELETE CASCADE
@@ -125,48 +128,6 @@ SET retention = '1 month',
     infinite_time_partitions = true
 WHERE parent_table = 'public.predicted_generation_values';
 
-
-/*- Views ------------------------------------------------------------------------------*/
-
--- View to get the forecast values from the forecast whos init time is closest to
--- the current time minus the desired horizon minutes (e.g. if desired_horizon_mins = 240,
--- and the current time is 2023-01-01 12:00, then the forecast with init_time_utc
--- closest to 2023-01-01 08:00 will be used).
-CREATE VIEW pred.future_timeseries_horizon_view AS
-WITH vars AS (
-    SELECT
-        -- The desired horizon in minutes
-        0 AS desired_horizon_hours,
-        -- The window to look back for past values, in hours
-        52 AS window_hours_backwards,
-        -- The window to look forward for future values, in hours
-        36 AS window_hours_forwards
-),
-future_horizon_forecast AS (
-    SELECT DISTINCT ON (location_id)
-        f.location_id, f.forecast_id 
-    FROM pred.forecasts f
-    JOIN vars v ON true
-    WHERE
-        f.init_time_utc BETWEEN 
-            (NOW() - make_interval(hours => v.desired_horizon_hours + 1))
-            AND (NOW() - make_interval(hours => v.desired_horizon_hours))
-    ORDER BY
-        location_id, f.init_time_utc DESC
-    LIMIT 1
-)
-SELECT
-    p.location_id, p.forecast_id, p.target_time_utc,
-    p.horizon_mins, p.p10, p.p50, p.p90, p.metadata
-FROM pred.predicted_generation_values p
-JOIN future_horizon_forecast f
-  ON p.forecast_id = f.forecast_id
-JOIN vars v ON true
-WHERE
-    p.target_time_utc BETWEEN
-        (NOW() - make_interval(hours => v.desired_horizon_hours))
-        AND (NOW() + make_interval(hours => v.window_hours_forwards));
-    
 -- +goose Down
 DROP SCHEMA pred CASCADE;
 

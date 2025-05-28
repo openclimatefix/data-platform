@@ -359,8 +359,41 @@ func (q *QuartzAPIPostgresServer) GetPredictedCrossSection(context.Context, *fcf
 }
 
 // GetPredictedTimeseries implements proto.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(*fcfsapi.GetPredictedTimeseriesRequest, grpc.ServerStreamingServer[fcfsapi.GetPredictedTimeseriesResponse]) error {
-	panic("unimplemented")
+func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredictedTimeseriesRequest, stream grpc.ServerStreamingServer[fcfsapi.GetPredictedTimeseriesResponse]) error {
+	log.Info().Msg("GetPredictedTimeseries called")
+	// Establish a transaction with the database
+	tx, err := q.pool.Begin(stream.Context())
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback(stream.Context())
+	querier := db.New(tx)
+
+	for _, locationId := range req.LocationIds {
+		dbYields, err := querier.GetMinHorizonPredictedGenerationValuesForLocation(stream.Context(), int32(locationId))
+		if err != nil {
+			return fmt.Errorf("failed to get predicted generation values: %v", err)
+		}
+
+		yields := make([]*fcfsapi.PredictedYield, 0, len(dbYields))
+		for i, yield := range dbYields {
+			yields[i] = &fcfsapi.PredictedYield{
+				YieldKw:       int32(yield.P50),
+				TimestampUnix: yield.TargetTimeUtc.Time.Unix(),
+				Uncertainty:   &fcfsapi.PredictedYieldUncertainty{},
+			}
+		}
+
+		err = stream.Send(&fcfsapi.GetPredictedTimeseriesResponse{
+			LocationId: locationId,
+			Yields: yields,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to send predicted timeseries response: %v", err)
+		}
+	}
+	
+	return nil
 }
 
 // NewPostgresClient creates a new PostgresClient instance and connects to the database

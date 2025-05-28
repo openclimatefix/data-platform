@@ -8,11 +8,11 @@ option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfs
 
 // --- GetPredictedTimeseries --------------------------------------------------------
 message GetPredictedTimeseriesRequest {
-  repeated string location_ids = 1;
+  repeated int32 location_ids = 1;
 }
 
 message GetPredictedTimeseriesResponse {
-  string location_id = 1;
+  int32 location_id = 1;
   repeated PredictedYield yields = 2;
 }
 
@@ -33,7 +33,7 @@ message GetActualTimeseriesRequest {
 }
 
 message GetActualTimeseriesResponse {
-  string location_id = 1;
+  int32 location_id = 1;
   repeated ActualYield yields = 2;
 }
 
@@ -44,7 +44,7 @@ message ActualYield {
 
 // --- GetPredictedCrossSection ------------------------------------------------------
 message GetPredictedCrossSectionRequest {
-  repeated string location_ids = 1;
+  repeated int32 location_ids = 1;
   int64 timestamp_unix = 2;
 }
 
@@ -54,14 +54,14 @@ message GetPredictedCrossSectionResponse {
 }
 
 message PredictedYieldAtLocation {
-  string location_id = 1;
+  int32 location_id = 1;
   int32 yield_kw = 2;
   PredictedYieldUncertainty uncertainty = 3;
 }
 
 // --- GetActualCrossSection ---------------------------------------------------------
 message GetActualCrossSectionRequest {
-  repeated string location_ids = 1;
+  repeated int32 location_ids = 1;
   int64 timestamp_unix = 2;
 }
 
@@ -71,7 +71,7 @@ message GetActualCrossSectionResponse {
 }
 
 message ActualYieldAtLocation {
-  string location_id = 1;
+  int32 location_id = 1;
   int32 yield_kw = 2;
 }
 
