@@ -228,45 +228,6 @@ func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *fcfsapi.
 	return &fcfsapi.CreateModelResponse{ModelId: int64(modelID)}, tx.Commit(ctx)
 }
 
-func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *fcfsapi.CreateGspRequest) (*fcfsapi.CreateLocationResponse, error) {
-	log.Info().Msg("CreateSolarGsp called")
-	// Establish a transaction with the database
-	tx, err := q.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %v", err)
-	}
-	defer tx.Rollback(ctx)
-	querier := db.New(tx)
-
-	// Create a new location as a GSP
-	params := db.CreateLocationParams{
-		LocationTypeName: "gsp",
-		LocationName:     req.Name,
-		Geom:             req.Geometry,
-	}
-	locationID, err := querier.CreateLocation(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create GSP: %v", err)
-	}
-	// Create a Solar source associated with the location
-	capacity, prefix, err := capacityKwToValueMultiplier(int64(req.CapacityMw * 1000))
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert capacity: %v", err)
-	}
-	sourceParams := db.CreateLocationSourceParams{
-		LocationID:               locationID,
-		SourceTypeName:           "solar",
-		Capacity:                 capacity,
-		CapacityUnitPrefixFactor: prefix,
-		Metadata:                 []byte(req.Metadata),
-	}
-	_, err = querier.CreateLocationSource(ctx, sourceParams)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create source: %v", err)
-	}
-	return &fcfsapi.CreateLocationResponse{LocationId: int64(locationID)}, tx.Commit(ctx)
-}
-
 func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfsapi.CreateSiteRequest) (*fcfsapi.CreateLocationResponse, error) {
 	l := log.With().Str("method", "CreateSolarSite").Logger()
 	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
@@ -288,7 +249,7 @@ func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfs
 	}
 	locationID, err := querier.CreateLocation(ctx, params)
 	if err != nil {
-		l.Err(err).Msg("failed to create site")
+		l.Err(err).Msg("failed to create site location")
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid Site. Ensure name is not empty and uppercase, and that coordinates are valid WGS84.")
 	}
 	l.Debug().Msgf("Created location of type 'site' with ID %d", locationID)
@@ -312,7 +273,7 @@ func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfs
 	}
 	_, err = querier.CreateLocationSource(ctx, sourceParams)
 	if err != nil {
-		l.Err(err).Msg("failed to create solar source for site")
+		l.Err(err).Msgf("failed to create solar source for location %d", locationID)
 		return nil, status.Error(codes.InvalidArgument, "Invalid site. Ensure metadata is NULL or a non-empty JSON object.")
 	}
 	l.Debug().Msgf("Created source of type 'solar' for location %d with capacity %dx10^%dW", locationID, capacity, prefix)
@@ -320,12 +281,15 @@ func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfs
 }
 
 // CreateWindGsp implements proto.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) CreateWindGsp(ctx context.Context, req *fcfsapi.CreateGspRequest) (*fcfsapi.CreateLocationResponse, error) {
-	log.Info().Msg("CreateSolarGsp called")
+func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *fcfsapi.CreateGspRequest) (*fcfsapi.CreateLocationResponse, error) {
+	l := log.With().Str("method", "CreateSolarGsp").Logger()
+	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %v", err)
+		l.Err(err).Msg("failed to begin transaction")
+		return nil, status.Error(codes.Internal, "Encountered database connection error")
 	}
 	defer tx.Rollback(ctx)
 	querier := db.New(tx)
@@ -338,68 +302,28 @@ func (q *QuartzAPIPostgresServer) CreateWindGsp(ctx context.Context, req *fcfsap
 	}
 	locationID, err := querier.CreateLocation(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create GSP: %v", err)
+		l.Err(err).Msg("failed to create GSP")
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid GSP. Ensure name is not empty and uppercase, and that geometry is valid WGS84.")
 	}
 	// Create a Solar source associated with the location
 	capacity, prefix, err := capacityKwToValueMultiplier(int64(req.CapacityMw * 1000))
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert capacity: %v", err)
+		l.Err(err).Msg("failed to convert capacity")
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid capacity value: %d", req.CapacityMw)
 	}
 	sourceParams := db.CreateLocationSourceParams{
 		LocationID:               locationID,
-		SourceTypeName:           "wind",
+		SourceTypeName:           "solar",
 		Capacity:                 capacity,
 		CapacityUnitPrefixFactor: prefix,
 		Metadata:                 []byte(req.Metadata),
 	}
 	_, err = querier.CreateLocationSource(ctx, sourceParams)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create source: %v", err)
+		l.Err(err).Msgf("failed to create solar source for location with id %d", locationID)
+		return nil, status.Error(codes.InvalidArgument, "Invalid GSP. Ensure metadata is NULL or a non-empty JSON object.")
 	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %v", err)
-	}
-	return &fcfsapi.CreateLocationResponse{LocationId: int64(locationID)}, tx.Commit(ctx)
-}
 
-// CreateWindSite implements proto.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) CreateWindSite(ctx context.Context, req *fcfsapi.CreateSiteRequest) (*fcfsapi.CreateLocationResponse, error) {
-	log.Info().Msg("CreateWindSite called")
-	// Establish a transaction with the database
-	tx, err := q.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %v", err)
-	}
-	defer tx.Rollback(ctx)
-	querier := db.New(tx)
-
-	// Create a new location as a GSP
-	params := db.CreateLocationParams{
-		LocationTypeName: "site",
-		LocationName:     req.Name,
-		Geom:             fmt.Sprintf("POINT(%f %f)", req.Latitude, req.Longitude),
-	}
-	locationID, err := querier.CreateLocation(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Site: %v", err)
-	}
-	// Create a Solar source associated with the location
-	capacity, prefix, err := capacityKwToValueMultiplier(int64(req.CapacityKw))
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert capacity: %v", err)
-	}
-	sourceParams := db.CreateLocationSourceParams{
-		LocationID:               locationID,
-		SourceTypeName:           "wind",
-		Capacity:                 capacity,
-		CapacityUnitPrefixFactor: prefix,
-		Metadata:                 []byte(req.Metadata),
-	}
-	_, err = querier.CreateLocationSource(ctx, sourceParams)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create source: %v", err)
-	}
 	return &fcfsapi.CreateLocationResponse{LocationId: int64(locationID)}, tx.Commit(ctx)
 }
 

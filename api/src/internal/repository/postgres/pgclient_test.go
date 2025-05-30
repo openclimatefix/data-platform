@@ -239,6 +239,93 @@ func TestCreateSolarSite(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCreateSolarGSP(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupSuite(t, ctx)
+	defer cleanup(t)
+
+	defaultGsp := &fcfsapi.CreateGspRequest{
+		Name:       "OXFORDSHIRE",
+		Metadata:   `{"group": "test-gsps"}`,
+		Geometry:   "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5))",
+		CapacityMw: 2002,
+	}
+
+	tests := []struct {
+		name string
+		gsp  *fcfsapi.CreateGspRequest
+		shouldError bool
+	}{
+		{
+			name: "Create default GSP",
+			gsp:  defaultGsp,
+			shouldError: false,
+		},
+		{
+			name: "Create GSP with large capacity",
+			gsp: &fcfsapi.CreateGspRequest{
+				Name:       "LARGE CAPACITY GSP",
+				Metadata:   defaultGsp.Metadata,
+				Geometry:   defaultGsp.Geometry,
+				CapacityMw: 1000000, // 1000 GW
+			},
+			shouldError: false,
+		},
+		{
+			name: "Create GSP with negative capacity",
+			gsp: &fcfsapi.CreateGspRequest{
+				Name:       "NEGATIVE CAPACITY GSP",
+				Metadata:   defaultGsp.Metadata,
+				Geometry:   defaultGsp.Geometry,
+				CapacityMw: -1000, // Invalid capacity
+			},
+			shouldError: true,
+		},
+		{
+			name: "Create GSP with invalid geometry",
+			gsp: &fcfsapi.CreateGspRequest{
+				Name:       "INVALID GEOMETRY GSP",
+				Metadata:   defaultGsp.Metadata,
+				Geometry:   "INVALID GEOMETRY",
+				CapacityMw: defaultGsp.CapacityMw,
+			},
+			shouldError: true,
+		},
+		{
+			name: "Create GSP with empty name",
+			gsp: &fcfsapi.CreateGspRequest{
+				Name:       "",
+				Metadata:   defaultGsp.Metadata,
+				Geometry:   defaultGsp.Geometry,
+				CapacityMw: defaultGsp.CapacityMw,
+			},
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		resp, err := s.CreateSolarGsp(ctx, tt.gsp)
+		if tt.shouldError {
+			t.Logf("Expected error: %v", err)
+			require.Error(t, err)
+			continue
+		} 
+		require.NoError(t, err)
+
+		resp2, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: resp.LocationId})
+		require.NoError(t, err)
+		require.Equal(t, tt.gsp.Name, resp2.Name)
+		require.Equal(t, tt.gsp.Metadata, resp2.Metadata)
+		require.Equal(t, int64(tt.gsp.CapacityMw * 1000), resp2.CapacityKw)
+	}
+
+	_, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: 999999})
+	t.Log("Expected error for non-existent GSP: ", err)
+	require.Error(t, err)
+}
+
+
+
 func TestGetPredictedTimeseries(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupSuite(t, ctx)
