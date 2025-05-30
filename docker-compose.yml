@@ -10,7 +10,9 @@ volumes:
 services:
 
   api:
-    image: ghcr.io/devsjc/fcfs-api:latest
+    build:
+      context: api
+      dockerfile: Containerfile
     ports:
       - "50051:50051"
     environment:
@@ -20,6 +22,15 @@ services:
       database:
         condition: service_healthy
         restart: true
+    networks:
+      - fcfs-net
+
+  grpcui:
+    image: fullstorydev/grpcui:latest
+    ports:
+      - "8080:8080"
+    command: ["-plaintext", "api:50051"]
+    depends_on: ["api", "envoy-proxy"]
     networks:
       - fcfs-net
 
@@ -35,7 +46,9 @@ services:
       - fcfs-net
 
   frontend:
-    image: ghcr.io/devsjc/fcfs-frontend:latest
+    build:
+      context: frontend
+      dockerfile: Containerfile
     ports:
       - "5173:5173"
     environment:
@@ -45,7 +58,9 @@ services:
       - fcfs-net
 
   database:
-    image: ghcr.io/devsjc/fcfs-pgdb:latest
+    build:
+      context: api/src/internal/repository/postgres/infra
+      dockerfile: Containerfile
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

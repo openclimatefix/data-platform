@@ -8,6 +8,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+    "google.golang.org/grpc/health"
+    "google.golang.org/grpc/health/grpc_health_v1"
+
 	"github.com/devsjc/fcfs/api/src/internal/models/fcfsapi"
 	rpgx "github.com/devsjc/fcfs/api/src/internal/repository/postgres"
 )
@@ -25,6 +28,7 @@ func main() {
 	}
 	s := grpc.NewServer()
 	fcfsapi.RegisterQuartzAPIServer(s, apiServer)
+	grpc_health_v1.RegisterHealthServer(s, health.NewServer())
 	reflection.Register(s)
 	log.Info().Msg("Listening on :50051")
 	s.Serve(lis)
