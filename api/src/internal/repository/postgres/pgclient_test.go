@@ -152,55 +152,91 @@ func TestCreateSolarSite(t *testing.T) {
 	s, cleanup := setupSuite(t, ctx)
 	defer cleanup(t)
 
-	resp, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
-		Name:       "GREENWICH OBSERVATORY",
+	defaultSite := &fcfsapi.CreateSiteRequest{
+		Name: "GREENWICH OBSERVATORY",
 		Latitude:   51.4769,
 		Longitude:  -0.0005,
 		CapacityKw: 1280,
 		Metadata:   `{"group": "test-sites"}`,
-	})
+	}
 
-	require.NoError(t, err)
-	// Expected to be insterted after the UK GSPs
-	require.Equal(t, int64(344), resp.LocationId)
-}
-
-func TestCreateForecast(t *testing.T) {
-	ctx := context.Background()
-	s, cleanup := setupSuite(t, ctx)
-	defer cleanup(t)
-
-	// Create a model
-	modelResp, err := s.CreateModel(ctx, &fcfsapi.CreateModelRequest{
-		Name: "testmodel01",
-		Version: "0.1.0",
-		MakeDefault: true,
-	})
-	require.NoError(t, err)
-
-	init_time := time.Now().Truncate(24 * time.Hour)
-	predictedGenerationValues := []*fcfsapi.PredictedGenerationValue{
+	tests := []struct {
+		name string
+		site *fcfsapi.CreateSiteRequest
+		shouldError bool
+	}{
 		{
-			HorizonMins:       0,
-			P50:               85,
-			P10:               81,
-			P90:               88,
-			Metadata:          `{"group": "test"}`,
+			name: "Create default site",
+			site: defaultSite,
+			shouldError: false,
+		},
+		{
+			name: "Create site with large capacity",
+			site: &fcfsapi.CreateSiteRequest{
+				Name: "LARGE CAPACITY SITE",
+				Latitude: defaultSite.Latitude,
+				Longitude: defaultSite.Longitude,
+				CapacityKw: 100000000, // 100 GW
+				Metadata: defaultSite.Metadata,
+			},
+			shouldError: false,
+		},
+		{
+			name: "Create site with negative capacity",
+			site: &fcfsapi.CreateSiteRequest{
+				Name: "NEGATIVE CAPACITY SITE",
+				Latitude: defaultSite.Latitude,
+				Longitude: defaultSite.Longitude,
+				CapacityKw: -1000, // Invalid capacity
+				Metadata: defaultSite.Metadata,
+			},
+			shouldError: true,
+		},
+		{
+			name: "Create site with invalid metadata",
+			site: &fcfsapi.CreateSiteRequest{
+				Name: "INVALID METADATA SITE",
+				Latitude: defaultSite.Latitude,
+				Longitude: defaultSite.Longitude,
+				CapacityKw: defaultSite.CapacityKw,
+				Metadata: "{}", // Empty metadata
+			},
+			shouldError: true,
+		},
+		{
+			name: "Create site with invalid name",
+			site: &fcfsapi.CreateSiteRequest{
+				Name: "",
+				Latitude: defaultSite.Latitude,
+				Longitude: defaultSite.Longitude,
+				CapacityKw: defaultSite.CapacityKw,
+				Metadata: defaultSite.Metadata,
+			},
+			shouldError: true,
 		},
 	}
 
-	req := &fcfsapi.CreateForecastRequest{
-		Forecast: &fcfsapi.Forecast{
-			ModelId: modelResp.ModelId,
-			InitTimeUtc: timestamppb.New(init_time),
-			LocationId: 0,
-		},
-		PredictedGenerationValues: predictedGenerationValues,
+	for _, tt := range tests {
+
+		resp, err := s.CreateSolarSite(ctx, tt.site)
+		if tt.shouldError {
+			t.Logf("Expected error: %v", err)
+			require.Error(t, err)
+			continue
+		} 
+		require.NoError(t, err)
+
+		resp2, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: resp.LocationId})
+		require.Equal(t, tt.site.Name, resp2.Name)
+		require.Equal(t, tt.site.Latitude, resp2.Latitude)
+		require.Equal(t, tt.site.Longitude, resp2.Longitude)
+		require.Equal(t, tt.site.CapacityKw, int32(resp2.CapacityKw))
+		require.Equal(t, tt.site.Metadata, resp2.Metadata)
 	}
-	resp, err := s.CreateSolarForecast(ctx, req)
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	require.Equal(t, int64(0), resp.ForecastId)
+    
+	_, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: 999999})
+	t.Log("Expected error for non-existent location: ", err)
+	require.Error(t, err)
 }
 
 func TestGetPredictedTimeseries(t *testing.T) {

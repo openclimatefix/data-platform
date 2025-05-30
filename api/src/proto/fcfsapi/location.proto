@@ -31,11 +31,11 @@ message GetLocationRequest {
 }
 
 message GetLocationResponse {
-  string location_id = 1;
+  int32 location_id = 1;
   string name = 2;
   float latitude = 3;
   float longitude = 4;
-  int32 capacity_kw = 5;
+  int64 capacity_kw = 5;
   string metadata = 6;
 }
 

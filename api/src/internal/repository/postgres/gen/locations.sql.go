@@ -7,6 +7,8 @@ package gen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createLocation = `-- name: CreateLocation :one
@@ -84,28 +86,47 @@ func (q *Queries) DecomissionLocationSource(ctx context.Context, arg Decomission
 }
 
 const getLocationById = `-- name: GetLocationById :one
-SELECT location_id, location_name, geom, location_type_id, geom_hash FROM loc.locations
-WHERE location_id = $1
+SELECT 
+    l.location_id,
+    l.location_name,
+    ST_AsText(l.geom)::text AS geom,
+    (SELECT location_type_name FROM loc.location_types WHERE location_type_id = l.location_type_id) AS location_type_name,
+    ST_Y(l.centroid)::real AS latitude,
+    ST_X(l.centroid)::real AS longitude
+FROM loc.locations AS l
+WHERE l.location_id = $1
 `
 
-func (q *Queries) GetLocationById(ctx context.Context, locationID int32) (LocLocation, error) {
+type GetLocationByIdRow struct {
+	LocationID       int32
+	LocationName     string
+	Geom             string
+	LocationTypeName string
+	Latitude         float32
+	Longitude        float32
+}
+
+func (q *Queries) GetLocationById(ctx context.Context, locationID int32) (GetLocationByIdRow, error) {
 	row := q.db.QueryRow(ctx, getLocationById, locationID)
-	var i LocLocation
+	var i GetLocationByIdRow
 	err := row.Scan(
 		&i.LocationID,
 		&i.LocationName,
 		&i.Geom,
-		&i.LocationTypeID,
-		&i.GeomHash,
+		&i.LocationTypeName,
+		&i.Latitude,
+		&i.Longitude,
 	)
 	return i, err
 }
 
 const getLocationSourceByType = `-- name: GetLocationSourceByType :one
+/*- Queries for the location_sources table ---------------------------
+*/
 
-SELECT (
+SELECT 
     record_id, capacity, capacity_unit_prefix_factor, metadata
-) FROM loc.location_sources
+FROM loc.location_sources
 WHERE 
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
@@ -117,18 +138,32 @@ type GetLocationSourceByTypeParams struct {
 	SourceTypeName string
 }
 
-// - Queries for the location_sources table ---------------------------
+type GetLocationSourceByTypeRow struct {
+	RecordID                 int32
+	Capacity                 int16
+	CapacityUnitPrefixFactor int16
+	Metadata                 []byte
+}
+
 // Get latest active record via the UPPER(sys_period) IS NULL condition
-func (q *Queries) GetLocationSourceByType(ctx context.Context, arg GetLocationSourceByTypeParams) (interface{}, error) {
+func (q *Queries) GetLocationSourceByType(ctx context.Context, arg GetLocationSourceByTypeParams) (GetLocationSourceByTypeRow, error) {
 	row := q.db.QueryRow(ctx, getLocationSourceByType, arg.LocationID, arg.SourceTypeName)
-	var column_1 interface{}
-	err := row.Scan(&column_1)
-	return column_1, err
+	var i GetLocationSourceByTypeRow
+	err := row.Scan(
+		&i.RecordID,
+		&i.Capacity,
+		&i.CapacityUnitPrefixFactor,
+		&i.Metadata,
+	)
+	return i, err
 }
 
 const listLocationGeometryByType = `-- name: ListLocationGeometryByType :many
-SELECT location_name, ST_AsText(geom) FROM loc.locations AS l
-WHERE l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
+SELECT
+    location_name, ST_AsText(geom)
+FROM loc.locations AS l
+WHERE
+    l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
 `
 
 type ListLocationGeometryByTypeRow struct {
@@ -157,8 +192,11 @@ func (q *Queries) ListLocationGeometryByType(ctx context.Context, locationTypeNa
 }
 
 const listLocationIdsByType = `-- name: ListLocationIdsByType :many
-SELECT location_id, location_name FROM loc.locations AS l
-WHERE l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
+SELECT
+    location_id, location_name
+FROM loc.locations AS l
+WHERE
+    l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
 ORDER BY l.location_id
 `
 
@@ -188,9 +226,9 @@ func (q *Queries) ListLocationIdsByType(ctx context.Context, locationTypeName st
 }
 
 const listLocationSourceHistoryByType = `-- name: ListLocationSourceHistoryByType :many
-SELECT (
+SELECT
     record_id, capacity, capacity_unit_prefix_factor, metadata, sys_period
-) FROM loc.location_sources
+FROM loc.location_sources
 WHERE 
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
@@ -202,19 +240,33 @@ type ListLocationSourceHistoryByTypeParams struct {
 	SourceTypeName string
 }
 
-func (q *Queries) ListLocationSourceHistoryByType(ctx context.Context, arg ListLocationSourceHistoryByTypeParams) ([]interface{}, error) {
+type ListLocationSourceHistoryByTypeRow struct {
+	RecordID                 int32
+	Capacity                 int16
+	CapacityUnitPrefixFactor int16
+	Metadata                 []byte
+	SysPeriod                pgtype.Range[pgtype.Timestamp]
+}
+
+func (q *Queries) ListLocationSourceHistoryByType(ctx context.Context, arg ListLocationSourceHistoryByTypeParams) ([]ListLocationSourceHistoryByTypeRow, error) {
 	rows, err := q.db.Query(ctx, listLocationSourceHistoryByType, arg.LocationID, arg.SourceTypeName)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []interface{}{}
+	items := []ListLocationSourceHistoryByTypeRow{}
 	for rows.Next() {
-		var column_1 interface{}
-		if err := rows.Scan(&column_1); err != nil {
+		var i ListLocationSourceHistoryByTypeRow
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.Capacity,
+			&i.CapacityUnitPrefixFactor,
+			&i.Metadata,
+			&i.SysPeriod,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, column_1)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -223,8 +275,11 @@ func (q *Queries) ListLocationSourceHistoryByType(ctx context.Context, arg ListL
 }
 
 const listLocationsByType = `-- name: ListLocationsByType :many
-SELECT location_id, location_name, geom, location_type_id, geom_hash FROM loc.locations AS l
-WHERE l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
+SELECT
+    location_id, location_name, geom, location_type_id, centroid, geom_hash
+FROM loc.locations AS l
+WHERE
+    l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
 ORDER BY l.location_id
 `
 
@@ -242,6 +297,7 @@ func (q *Queries) ListLocationsByType(ctx context.Context, locationTypeName stri
 			&i.LocationName,
 			&i.Geom,
 			&i.LocationTypeID,
+			&i.Centroid,
 			&i.GeomHash,
 		); err != nil {
 			return nil, err

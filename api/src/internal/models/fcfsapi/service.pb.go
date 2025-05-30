@@ -24,16 +24,15 @@ var File_fcfsapi_service_proto protoreflect.FileDescriptor
 
 const file_fcfsapi_service_proto_rawDesc = "" +
 	"\n" +
-	"\x15fcfsapi/service.proto\x12\afcfsapi\x1a\x16fcfsapi/location.proto\x1a\x16fcfsapi/forecast.proto\x1a\x16fcfsapi/quartzui.proto2\x9e\a\n" +
+	"\x15fcfsapi/service.proto\x12\afcfsapi\x1a\x16fcfsapi/location.proto\x1a\x16fcfsapi/forecast.proto\x1a\x16fcfsapi/quartzui.proto2\xd6\x06\n" +
 	"\tQuartzAPI\x12m\n" +
 	"\x16GetPredictedTimeseries\x12&.fcfsapi.GetPredictedTimeseriesRequest\x1a'.fcfsapi.GetPredictedTimeseriesResponse\"\x000\x01\x12d\n" +
 	"\x13GetActualTimeseries\x12#.fcfsapi.GetActualTimeseriesRequest\x1a$.fcfsapi.GetActualTimeseriesResponse\"\x000\x01\x12h\n" +
 	"\x15GetActualCrossSection\x12%.fcfsapi.GetActualCrossSectionRequest\x1a&.fcfsapi.GetActualCrossSectionResponse\"\x00\x12q\n" +
 	"\x18GetPredictedCrossSection\x12(.fcfsapi.GetPredictedCrossSectionRequest\x1a).fcfsapi.GetPredictedCrossSectionResponse\"\x00\x12P\n" +
 	"\x0fCreateSolarSite\x12\x1a.fcfsapi.CreateSiteRequest\x1a\x1f.fcfsapi.CreateLocationResponse\"\x00\x12N\n" +
-	"\x0eCreateSolarGsp\x12\x19.fcfsapi.CreateGspRequest\x1a\x1f.fcfsapi.CreateLocationResponse\"\x00\x12K\n" +
-	"\fGetSolarSite\x12\x1b.fcfsapi.GetLocationRequest\x1a\x1c.fcfsapi.GetLocationResponse\"\x00\x12J\n" +
-	"\vGetSolarGsp\x12\x1b.fcfsapi.GetLocationRequest\x1a\x1c.fcfsapi.GetLocationResponse\"\x00\x12J\n" +
+	"\x0eCreateSolarGsp\x12\x19.fcfsapi.CreateGspRequest\x1a\x1f.fcfsapi.CreateLocationResponse\"\x00\x12O\n" +
+	"\x10GetSolarLocation\x12\x1b.fcfsapi.GetLocationRequest\x1a\x1c.fcfsapi.GetLocationResponse\"\x00\x12J\n" +
 	"\vCreateModel\x12\x1b.fcfsapi.CreateModelRequest\x1a\x1c.fcfsapi.CreateModelResponse\"\x00\x12X\n" +
 	"\x13CreateSolarForecast\x12\x1e.fcfsapi.CreateForecastRequest\x1a\x1f.fcfsapi.CreateForecastResponse\"\x00B@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
 
@@ -63,22 +62,20 @@ var file_fcfsapi_service_proto_depIdxs = []int32{
 	3,  // 3: fcfsapi.QuartzAPI.GetPredictedCrossSection:input_type -> fcfsapi.GetPredictedCrossSectionRequest
 	4,  // 4: fcfsapi.QuartzAPI.CreateSolarSite:input_type -> fcfsapi.CreateSiteRequest
 	5,  // 5: fcfsapi.QuartzAPI.CreateSolarGsp:input_type -> fcfsapi.CreateGspRequest
-	6,  // 6: fcfsapi.QuartzAPI.GetSolarSite:input_type -> fcfsapi.GetLocationRequest
-	6,  // 7: fcfsapi.QuartzAPI.GetSolarGsp:input_type -> fcfsapi.GetLocationRequest
-	7,  // 8: fcfsapi.QuartzAPI.CreateModel:input_type -> fcfsapi.CreateModelRequest
-	8,  // 9: fcfsapi.QuartzAPI.CreateSolarForecast:input_type -> fcfsapi.CreateForecastRequest
-	9,  // 10: fcfsapi.QuartzAPI.GetPredictedTimeseries:output_type -> fcfsapi.GetPredictedTimeseriesResponse
-	10, // 11: fcfsapi.QuartzAPI.GetActualTimeseries:output_type -> fcfsapi.GetActualTimeseriesResponse
-	11, // 12: fcfsapi.QuartzAPI.GetActualCrossSection:output_type -> fcfsapi.GetActualCrossSectionResponse
-	12, // 13: fcfsapi.QuartzAPI.GetPredictedCrossSection:output_type -> fcfsapi.GetPredictedCrossSectionResponse
-	13, // 14: fcfsapi.QuartzAPI.CreateSolarSite:output_type -> fcfsapi.CreateLocationResponse
-	13, // 15: fcfsapi.QuartzAPI.CreateSolarGsp:output_type -> fcfsapi.CreateLocationResponse
-	14, // 16: fcfsapi.QuartzAPI.GetSolarSite:output_type -> fcfsapi.GetLocationResponse
-	14, // 17: fcfsapi.QuartzAPI.GetSolarGsp:output_type -> fcfsapi.GetLocationResponse
-	15, // 18: fcfsapi.QuartzAPI.CreateModel:output_type -> fcfsapi.CreateModelResponse
-	16, // 19: fcfsapi.QuartzAPI.CreateSolarForecast:output_type -> fcfsapi.CreateForecastResponse
-	10, // [10:20] is the sub-list for method output_type
-	0,  // [0:10] is the sub-list for method input_type
+	6,  // 6: fcfsapi.QuartzAPI.GetSolarLocation:input_type -> fcfsapi.GetLocationRequest
+	7,  // 7: fcfsapi.QuartzAPI.CreateModel:input_type -> fcfsapi.CreateModelRequest
+	8,  // 8: fcfsapi.QuartzAPI.CreateSolarForecast:input_type -> fcfsapi.CreateForecastRequest
+	9,  // 9: fcfsapi.QuartzAPI.GetPredictedTimeseries:output_type -> fcfsapi.GetPredictedTimeseriesResponse
+	10, // 10: fcfsapi.QuartzAPI.GetActualTimeseries:output_type -> fcfsapi.GetActualTimeseriesResponse
+	11, // 11: fcfsapi.QuartzAPI.GetActualCrossSection:output_type -> fcfsapi.GetActualCrossSectionResponse
+	12, // 12: fcfsapi.QuartzAPI.GetPredictedCrossSection:output_type -> fcfsapi.GetPredictedCrossSectionResponse
+	13, // 13: fcfsapi.QuartzAPI.CreateSolarSite:output_type -> fcfsapi.CreateLocationResponse
+	13, // 14: fcfsapi.QuartzAPI.CreateSolarGsp:output_type -> fcfsapi.CreateLocationResponse
+	14, // 15: fcfsapi.QuartzAPI.GetSolarLocation:output_type -> fcfsapi.GetLocationResponse
+	15, // 16: fcfsapi.QuartzAPI.CreateModel:output_type -> fcfsapi.CreateModelResponse
+	16, // 17: fcfsapi.QuartzAPI.CreateSolarForecast:output_type -> fcfsapi.CreateForecastResponse
+	9,  // [9:18] is the sub-list for method output_type
+	0,  // [0:9] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

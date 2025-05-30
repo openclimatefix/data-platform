@@ -84,11 +84,11 @@ class GetLocationRequest(betterproto.Message):
 
 @dataclass
 class GetLocationResponse(betterproto.Message):
-    location_id: str = betterproto.string_field(1)
+    location_id: int = betterproto.int32_field(1)
     name: str = betterproto.string_field(2)
     latitude: float = betterproto.float_field(3)
     longitude: float = betterproto.float_field(4)
-    capacity_kw: int = betterproto.int32_field(5)
+    capacity_kw: int = betterproto.int64_field(5)
     metadata: str = betterproto.string_field(6)
 
 
@@ -285,22 +285,12 @@ class QuartzAPIStub(betterproto.ServiceStub):
             CreateLocationResponse,
         )
 
-    async def get_solar_site(self, *, location_id: int = 0) -> GetLocationResponse:
+    async def get_solar_location(self, *, location_id: int = 0) -> GetLocationResponse:
         request = GetLocationRequest()
         request.location_id = location_id
 
         return await self._unary_unary(
-            "/fcfsapi.QuartzAPI/GetSolarSite",
-            request,
-            GetLocationResponse,
-        )
-
-    async def get_solar_gsp(self, *, location_id: int = 0) -> GetLocationResponse:
-        request = GetLocationRequest()
-        request.location_id = location_id
-
-        return await self._unary_unary(
-            "/fcfsapi.QuartzAPI/GetSolarGsp",
+            "/fcfsapi.QuartzAPI/GetSolarLocation",
             request,
             GetLocationResponse,
         )

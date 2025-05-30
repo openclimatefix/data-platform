@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
 
 	"github.com/devsjc/fcfs/api/src/internal/models/fcfsapi"
 	db "github.com/devsjc/fcfs/api/src/internal/repository/postgres/gen"
@@ -86,6 +88,48 @@ type QuartzAPIPostgresServer struct {
 	pool *pgxpool.Pool
 }
 
+func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *fcfsapi.GetLocationRequest) (*fcfsapi.GetLocationResponse, error) {
+	l := log.With().Str("method", "GetLocation").Logger()
+	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+
+	// Establish a transaction with the database
+	tx, err := q.pool.Begin(ctx)
+	if err != nil {
+		l.Err(err).Msg("failed to begin transaction")
+		return nil, status.Error(codes.Internal,"Encountered database connection error")
+	}
+	defer tx.Rollback(ctx)
+	querier := db.New(tx)
+
+	// Get the location by ID
+	dbLocationData, err := querier.GetLocationById(ctx, int32(req.LocationId))
+	if err != nil {
+		l.Err(err).Msgf("failed to get location with id %d", req.LocationId)
+		return nil, status.Errorf(codes.NotFound, "No location with id %d", req.LocationId)
+	}
+	l.Debug().Msgf("Retrieved location with id %d", dbLocationData.LocationID)
+
+	// Get the solar sources associated with the location
+	dbSourceData, err := querier.GetLocationSourceByType(ctx, db.GetLocationSourceByTypeParams{
+		LocationID:     int32(req.LocationId),
+		SourceTypeName: "solar",
+	})
+	if err != nil {
+		l.Err(err).Msg("failed to get solar source for location")
+		return nil, status.Errorf( codes.NotFound, "No solar source associated with location with id %d", req.LocationId)
+	}
+	l.Debug().Msgf("Retrieved solar source for location %d", req.LocationId)
+
+	return &fcfsapi.GetLocationResponse{
+		LocationId: int32(req.LocationId),
+		Name:       dbLocationData.LocationName,
+		Latitude:   dbLocationData.Latitude,
+		Longitude:  dbLocationData.Longitude,
+		CapacityKw: int64(float64(dbSourceData.Capacity) * math.Pow10(int(dbSourceData.CapacityUnitPrefixFactor)) / 1000.0),
+		Metadata:   string(dbSourceData.Metadata),
+	}, tx.Commit(ctx)
+}
+
 // CreateSolarForecast implements fcfsapi.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *fcfsapi.CreateForecastRequest) (*fcfsapi.CreateForecastResponse, error) {
 	l := log.With().Str("method", "CreateSolarForecast").Logger()
@@ -98,7 +142,8 @@ func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %v", err)
+		l.Err(err).Msg("failed to begin transaction")
+		return nil, status.Error(codes.Internal, "Encountered database connection error")
 	}
 	defer tx.Rollback(ctx)
 	querier := db.New(tx)
@@ -108,14 +153,15 @@ func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *
 		LocationID:     int32(req.Forecast.LocationId),
 		SourceTypeName: "solar",
 		ModelID:        int32(req.Forecast.ModelId),
-		InitTimeUtc:    pgtype.Timestamp{
-			Time:             req.Forecast.InitTimeUtc.AsTime(),
+		InitTimeUtc: pgtype.Timestamp{
+			Time:  req.Forecast.InitTimeUtc.AsTime(),
 			Valid: true,
 		},
 	}
 	forecastID, err := querier.CreateForecast(ctx, createForecastParams)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create forecast: %v", err)
+		l.Err(err).Msg("failed to create forecast")
+		return nil, status.Error(codes.InvalidArgument, "Invalid forecast")
 	}
 	l.Debug().Msgf("Created forecast with ID %d", forecastID)
 
@@ -147,13 +193,13 @@ func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *
 
 	_, err = querier.CreatePredictedGenerationValues(ctx, predictedGenerationValues)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create predicted generation values: %v", err)
+		l.Err(err).Msg("failed to create predicted generation values")
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid predicted generation values")
 	}
 	l.Debug().Msgf("Inserted %d predicted generation values for forecast %d", len(predictedGenerationValues), forecastID)
 
 	return &fcfsapi.CreateForecastResponse{}, tx.Commit(ctx)
 }
-
 
 // CreateModel implements fcfsapi.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *fcfsapi.CreateModelRequest) (*fcfsapi.CreateModelResponse, error) {
@@ -182,17 +228,6 @@ func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *fcfsapi.
 	return &fcfsapi.CreateModelResponse{ModelId: int64(modelID)}, tx.Commit(ctx)
 }
 
-// GetSolarGsp implements fcfsapi.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) GetSolarGsp(context.Context, *fcfsapi.GetLocationRequest) (*fcfsapi.GetLocationResponse, error) {
-	panic("unimplemented")
-}
-
-// GetSolarSite implements fcfsapi.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) GetSolarSite(context.Context, *fcfsapi.GetLocationRequest) (*fcfsapi.GetLocationResponse, error) {
-	panic("unimplemented")
-}
-
-// CreateSolarGsp implements proto.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *fcfsapi.CreateGspRequest) (*fcfsapi.CreateLocationResponse, error) {
 	log.Info().Msg("CreateSolarGsp called")
 	// Establish a transaction with the database
@@ -232,44 +267,55 @@ func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *fcfsa
 	return &fcfsapi.CreateLocationResponse{LocationId: int64(locationID)}, tx.Commit(ctx)
 }
 
-// CreateSolarSite implements proto.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfsapi.CreateSiteRequest) (*fcfsapi.CreateLocationResponse, error) {
-	log.Info().Msg("CreateSolarSite called")
+	l := log.With().Str("method", "CreateSolarSite").Logger()
+	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %v", err)
+		l.Err(err).Msg("failed to begin transaction")
+		return nil, status.Error(codes.Internal, "Encountered database connection error")
 	}
 	defer tx.Rollback(ctx)
 	querier := db.New(tx)
 
-	// Create a new location as a GSP
+	// Create a new location as a Site
 	params := db.CreateLocationParams{
 		LocationTypeName: "site",
 		LocationName:     req.Name,
-		Geom:             fmt.Sprintf("POINT(%.8f %.8f)", req.Latitude, req.Longitude),
+		Geom:             fmt.Sprintf("POINT(%.8f %.8f)", req.Longitude, req.Latitude),
 	}
-	log.Debug().Msgf("CreateSolarSite params: %v", params)
 	locationID, err := querier.CreateLocation(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Site: %v", err)
+		l.Err(err).Msg("failed to create site")
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid Site. Ensure name is not empty and uppercase, and that coordinates are valid WGS84.")
 	}
-	// Create a Solar source associated with the location
+	l.Debug().Msgf("Created location of type 'site' with ID %d", locationID)
+
+	// Create a Solar energy source associated with the location
 	capacity, prefix, err := capacityKwToValueMultiplier(int64(req.CapacityKw))
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert capacity: %v", err)
+		l.Err(err).Msg("failed to convert capacity")
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid capacity value: %d", req.CapacityKw)
+	}
+	metadata := []byte(req.Metadata)
+	if req.Metadata == "" {
+		metadata = nil
 	}
 	sourceParams := db.CreateLocationSourceParams{
 		LocationID:               locationID,
 		SourceTypeName:           "solar",
 		Capacity:                 capacity,
 		CapacityUnitPrefixFactor: prefix,
-		Metadata:                 []byte(req.Metadata),
+		Metadata:                 metadata,
 	}
 	_, err = querier.CreateLocationSource(ctx, sourceParams)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create source: %v", err)
+		l.Err(err).Msg("failed to create solar source for site")
+		return nil, status.Error(codes.InvalidArgument, "Invalid site. Ensure metadata is NULL or a non-empty JSON object.")
 	}
+	l.Debug().Msgf("Created source of type 'solar' for location %d with capacity %dx10^%dW", locationID, capacity, prefix)
 	return &fcfsapi.CreateLocationResponse{LocationId: int64(locationID)}, tx.Commit(ctx)
 }
 
@@ -410,7 +456,6 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 		}
 		l.Debug().Msgf("Found %d predicted generation values for forecast %d", len(dbYields), forecastResp.ForecastID)
 
-
 		yields := make([]*fcfsapi.PredictedYield, len(dbYields))
 		for i, yield := range dbYields {
 			yields[i] = &fcfsapi.PredictedYield{
@@ -422,13 +467,13 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 
 		err = stream.Send(&fcfsapi.GetPredictedTimeseriesResponse{
 			LocationId: locationId,
-			Yields: yields,
+			Yields:     yields,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to send predicted timeseries response: %v", err)
 		}
 	}
-	
+
 	return nil
 }
 

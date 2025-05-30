@@ -258,11 +258,11 @@ func (x *GetLocationRequest) GetLocationId() int64 {
 
 type GetLocationResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationId    string                 `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Latitude      float32                `protobuf:"fixed32,3,opt,name=latitude,proto3" json:"latitude,omitempty"`
 	Longitude     float32                `protobuf:"fixed32,4,opt,name=longitude,proto3" json:"longitude,omitempty"`
-	CapacityKw    int32                  `protobuf:"varint,5,opt,name=capacity_kw,json=capacityKw,proto3" json:"capacity_kw,omitempty"`
+	CapacityKw    int64                  `protobuf:"varint,5,opt,name=capacity_kw,json=capacityKw,proto3" json:"capacity_kw,omitempty"`
 	Metadata      string                 `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -298,11 +298,11 @@ func (*GetLocationResponse) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_location_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetLocationResponse) GetLocationId() string {
+func (x *GetLocationResponse) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
-	return ""
+	return 0
 }
 
 func (x *GetLocationResponse) GetName() string {
@@ -326,7 +326,7 @@ func (x *GetLocationResponse) GetLongitude() float32 {
 	return 0
 }
 
-func (x *GetLocationResponse) GetCapacityKw() int32 {
+func (x *GetLocationResponse) GetCapacityKw() int64 {
 	if x != nil {
 		return x.CapacityKw
 	}
@@ -365,12 +365,12 @@ const file_fcfsapi_location_proto_rawDesc = "" +
 	"\vlocation_id\x18\x01 \x01(\x03R\n" +
 	"locationId\"\xc1\x01\n" +
 	"\x13GetLocationResponse\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\blatitude\x18\x03 \x01(\x02R\blatitude\x12\x1c\n" +
 	"\tlongitude\x18\x04 \x01(\x02R\tlongitude\x12\x1f\n" +
-	"\vcapacity_kw\x18\x05 \x01(\x05R\n" +
+	"\vcapacity_kw\x18\x05 \x01(\x03R\n" +
 	"capacityKw\x12\x1a\n" +
 	"\bmetadata\x18\x06 \x01(\tR\bmetadataB@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
 

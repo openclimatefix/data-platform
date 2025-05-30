@@ -24,8 +24,7 @@ service QuartzAPI {
   rpc CreateSolarSite(CreateSiteRequest) returns (CreateLocationResponse) {}
   rpc CreateSolarGsp(CreateGspRequest) returns (CreateLocationResponse) {}
 
-  rpc GetSolarSite(GetLocationRequest) returns (GetLocationResponse) {}
-  rpc GetSolarGsp(GetLocationRequest) returns (GetLocationResponse) {}
+  rpc GetSolarLocation(GetLocationRequest) returns (GetLocationResponse) {}
 
   // --- Predictions ---------------------------------------------------------------
 

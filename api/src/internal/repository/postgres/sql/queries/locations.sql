@@ -10,31 +10,48 @@ INSERT INTO loc.locations AS l (
 ) RETURNING l.location_id;
 
 -- name: ListLocationIdsByType :many
-SELECT location_id, location_name FROM loc.locations AS l
-WHERE l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
+SELECT
+    location_id, location_name
+FROM loc.locations AS l
+WHERE
+    l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
 ORDER BY l.location_id;
 
 -- name: ListLocationsByType :many
-SELECT * FROM loc.locations AS l
-WHERE l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
+SELECT
+    *
+FROM loc.locations AS l
+WHERE
+    l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1)
 ORDER BY l.location_id;
 
 -- name: ListLocationGeometryByType :many
-SELECT location_name, ST_AsText(geom) FROM loc.locations AS l
-WHERE l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1);
+SELECT
+    location_name, ST_AsText(geom)
+FROM loc.locations AS l
+WHERE
+    l.location_type_id = (SELECT location_type_id FROM loc.location_types WHERE location_type_name = $1);
 
 -- name: GetLocationById :one
-SELECT * FROM loc.locations
-WHERE location_id = $1;
+SELECT 
+    l.location_id,
+    l.location_name,
+    ST_AsText(l.geom)::text AS geom,
+    (SELECT location_type_name FROM loc.location_types WHERE location_type_id = l.location_type_id) AS location_type_name,
+    ST_Y(l.centroid)::real AS latitude,
+    ST_X(l.centroid)::real AS longitude
+FROM loc.locations AS l
+WHERE l.location_id = $1;
 
 
-/*- Queries for the location_sources table --------------------------- */
+/*- Queries for the location_sources table ---------------------------
 -- Get latest active record via the UPPER(sys_period) IS NULL condition
+*/
 
 -- name: GetLocationSourceByType :one
-SELECT (
+SELECT 
     record_id, capacity, capacity_unit_prefix_factor, metadata
-) FROM loc.location_sources
+FROM loc.location_sources
 WHERE 
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
@@ -84,9 +101,9 @@ WHERE
     AND UPPER(sys_period) IS NULL;
 
 -- name: ListLocationSourceHistoryByType :many
-SELECT (
+SELECT
     record_id, capacity, capacity_unit_prefix_factor, metadata, sys_period
-) FROM loc.location_sources
+FROM loc.location_sources
 WHERE 
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)

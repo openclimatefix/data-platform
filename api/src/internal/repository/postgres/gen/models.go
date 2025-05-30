@@ -13,6 +13,7 @@ type LocLocation struct {
 	LocationName   string
 	Geom           interface{}
 	LocationTypeID int16
+	Centroid       interface{}
 	GeomHash       *string
 }
 

@@ -22,7 +22,11 @@ CREATE EXTENSION IF NOT EXISTS "postgis";
 CREATE TABLE loc.source_types(
     source_type_id SMALLINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     source_type_name TEXT NOT NULL
-        CHECK ( LENGTH(source_type_name) <= 24 AND source_type_name = LOWER(source_type_name) ),
+        CHECK (
+            LENGTH(source_type_name) > 0
+            AND LENGTH(source_type_name) <= 24
+            AND source_type_name = LOWER(source_type_name)
+        ),
     PRIMARY KEY (source_type_id),
     UNIQUE (source_type_name)
 );
@@ -32,7 +36,11 @@ INSERT INTO loc.source_types (source_type_name) VALUES ('solar'), ('wind');
 CREATE TABLE loc.location_types(
     location_type_id SMALLINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     location_type_name TEXT NOT NULL
-        CHECK ( LENGTH(location_type_name) <= 24 AND location_type_name = LOWER(location_type_name) ),
+        CHECK (
+            LENGTH(location_type_name) > 0
+            AND LENGTH(location_type_name) <= 24
+            AND location_type_name = LOWER(location_type_name)
+        ),
     PRIMARY KEY (location_type_id),
     UNIQUE (location_type_name)
 );
@@ -58,6 +66,7 @@ CREATE TABLE loc.locations (
     location_type_id SMALLINT NOT NULL
         REFERENCES loc.location_types(location_type_id)
         ON DELETE RESTRICT,
+    centroid GEOMETRY(POINT, 4326) GENERATED ALWAYS AS (ST_Centroid(geom)) STORED,
     geom_hash TEXT GENERATED ALWAYS AS (MD5(ST_AsBinary(geom))) STORED,
     PRIMARY KEY (location_id),
     UNIQUE (location_name, geom_hash)
