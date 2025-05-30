@@ -86,7 +86,7 @@ func (x *CreateModelRequest) GetMakeDefault() bool {
 
 type CreateModelResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ModelId       int64                  `protobuf:"varint,1,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	ModelId       int32                  `protobuf:"varint,1,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -121,7 +121,7 @@ func (*CreateModelResponse) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_forecast_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *CreateModelResponse) GetModelId() int64 {
+func (x *CreateModelResponse) GetModelId() int32 {
 	if x != nil {
 		return x.ModelId
 	}
@@ -130,7 +130,7 @@ func (x *CreateModelResponse) GetModelId() int64 {
 
 type PredictedGenerationValue struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	HorizonMins   int64                  `protobuf:"varint,1,opt,name=horizon_mins,json=horizonMins,proto3" json:"horizon_mins,omitempty"`
+	HorizonMins   int32                  `protobuf:"varint,1,opt,name=horizon_mins,json=horizonMins,proto3" json:"horizon_mins,omitempty"`
 	P50           int32                  `protobuf:"varint,2,opt,name=p50,proto3" json:"p50,omitempty"`
 	P10           int32                  `protobuf:"varint,3,opt,name=p10,proto3" json:"p10,omitempty"`
 	P90           int32                  `protobuf:"varint,4,opt,name=p90,proto3" json:"p90,omitempty"`
@@ -169,7 +169,7 @@ func (*PredictedGenerationValue) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_forecast_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *PredictedGenerationValue) GetHorizonMins() int64 {
+func (x *PredictedGenerationValue) GetHorizonMins() int32 {
 	if x != nil {
 		return x.HorizonMins
 	}
@@ -206,8 +206,8 @@ func (x *PredictedGenerationValue) GetMetadata() string {
 
 type Forecast struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ModelId       int64                  `protobuf:"varint,1,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	LocationId    int64                  `protobuf:"varint,2,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	ModelId       int32                  `protobuf:"varint,1,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	LocationId    int32                  `protobuf:"varint,2,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	InitTimeUtc   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=init_time_utc,json=initTimeUtc,proto3" json:"init_time_utc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -243,14 +243,14 @@ func (*Forecast) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_forecast_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *Forecast) GetModelId() int64 {
+func (x *Forecast) GetModelId() int32 {
 	if x != nil {
 		return x.ModelId
 	}
 	return 0
 }
 
-func (x *Forecast) GetLocationId() int64 {
+func (x *Forecast) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
@@ -370,16 +370,16 @@ const file_fcfsapi_forecast_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12!\n" +
 	"\fmake_default\x18\x03 \x01(\bR\vmakeDefault\"0\n" +
 	"\x13CreateModelResponse\x12\x19\n" +
-	"\bmodel_id\x18\x01 \x01(\x03R\amodelId\"\x8f\x01\n" +
+	"\bmodel_id\x18\x01 \x01(\x05R\amodelId\"\x8f\x01\n" +
 	"\x18PredictedGenerationValue\x12!\n" +
-	"\fhorizon_mins\x18\x01 \x01(\x03R\vhorizonMins\x12\x10\n" +
+	"\fhorizon_mins\x18\x01 \x01(\x05R\vhorizonMins\x12\x10\n" +
 	"\x03p50\x18\x02 \x01(\x05R\x03p50\x12\x10\n" +
 	"\x03p10\x18\x03 \x01(\x05R\x03p10\x12\x10\n" +
 	"\x03p90\x18\x04 \x01(\x05R\x03p90\x12\x1a\n" +
 	"\bmetadata\x18\x05 \x01(\tR\bmetadata\"\x86\x01\n" +
 	"\bForecast\x12\x19\n" +
-	"\bmodel_id\x18\x01 \x01(\x03R\amodelId\x12\x1f\n" +
-	"\vlocation_id\x18\x02 \x01(\x03R\n" +
+	"\bmodel_id\x18\x01 \x01(\x05R\amodelId\x12\x1f\n" +
+	"\vlocation_id\x18\x02 \x01(\x05R\n" +
 	"locationId\x12>\n" +
 	"\rinit_time_utc\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vinitTimeUtc\"\xa9\x01\n" +
 	"\x15CreateForecastRequest\x12-\n" +

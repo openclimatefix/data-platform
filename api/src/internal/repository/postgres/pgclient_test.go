@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -230,7 +231,7 @@ func TestCreateSolarSite(t *testing.T) {
 		require.Equal(t, tt.site.Name, resp2.Name)
 		require.Equal(t, tt.site.Latitude, resp2.Latitude)
 		require.Equal(t, tt.site.Longitude, resp2.Longitude)
-		require.Equal(t, tt.site.CapacityKw, int32(resp2.CapacityKw))
+		require.Equal(t, tt.site.CapacityKw, resp2.CapacityKw)
 		require.Equal(t, tt.site.Metadata, resp2.Metadata)
 	}
     
@@ -282,11 +283,31 @@ func TestCreateSolarGSP(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			name: "Create GSP with invalid geometry",
+			name: "Create GSP with invalid geometry 1 (non-WKT)",
 			gsp: &fcfsapi.CreateGspRequest{
 				Name:       "INVALID GEOMETRY GSP",
 				Metadata:   defaultGsp.Metadata,
 				Geometry:   "INVALID GEOMETRY",
+				CapacityMw: defaultGsp.CapacityMw,
+			},
+			shouldError: true,
+		},
+		{
+			name: "Create a GSP with invalid geometry 2 (3D geometry)",
+			gsp: &fcfsapi.CreateGspRequest{
+				Name:       "3D GEOMETRY GSP",
+				Metadata:   defaultGsp.Metadata,
+				Geometry:   "POLYGON((0.0 51.5 0.0, 1.0 51.5 0.0, 1.0 52.0 0.0, 0.0 52.0 0.0, 0.0 51.5 0.0))",
+				CapacityMw: defaultGsp.CapacityMw,
+			},
+			shouldError: true,
+		},
+		{
+			name: "Create GSP with empty geometry",
+			gsp: &fcfsapi.CreateGspRequest{
+				Name:       "EMPTY GEOMETRY GSP",
+				Metadata:   defaultGsp.Metadata,
+				Geometry:   "",
 				CapacityMw: defaultGsp.CapacityMw,
 			},
 			shouldError: true,
@@ -316,12 +337,41 @@ func TestCreateSolarGSP(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, tt.gsp.Name, resp2.Name)
 		require.Equal(t, tt.gsp.Metadata, resp2.Metadata)
-		require.Equal(t, int64(tt.gsp.CapacityMw * 1000), resp2.CapacityKw)
+		require.Equal(t, tt.gsp.CapacityMw * 1000, resp2.CapacityKw)
 	}
 
 	_, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: 999999})
 	t.Log("Expected error for non-existent GSP: ", err)
 	require.Error(t, err)
+}
+
+func TestGetLocationsAsGeoJSON(t *testing.T) {
+	ctx := context.Background()
+	s, cleanup := setupSuite(t, ctx)
+	defer cleanup(t)
+
+	// Create some locations
+	siteIds := make([]int32, 3)
+	for i, _ := range siteIds {
+		resp, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
+			Name:       fmt.Sprintf("TESTSITE%02d", i),
+			Latitude:   51.5 + float32(i)*0.01,
+			Longitude:  -0.1 + float32(i)*0.01,
+			CapacityKw: int64(1000 + i*100),
+			Metadata:   "",
+		})
+		require.NoError(t, err)
+		siteIds[i] = resp.LocationId
+	}	
+
+	geojson, err := s.GetLocationsAsGeoJSON(ctx, &fcfsapi.GetLocationsAsGeoJSONRequest{
+		LocationIds: siteIds,
+	})
+	require.NoError(t, err)
+	var result map[string]any
+	json.Unmarshal([]byte(geojson.Geojson), &result)
+	features := result["features"].([]any)
+	require.Equal(t, len(siteIds), len(features))
 }
 
 
@@ -330,14 +380,6 @@ func TestGetPredictedTimeseries(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupSuite(t, ctx)
 	defer cleanup(t)
-
-	// Create a model
-	modelResp, err := s.CreateModel(ctx, &fcfsapi.CreateModelRequest{
-		Name: "testmodel01",
-		Version: "0.1.0",
-		MakeDefault: true,
-	})
-	require.NoError(t, err)
 
 
 	// Make 10 forecasts created an hour apart from each other
@@ -350,7 +392,7 @@ func TestGetPredictedTimeseries(t *testing.T) {
 		
 		for j := 0; j < 12 * 48; j++ {
 			predictedGenerationValues[j] = &fcfsapi.PredictedGenerationValue{
-				HorizonMins: int64(j * 5),
+				HorizonMins: int32(j * 5),
 				// Each forecast's P50 will be equal to their hour difference from the 
 				P50:         int32(i),
 				P10:         int32(i),
@@ -361,7 +403,7 @@ func TestGetPredictedTimeseries(t *testing.T) {
 
 		req := &fcfsapi.CreateForecastRequest{
 			Forecast: &fcfsapi.Forecast{
-				ModelId: modelResp.ModelId,
+				ModelId: 10, // See the seeding SQL for this model ID
 				InitTimeUtc: timestamppb.New(init_time),
 				LocationId: 0,
 			},
@@ -381,7 +423,7 @@ func TestGetPredictedTimeseries(t *testing.T) {
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
-			break // End of stream
+			break
 		}
 		require.NotNil(t, resp)
 		require.Equal(t, int32(0), resp.LocationId)
@@ -392,10 +434,7 @@ func TestGetPredictedTimeseries(t *testing.T) {
 			require.Equal(t, int32(0), v.YieldKw)
 		}
 	}
-
 }
-
-
 
 func BenchmarkCreateForecast(b *testing.B) {
 	ctx := context.Background()
@@ -406,32 +445,25 @@ func BenchmarkCreateForecast(b *testing.B) {
 	num_predictions := 12 * 48 // 12 predictions per hour, 48 hours
 
 	// Create Sites
-	siteIds := make([]int64, num_sites)
+	siteIds := make([]int32, num_sites)
 	for i := range siteIds {
 		createSiteResponse, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
 			Name:       fmt.Sprintf("TESTSITE%03d", i),
 			Latitude:   55.5,
 			Longitude:  float32(0.05 * float64(i)),
-			CapacityKw: int32(i),
+			CapacityKw: int64(i),
 			Metadata:   `{"group": "test"}`,
 		})
 		require.NoError(b, err)
 		siteIds[i] = createSiteResponse.LocationId
 	}
 
-	// Create a model
-	modelResp, err := s.CreateModel(ctx, &fcfsapi.CreateModelRequest{
-		Name: "testmodel01",
-		Version: "0.1.0",
-	})
-	require.NoError(b, err)
-
 	// Create a forecast and set of predicted values for each site
 	init_time := time.Now().Truncate(24 * time.Hour)
 	predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, num_predictions)
 	for i := range predictedGenerationValues {
 		predictedGenerationValues[i] = &fcfsapi.PredictedGenerationValue{
-			HorizonMins:       int64(i * 5),
+			HorizonMins:       int32(i * 5),
 			P50:               85,
 			P10:               81,
 			P90:               88,
@@ -444,7 +476,7 @@ func BenchmarkCreateForecast(b *testing.B) {
 		for _, v := range siteIds {
 			req := &fcfsapi.CreateForecastRequest{
 				Forecast: &fcfsapi.Forecast{
-					ModelId: modelResp.ModelId,
+					ModelId: 10, // See the seeding SQL for this model ID
 					LocationId: v,
 					InitTimeUtc: timestamppb.New(init_time),
 				},
@@ -456,6 +488,76 @@ func BenchmarkCreateForecast(b *testing.B) {
 	}
 
 	b.Logf("Inserted %d forecasts with %d predictions each (%d rows)", num_sites, num_predictions, num_sites*num_predictions)
-
 }
+
+func BenchmarkGetPredictedTimeseries(b *testing.B) {
+	ctx := context.Background()
+	s, cleanup := setupSuite(b, ctx)
+	defer cleanup(b)
+
+	num_locations := 500
+	num_predictions_per_forecast := 12 * 48 // 12 predictions per hour, 48 hours
+	num_forecasts_per_site := 48 // One day of half hourly forecasts
+
+	// Create locations and forecasts
+	siteIds := make([]int32, num_locations)
+	for i := range siteIds {
+		createSiteResponse, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
+			Name:       fmt.Sprintf("TESTSITE%03d", i),
+			Latitude:   55.5,
+			Longitude:  float32(0.05 * float64(i)),
+			CapacityKw: int64(i),
+			Metadata:   "",
+		})
+		require.NoError(b, err)
+		siteIds[i] = createSiteResponse.LocationId
+
+		for j := range num_forecasts_per_site {
+			init_time := time.Now().Truncate(24 * time.Hour).Add(-time.Duration(j) * 24 * time.Hour)
+			predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, num_predictions_per_forecast)
+			for k := range predictedGenerationValues {
+				predictedGenerationValues[k] = &fcfsapi.PredictedGenerationValue{
+					HorizonMins: int32(k * 5),
+					P50:         85,
+					P10:         81,
+					P90:         88,
+					Metadata:    "",
+				}
+			}
+
+			req := &fcfsapi.CreateForecastRequest{
+				Forecast: &fcfsapi.Forecast{
+					ModelId: 10, // See the seeding SQL for this model ID
+					LocationId: siteIds[i],
+					InitTimeUtc: timestamppb.New(init_time),
+				},
+				PredictedGenerationValues: predictedGenerationValues,
+			}
+			_, err := s.CreateSolarForecast(ctx, req)
+			require.NoError(b, err)
+		}
+	}
+
+	for b.Loop() {
+		stream, err := s.GetPredictedTimeseries(ctx, &fcfsapi.GetPredictedTimeseriesRequest{
+			LocationIds: siteIds[0:1],
+		})
+		require.NoError(b, err)
+		for {
+			resp, err := stream.Recv()
+			if err != nil {
+				break // End of stream
+			}
+			require.NotNil(b, resp)
+			require.Equal(b, siteIds[0], resp.LocationId)
+			require.Equal(b, num_predictions_per_forecast, len(resp.Yields))
+		}
+	}
+
+	b.Logf(
+		"Retrieved forecast values from table of size %d rows",
+		num_locations*num_predictions_per_forecast*num_forecasts_per_site,
+	)
+}
+
 

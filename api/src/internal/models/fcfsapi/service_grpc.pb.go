@@ -26,6 +26,7 @@ const (
 	QuartzAPI_CreateSolarSite_FullMethodName          = "/fcfsapi.QuartzAPI/CreateSolarSite"
 	QuartzAPI_CreateSolarGsp_FullMethodName           = "/fcfsapi.QuartzAPI/CreateSolarGsp"
 	QuartzAPI_GetSolarLocation_FullMethodName         = "/fcfsapi.QuartzAPI/GetSolarLocation"
+	QuartzAPI_GetLocationsAsGeoJSON_FullMethodName    = "/fcfsapi.QuartzAPI/GetLocationsAsGeoJSON"
 	QuartzAPI_CreateModel_FullMethodName              = "/fcfsapi.QuartzAPI/CreateModel"
 	QuartzAPI_CreateSolarForecast_FullMethodName      = "/fcfsapi.QuartzAPI/CreateSolarForecast"
 )
@@ -41,6 +42,7 @@ type QuartzAPIClient interface {
 	CreateSolarSite(ctx context.Context, in *CreateSiteRequest, opts ...grpc.CallOption) (*CreateLocationResponse, error)
 	CreateSolarGsp(ctx context.Context, in *CreateGspRequest, opts ...grpc.CallOption) (*CreateLocationResponse, error)
 	GetSolarLocation(ctx context.Context, in *GetLocationRequest, opts ...grpc.CallOption) (*GetLocationResponse, error)
+	GetLocationsAsGeoJSON(ctx context.Context, in *GetLocationsAsGeoJSONRequest, opts ...grpc.CallOption) (*GetLocationsAsGeoJSONResponse, error)
 	CreateModel(ctx context.Context, in *CreateModelRequest, opts ...grpc.CallOption) (*CreateModelResponse, error)
 	CreateSolarForecast(ctx context.Context, in *CreateForecastRequest, opts ...grpc.CallOption) (*CreateForecastResponse, error)
 }
@@ -141,6 +143,16 @@ func (c *quartzAPIClient) GetSolarLocation(ctx context.Context, in *GetLocationR
 	return out, nil
 }
 
+func (c *quartzAPIClient) GetLocationsAsGeoJSON(ctx context.Context, in *GetLocationsAsGeoJSONRequest, opts ...grpc.CallOption) (*GetLocationsAsGeoJSONResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLocationsAsGeoJSONResponse)
+	err := c.cc.Invoke(ctx, QuartzAPI_GetLocationsAsGeoJSON_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *quartzAPIClient) CreateModel(ctx context.Context, in *CreateModelRequest, opts ...grpc.CallOption) (*CreateModelResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateModelResponse)
@@ -172,6 +184,7 @@ type QuartzAPIServer interface {
 	CreateSolarSite(context.Context, *CreateSiteRequest) (*CreateLocationResponse, error)
 	CreateSolarGsp(context.Context, *CreateGspRequest) (*CreateLocationResponse, error)
 	GetSolarLocation(context.Context, *GetLocationRequest) (*GetLocationResponse, error)
+	GetLocationsAsGeoJSON(context.Context, *GetLocationsAsGeoJSONRequest) (*GetLocationsAsGeoJSONResponse, error)
 	CreateModel(context.Context, *CreateModelRequest) (*CreateModelResponse, error)
 	CreateSolarForecast(context.Context, *CreateForecastRequest) (*CreateForecastResponse, error)
 }
@@ -203,6 +216,9 @@ func (UnimplementedQuartzAPIServer) CreateSolarGsp(context.Context, *CreateGspRe
 }
 func (UnimplementedQuartzAPIServer) GetSolarLocation(context.Context, *GetLocationRequest) (*GetLocationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSolarLocation not implemented")
+}
+func (UnimplementedQuartzAPIServer) GetLocationsAsGeoJSON(context.Context, *GetLocationsAsGeoJSONRequest) (*GetLocationsAsGeoJSONResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLocationsAsGeoJSON not implemented")
 }
 func (UnimplementedQuartzAPIServer) CreateModel(context.Context, *CreateModelRequest) (*CreateModelResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateModel not implemented")
@@ -342,6 +358,24 @@ func _QuartzAPI_GetSolarLocation_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _QuartzAPI_GetLocationsAsGeoJSON_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLocationsAsGeoJSONRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QuartzAPIServer).GetLocationsAsGeoJSON(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QuartzAPI_GetLocationsAsGeoJSON_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QuartzAPIServer).GetLocationsAsGeoJSON(ctx, req.(*GetLocationsAsGeoJSONRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _QuartzAPI_CreateModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateModelRequest)
 	if err := dec(in); err != nil {
@@ -404,6 +438,10 @@ var QuartzAPI_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSolarLocation",
 			Handler:    _QuartzAPI_GetSolarLocation_Handler,
+		},
+		{
+			MethodName: "GetLocationsAsGeoJSON",
+			Handler:    _QuartzAPI_GetLocationsAsGeoJSON_Handler,
 		},
 		{
 			MethodName: "CreateModel",

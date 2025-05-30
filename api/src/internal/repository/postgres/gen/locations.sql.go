@@ -120,6 +120,36 @@ func (q *Queries) GetLocationById(ctx context.Context, locationID int32) (GetLoc
 	return i, err
 }
 
+const getLocationGeoJSONByIds = `-- name: GetLocationGeoJSONByIds :one
+SELECT json_build_object(
+    'type', 'FeatureCollection',
+    'features', json_agg(
+        ST_AsGeoJSON(sl.*, id_column => 'location_id'::text, geom_column => 'geom_simple')::jsonb
+    )
+) AS geojson
+FROM (
+    SELECT 
+        l.location_id,
+        l.location_name,
+        (SELECT location_type_name FROM loc.location_types WHERE location_type_id = l.location_type_id) AS location_type_name,
+        ST_SimplifyPreserveTopology(l.geom, $1::real) AS geom_simple
+    FROM loc.locations AS l
+    WHERE l.location_id = ANY($2::int[])
+) AS sl
+`
+
+type GetLocationGeoJSONByIdsParams struct {
+	SimplificationLevel float32
+	LocationIds         []int32
+}
+
+func (q *Queries) GetLocationGeoJSONByIds(ctx context.Context, arg GetLocationGeoJSONByIdsParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getLocationGeoJSONByIds, arg.SimplificationLevel, arg.LocationIds)
+	var geojson []byte
+	err := row.Scan(&geojson)
+	return geojson, err
+}
+
 const getLocationSourceByType = `-- name: GetLocationSourceByType :one
 /*- Queries for the location_sources table ---------------------------
 */

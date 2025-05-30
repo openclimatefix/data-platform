@@ -11,23 +11,23 @@ message CreateSiteRequest {
   string name = 1;
   float latitude = 2;
   float longitude = 3;
-  int32 capacity_kw = 4;
+  int64 capacity_kw = 4;
   string metadata = 5;
 }
 
 message CreateGspRequest {
   string name = 1;
   string geometry = 2;
-  int32 capacity_mw = 3;
+  int64 capacity_mw = 3;
   string metadata = 4;
 }
 
 message CreateLocationResponse {
-  int64 location_id = 1;
+  int32 location_id = 1;
 }
 
 message GetLocationRequest {
-  int64 location_id = 1;
+  int32 location_id = 1;
 }
 
 message GetLocationResponse {
@@ -37,5 +37,14 @@ message GetLocationResponse {
   float longitude = 4;
   int64 capacity_kw = 5;
   string metadata = 6;
+}
+
+message GetLocationsAsGeoJSONRequest {
+  repeated int32 location_ids = 1;
+  bool unsimplified = 2;
+}
+
+message GetLocationsAsGeoJSONResponse {
+  string geojson = 1;
 }
 

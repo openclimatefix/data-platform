@@ -130,7 +130,6 @@ func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *fcf
 	}, tx.Commit(ctx)
 }
 
-// CreateSolarForecast implements fcfsapi.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *fcfsapi.CreateForecastRequest) (*fcfsapi.CreateForecastResponse, error) {
 	l := log.With().Str("method", "CreateSolarForecast").Logger()
 	l.Info().Str("params", fmt.Sprintf("%+v", req.Forecast)).Msg("recieved method call")
@@ -201,7 +200,6 @@ func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *
 	return &fcfsapi.CreateForecastResponse{}, tx.Commit(ctx)
 }
 
-// CreateModel implements fcfsapi.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *fcfsapi.CreateModelRequest) (*fcfsapi.CreateModelResponse, error) {
 	log.Info().Msg("CreateModel called")
 	// Establish a transaction with the database
@@ -225,7 +223,7 @@ func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *fcfsapi.
 		return nil, fmt.Errorf("failed to create model: %v", err)
 	}
 
-	return &fcfsapi.CreateModelResponse{ModelId: int64(modelID)}, tx.Commit(ctx)
+	return &fcfsapi.CreateModelResponse{ModelId: modelID}, tx.Commit(ctx)
 }
 
 func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfsapi.CreateSiteRequest) (*fcfsapi.CreateLocationResponse, error) {
@@ -277,10 +275,9 @@ func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfs
 		return nil, status.Error(codes.InvalidArgument, "Invalid site. Ensure metadata is NULL or a non-empty JSON object.")
 	}
 	l.Debug().Msgf("Created source of type 'solar' for location %d with capacity %dx10^%dW", locationID, capacity, prefix)
-	return &fcfsapi.CreateLocationResponse{LocationId: int64(locationID)}, tx.Commit(ctx)
+	return &fcfsapi.CreateLocationResponse{LocationId: locationID}, tx.Commit(ctx)
 }
 
-// CreateWindGsp implements proto.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *fcfsapi.CreateGspRequest) (*fcfsapi.CreateLocationResponse, error) {
 	l := log.With().Str("method", "CreateSolarGsp").Logger()
 	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
@@ -324,7 +321,7 @@ func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *fcfsa
 		return nil, status.Error(codes.InvalidArgument, "Invalid GSP. Ensure metadata is NULL or a non-empty JSON object.")
 	}
 
-	return &fcfsapi.CreateLocationResponse{LocationId: int64(locationID)}, tx.Commit(ctx)
+	return &fcfsapi.CreateLocationResponse{LocationId: locationID}, tx.Commit(ctx)
 }
 
 // GetActualCrossSection implements proto.QuartzAPIServer.
@@ -340,6 +337,38 @@ func (q *QuartzAPIPostgresServer) GetActualTimeseries(*fcfsapi.GetActualTimeseri
 // GetPredictedCrossSection implements proto.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) GetPredictedCrossSection(context.Context, *fcfsapi.GetPredictedCrossSectionRequest) (*fcfsapi.GetPredictedCrossSectionResponse, error) {
 	panic("unimplemented")
+}
+
+func (q *QuartzAPIPostgresServer) GetLocationsAsGeoJSON(ctx context.Context, req *fcfsapi.GetLocationsAsGeoJSONRequest) (*fcfsapi.GetLocationsAsGeoJSONResponse, error) {
+	l := log.With().Str("method", "GetLocationsAsGeoJSON").Logger()
+	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+
+	// Establish a transaction with the database
+	tx, err := q.pool.Begin(ctx)
+	if err != nil {
+		l.Err(err).Msg("failed to begin transaction")
+		return nil, status.Error(codes.Internal, "Encountered database connection error")
+	}
+	defer tx.Rollback(ctx)
+	querier := db.New(tx)
+
+	// Get the locations as GeoJSON
+	var simplificationLevel float32;
+	if req.Unsimplified {
+		simplificationLevel = 0
+	} else {
+		simplificationLevel = 0.5
+	}
+	geojson, err := querier.GetLocationGeoJSONByIds(ctx, db.GetLocationGeoJSONByIdsParams{
+		SimplificationLevel: simplificationLevel,
+		LocationIds:         req.LocationIds,
+	})
+	if err != nil {
+		l.Err(err).Msg("failed to get locations as GeoJSON")
+		return nil, status.Error(codes.InvalidArgument, "No locations found for input IDs")
+	}
+
+	return &fcfsapi.GetLocationsAsGeoJSONResponse{Geojson: string(geojson)}, tx.Commit(ctx)
 }
 
 // GetPredictedTimeseries implements proto.QuartzAPIServer.

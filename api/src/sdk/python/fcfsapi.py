@@ -18,12 +18,12 @@ class CreateModelRequest(betterproto.Message):
 
 @dataclass
 class CreateModelResponse(betterproto.Message):
-    model_id: int = betterproto.int64_field(1)
+    model_id: int = betterproto.int32_field(1)
 
 
 @dataclass
 class PredictedGenerationValue(betterproto.Message):
-    horizon_mins: int = betterproto.int64_field(1)
+    horizon_mins: int = betterproto.int32_field(1)
     p50: int = betterproto.int32_field(2)
     p10: int = betterproto.int32_field(3)
     p90: int = betterproto.int32_field(4)
@@ -32,8 +32,8 @@ class PredictedGenerationValue(betterproto.Message):
 
 @dataclass
 class Forecast(betterproto.Message):
-    model_id: int = betterproto.int64_field(1)
-    location_id: int = betterproto.int64_field(2)
+    model_id: int = betterproto.int32_field(1)
+    location_id: int = betterproto.int32_field(2)
     init_time_utc: datetime = betterproto.message_field(3)
 
 
@@ -60,7 +60,7 @@ class CreateSiteRequest(betterproto.Message):
     name: str = betterproto.string_field(1)
     latitude: float = betterproto.float_field(2)
     longitude: float = betterproto.float_field(3)
-    capacity_kw: int = betterproto.int32_field(4)
+    capacity_kw: int = betterproto.int64_field(4)
     metadata: str = betterproto.string_field(5)
 
 
@@ -68,18 +68,18 @@ class CreateSiteRequest(betterproto.Message):
 class CreateGspRequest(betterproto.Message):
     name: str = betterproto.string_field(1)
     geometry: str = betterproto.string_field(2)
-    capacity_mw: int = betterproto.int32_field(3)
+    capacity_mw: int = betterproto.int64_field(3)
     metadata: str = betterproto.string_field(4)
 
 
 @dataclass
 class CreateLocationResponse(betterproto.Message):
-    location_id: int = betterproto.int64_field(1)
+    location_id: int = betterproto.int32_field(1)
 
 
 @dataclass
 class GetLocationRequest(betterproto.Message):
-    location_id: int = betterproto.int64_field(1)
+    location_id: int = betterproto.int32_field(1)
 
 
 @dataclass
@@ -90,6 +90,17 @@ class GetLocationResponse(betterproto.Message):
     longitude: float = betterproto.float_field(4)
     capacity_kw: int = betterproto.int64_field(5)
     metadata: str = betterproto.string_field(6)
+
+
+@dataclass
+class GetLocationsAsGeoJSONRequest(betterproto.Message):
+    location_ids: List[int] = betterproto.int32_field(1)
+    unsimplified: bool = betterproto.bool_field(2)
+
+
+@dataclass
+class GetLocationsAsGeoJSONResponse(betterproto.Message):
+    geojson: str = betterproto.string_field(1)
 
 
 @dataclass
@@ -293,6 +304,19 @@ class QuartzAPIStub(betterproto.ServiceStub):
             "/fcfsapi.QuartzAPI/GetSolarLocation",
             request,
             GetLocationResponse,
+        )
+
+    async def get_locations_as_geo_j_s_o_n(
+        self, *, location_ids: List[int] = [], unsimplified: bool = False
+    ) -> GetLocationsAsGeoJSONResponse:
+        request = GetLocationsAsGeoJSONRequest()
+        request.location_ids = location_ids
+        request.unsimplified = unsimplified
+
+        return await self._unary_unary(
+            "/fcfsapi.QuartzAPI/GetLocationsAsGeoJSON",
+            request,
+            GetLocationsAsGeoJSONResponse,
         )
 
     async def create_model(

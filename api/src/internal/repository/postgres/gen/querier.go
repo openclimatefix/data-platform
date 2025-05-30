@@ -24,6 +24,7 @@ type Querier interface {
 	GetLatestForecastForLocationAtHorizon(ctx context.Context, arg GetLatestForecastForLocationAtHorizonParams) (GetLatestForecastForLocationAtHorizonRow, error)
 	GetLatestModelByName(ctx context.Context, modelName string) (GetLatestModelByNameRow, error)
 	GetLocationById(ctx context.Context, locationID int32) (GetLocationByIdRow, error)
+	GetLocationGeoJSONByIds(ctx context.Context, arg GetLocationGeoJSONByIdsParams) ([]byte, error)
 	// Get latest active record via the UPPER(sys_period) IS NULL condition
 	GetLocationSourceByType(ctx context.Context, arg GetLocationSourceByTypeParams) (GetLocationSourceByTypeRow, error)
 	GetModelById(ctx context.Context, modelID int32) (GetModelByIdRow, error)
@@ -35,7 +36,7 @@ type Querier interface {
 	ListLocationsByType(ctx context.Context, locationTypeName string) ([]LocLocation, error)
 	ListModels(ctx context.Context) ([]ListModelsRow, error)
 	ListObservationsByLocationId(ctx context.Context, locationID int32) ([]ObsObservedGenerationValue, error)
-	SetDefaultModel(ctx context.Context, dollar_1 interface{}) error
+	SetDefaultModel(ctx context.Context, modelID int32) error
 	UpdateLocationSource(ctx context.Context, arg UpdateLocationSourceParams) error
 	UpdateLocationSourceCapacity(ctx context.Context, arg UpdateLocationSourceCapacityParams) error
 	UpdateLocationSourceMetadata(ctx context.Context, arg UpdateLocationSourceMetadataParams) error

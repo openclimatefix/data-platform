@@ -361,12 +361,12 @@ const setDefaultModel = `-- name: SetDefaultModel :exec
 UPDATE pred.models AS m SET
     is_default = c.new_is_default
 FROM (VALUES
-    ((SELECT model_id FROM pred.models WHERE is_default = true), false), ($1, true)
+    ((SELECT model_id FROM pred.models WHERE is_default = true), false), ($1::integer, true)
 ) AS c(model_id, new_is_default)
 WHERE m.model_id = c.model_id
 `
 
-func (q *Queries) SetDefaultModel(ctx context.Context, dollar_1 interface{}) error {
-	_, err := q.db.Exec(ctx, setDefaultModel, dollar_1)
+func (q *Queries) SetDefaultModel(ctx context.Context, modelID int32) error {
+	_, err := q.db.Exec(ctx, setDefaultModel, modelID)
 	return err
 }

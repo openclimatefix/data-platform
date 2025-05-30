@@ -1,10 +1,12 @@
-.PHONY: run-docker-db run-api
+.PHONY: run-docker-db run-api gen-reqs
 
-gen:
+gen-reqs:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 	npm install -g @protobuf-ts/plugin @redocly/cli
 	uv pip install betterproto
+
+gen:
 	uv run protoc \
 		src/proto/fcfsapi/*.proto \
 		-I=src/proto \

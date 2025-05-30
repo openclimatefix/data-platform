@@ -43,6 +43,23 @@ SELECT
 FROM loc.locations AS l
 WHERE l.location_id = $1;
 
+-- name: GetLocationGeoJSONByIds :one
+SELECT json_build_object(
+    'type', 'FeatureCollection',
+    'features', json_agg(
+        ST_AsGeoJSON(sl.*, id_column => 'location_id'::text, geom_column => 'geom_simple')::jsonb
+    )
+) AS geojson
+FROM (
+    SELECT 
+        l.location_id,
+        l.location_name,
+        (SELECT location_type_name FROM loc.location_types WHERE location_type_id = l.location_type_id) AS location_type_name,
+        ST_SimplifyPreserveTopology(l.geom, sqlc.arg(simplification_level)::real) AS geom_simple
+    FROM loc.locations AS l
+    WHERE l.location_id = ANY(sqlc.arg(location_ids)::int[])
+) AS sl;
+
 
 /*- Queries for the location_sources table ---------------------------
 -- Get latest active record via the UPPER(sys_period) IS NULL condition

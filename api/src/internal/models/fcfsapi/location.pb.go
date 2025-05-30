@@ -29,7 +29,7 @@ type CreateSiteRequest struct {
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Latitude      float32                `protobuf:"fixed32,2,opt,name=latitude,proto3" json:"latitude,omitempty"`
 	Longitude     float32                `protobuf:"fixed32,3,opt,name=longitude,proto3" json:"longitude,omitempty"`
-	CapacityKw    int32                  `protobuf:"varint,4,opt,name=capacity_kw,json=capacityKw,proto3" json:"capacity_kw,omitempty"`
+	CapacityKw    int64                  `protobuf:"varint,4,opt,name=capacity_kw,json=capacityKw,proto3" json:"capacity_kw,omitempty"`
 	Metadata      string                 `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -86,7 +86,7 @@ func (x *CreateSiteRequest) GetLongitude() float32 {
 	return 0
 }
 
-func (x *CreateSiteRequest) GetCapacityKw() int32 {
+func (x *CreateSiteRequest) GetCapacityKw() int64 {
 	if x != nil {
 		return x.CapacityKw
 	}
@@ -104,7 +104,7 @@ type CreateGspRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Geometry      string                 `protobuf:"bytes,2,opt,name=geometry,proto3" json:"geometry,omitempty"`
-	CapacityMw    int32                  `protobuf:"varint,3,opt,name=capacity_mw,json=capacityMw,proto3" json:"capacity_mw,omitempty"`
+	CapacityMw    int64                  `protobuf:"varint,3,opt,name=capacity_mw,json=capacityMw,proto3" json:"capacity_mw,omitempty"`
 	Metadata      string                 `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -154,7 +154,7 @@ func (x *CreateGspRequest) GetGeometry() string {
 	return ""
 }
 
-func (x *CreateGspRequest) GetCapacityMw() int32 {
+func (x *CreateGspRequest) GetCapacityMw() int64 {
 	if x != nil {
 		return x.CapacityMw
 	}
@@ -170,7 +170,7 @@ func (x *CreateGspRequest) GetMetadata() string {
 
 type CreateLocationResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationId    int64                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -205,7 +205,7 @@ func (*CreateLocationResponse) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_location_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *CreateLocationResponse) GetLocationId() int64 {
+func (x *CreateLocationResponse) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
@@ -214,7 +214,7 @@ func (x *CreateLocationResponse) GetLocationId() int64 {
 
 type GetLocationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationId    int64                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -249,7 +249,7 @@ func (*GetLocationRequest) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_location_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetLocationRequest) GetLocationId() int64 {
+func (x *GetLocationRequest) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
@@ -340,6 +340,102 @@ func (x *GetLocationResponse) GetMetadata() string {
 	return ""
 }
 
+type GetLocationsAsGeoJSONRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LocationIds   []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	Unsimplified  bool                   `protobuf:"varint,2,opt,name=unsimplified,proto3" json:"unsimplified,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLocationsAsGeoJSONRequest) Reset() {
+	*x = GetLocationsAsGeoJSONRequest{}
+	mi := &file_fcfsapi_location_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLocationsAsGeoJSONRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLocationsAsGeoJSONRequest) ProtoMessage() {}
+
+func (x *GetLocationsAsGeoJSONRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_location_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLocationsAsGeoJSONRequest.ProtoReflect.Descriptor instead.
+func (*GetLocationsAsGeoJSONRequest) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_location_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetLocationsAsGeoJSONRequest) GetLocationIds() []int32 {
+	if x != nil {
+		return x.LocationIds
+	}
+	return nil
+}
+
+func (x *GetLocationsAsGeoJSONRequest) GetUnsimplified() bool {
+	if x != nil {
+		return x.Unsimplified
+	}
+	return false
+}
+
+type GetLocationsAsGeoJSONResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Geojson       string                 `protobuf:"bytes,1,opt,name=geojson,proto3" json:"geojson,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLocationsAsGeoJSONResponse) Reset() {
+	*x = GetLocationsAsGeoJSONResponse{}
+	mi := &file_fcfsapi_location_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLocationsAsGeoJSONResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLocationsAsGeoJSONResponse) ProtoMessage() {}
+
+func (x *GetLocationsAsGeoJSONResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_location_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLocationsAsGeoJSONResponse.ProtoReflect.Descriptor instead.
+func (*GetLocationsAsGeoJSONResponse) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_location_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GetLocationsAsGeoJSONResponse) GetGeojson() string {
+	if x != nil {
+		return x.Geojson
+	}
+	return ""
+}
+
 var File_fcfsapi_location_proto protoreflect.FileDescriptor
 
 const file_fcfsapi_location_proto_rawDesc = "" +
@@ -349,20 +445,20 @@ const file_fcfsapi_location_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\blatitude\x18\x02 \x01(\x02R\blatitude\x12\x1c\n" +
 	"\tlongitude\x18\x03 \x01(\x02R\tlongitude\x12\x1f\n" +
-	"\vcapacity_kw\x18\x04 \x01(\x05R\n" +
+	"\vcapacity_kw\x18\x04 \x01(\x03R\n" +
 	"capacityKw\x12\x1a\n" +
 	"\bmetadata\x18\x05 \x01(\tR\bmetadata\"\x7f\n" +
 	"\x10CreateGspRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bgeometry\x18\x02 \x01(\tR\bgeometry\x12\x1f\n" +
-	"\vcapacity_mw\x18\x03 \x01(\x05R\n" +
+	"\vcapacity_mw\x18\x03 \x01(\x03R\n" +
 	"capacityMw\x12\x1a\n" +
 	"\bmetadata\x18\x04 \x01(\tR\bmetadata\"9\n" +
 	"\x16CreateLocationResponse\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\x03R\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\"5\n" +
 	"\x12GetLocationRequest\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\x03R\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\"\xc1\x01\n" +
 	"\x13GetLocationResponse\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
@@ -372,7 +468,12 @@ const file_fcfsapi_location_proto_rawDesc = "" +
 	"\tlongitude\x18\x04 \x01(\x02R\tlongitude\x12\x1f\n" +
 	"\vcapacity_kw\x18\x05 \x01(\x03R\n" +
 	"capacityKw\x12\x1a\n" +
-	"\bmetadata\x18\x06 \x01(\tR\bmetadataB@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
+	"\bmetadata\x18\x06 \x01(\tR\bmetadata\"e\n" +
+	"\x1cGetLocationsAsGeoJSONRequest\x12!\n" +
+	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12\"\n" +
+	"\funsimplified\x18\x02 \x01(\bR\funsimplified\"9\n" +
+	"\x1dGetLocationsAsGeoJSONResponse\x12\x18\n" +
+	"\ageojson\x18\x01 \x01(\tR\ageojsonB@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
 
 var (
 	file_fcfsapi_location_proto_rawDescOnce sync.Once
@@ -386,13 +487,15 @@ func file_fcfsapi_location_proto_rawDescGZIP() []byte {
 	return file_fcfsapi_location_proto_rawDescData
 }
 
-var file_fcfsapi_location_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_fcfsapi_location_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_fcfsapi_location_proto_goTypes = []any{
-	(*CreateSiteRequest)(nil),      // 0: fcfsapi.CreateSiteRequest
-	(*CreateGspRequest)(nil),       // 1: fcfsapi.CreateGspRequest
-	(*CreateLocationResponse)(nil), // 2: fcfsapi.CreateLocationResponse
-	(*GetLocationRequest)(nil),     // 3: fcfsapi.GetLocationRequest
-	(*GetLocationResponse)(nil),    // 4: fcfsapi.GetLocationResponse
+	(*CreateSiteRequest)(nil),             // 0: fcfsapi.CreateSiteRequest
+	(*CreateGspRequest)(nil),              // 1: fcfsapi.CreateGspRequest
+	(*CreateLocationResponse)(nil),        // 2: fcfsapi.CreateLocationResponse
+	(*GetLocationRequest)(nil),            // 3: fcfsapi.GetLocationRequest
+	(*GetLocationResponse)(nil),           // 4: fcfsapi.GetLocationResponse
+	(*GetLocationsAsGeoJSONRequest)(nil),  // 5: fcfsapi.GetLocationsAsGeoJSONRequest
+	(*GetLocationsAsGeoJSONResponse)(nil), // 6: fcfsapi.GetLocationsAsGeoJSONResponse
 }
 var file_fcfsapi_location_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -413,7 +516,7 @@ func file_fcfsapi_location_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_fcfsapi_location_proto_rawDesc), len(file_fcfsapi_location_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

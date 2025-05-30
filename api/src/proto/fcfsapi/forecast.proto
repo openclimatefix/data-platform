@@ -17,13 +17,13 @@ message CreateModelRequest {
 }
 
 message CreateModelResponse {
-  int64 model_id = 1;
+  int32 model_id = 1;
 }
 
 // --- Forecasts -------------------------------------------------------------
 
 message PredictedGenerationValue {
-  int64 horizon_mins = 1;
+  int32 horizon_mins = 1;
   int32 p50 = 2;
   int32 p10 = 3;
   int32 p90 = 4;
@@ -31,8 +31,8 @@ message PredictedGenerationValue {
 }
 
 message Forecast {
-  int64 model_id = 1;
-  int64 location_id = 2;
+  int32 model_id = 1;
+  int32 location_id = 2;
   google.protobuf.Timestamp init_time_utc = 3;
 }
 

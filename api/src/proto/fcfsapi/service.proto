@@ -26,6 +26,8 @@ service QuartzAPI {
 
   rpc GetSolarLocation(GetLocationRequest) returns (GetLocationResponse) {}
 
+  rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
+
   // --- Predictions ---------------------------------------------------------------
 
   rpc CreateModel(CreateModelRequest) returns (CreateModelResponse) {}
