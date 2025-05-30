@@ -69,7 +69,6 @@ func (r iteratorForCreatePredictedGenerationValues) Values() ([]interface{}, err
 		r.rows[0].P50,
 		r.rows[0].P90,
 		r.rows[0].ForecastID,
-		r.rows[0].LocationID,
 		r.rows[0].TargetTimeUtc,
 		r.rows[0].Metadata,
 	}, nil
@@ -80,5 +79,5 @@ func (r iteratorForCreatePredictedGenerationValues) Err() error {
 }
 
 func (q *Queries) CreatePredictedGenerationValues(ctx context.Context, arg []CreatePredictedGenerationValuesParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"pred", "predicted_generation_values"}, []string{"horizon_mins", "p10", "p50", "p90", "forecast_id", "location_id", "target_time_utc", "metadata"}, &iteratorForCreatePredictedGenerationValues{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"pred", "predicted_generation_values"}, []string{"horizon_mins", "p10", "p50", "p90", "forecast_id", "target_time_utc", "metadata"}, &iteratorForCreatePredictedGenerationValues{rows: arg})
 }

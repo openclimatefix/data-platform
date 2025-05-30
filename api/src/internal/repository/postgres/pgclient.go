@@ -88,7 +88,13 @@ type QuartzAPIPostgresServer struct {
 
 // CreateSolarForecast implements fcfsapi.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *fcfsapi.CreateForecastRequest) (*fcfsapi.CreateForecastResponse, error) {
-	log.Info().Msg("CreateSolarForecast called")
+	l := log.With().Str("method", "CreateSolarForecast").Logger()
+	l.Info().Str("params", fmt.Sprintf("%+v", req.Forecast)).Msg("recieved method call")
+
+	if len(req.PredictedGenerationValues) == 0 {
+		return nil, fmt.Errorf("no predicted generation values provided")
+	}
+
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
@@ -96,8 +102,6 @@ func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *
 	}
 	defer tx.Rollback(ctx)
 	querier := db.New(tx)
-
-	// Get the location source metadata
 
 	// Create a new forecast
 	createForecastParams := db.CreateForecastParams{
@@ -113,23 +117,29 @@ func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *
 	if err != nil {
 		return nil, fmt.Errorf("failed to create forecast: %v", err)
 	}
+	l.Debug().Msgf("Created forecast with ID %d", forecastID)
+
 	// Create the forecast data
 	predictedGenerationValues := make([]db.CreatePredictedGenerationValuesParams, len(req.PredictedGenerationValues))
 	for i, value := range req.PredictedGenerationValues {
 		p10 := int16(value.P10)
 		p90 := int16(value.P90)
+		metadata := []byte(value.Metadata)
+		if value.Metadata == "" {
+			metadata = nil
+		}
+
 		predictedGenerationValues[i] = db.CreatePredictedGenerationValuesParams{
 			HorizonMins: int16(value.HorizonMins),
 			P50:         int16(value.P50),
 			ForecastID:  forecastID,
-			LocationID:  int32(req.Forecast.LocationId),
 			TargetTimeUtc: pgtype.Timestamp{
 				Time: req.Forecast.InitTimeUtc.AsTime().Add(
 					time.Duration(value.HorizonMins) * time.Minute,
 				),
 				Valid: true,
 			},
-			Metadata: []byte(value.Metadata),
+			Metadata: metadata,
 			P10:      &p10,
 			P90:      &p90,
 		}
@@ -139,6 +149,7 @@ func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *
 	if err != nil {
 		return nil, fmt.Errorf("failed to create predicted generation values: %v", err)
 	}
+	l.Debug().Msgf("Inserted %d predicted generation values for forecast %d", len(predictedGenerationValues), forecastID)
 
 	return &fcfsapi.CreateForecastResponse{}, tx.Commit(ctx)
 }
@@ -157,10 +168,13 @@ func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *fcfsapi.
 
 	// Create a new model
 	params := db.CreateModelParams{
-		Name:    req.Name,
-		Version: req.Version,
+		ModelName:    req.Name,
+		ModelVersion: req.Version,
 	}
 	modelID, err := querier.CreateModel(ctx, params)
+	if req.MakeDefault == true {
+		err = querier.SetDefaultModel(ctx, modelID)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create model: %v", err)
 	}
@@ -360,7 +374,9 @@ func (q *QuartzAPIPostgresServer) GetPredictedCrossSection(context.Context, *fcf
 
 // GetPredictedTimeseries implements proto.QuartzAPIServer.
 func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredictedTimeseriesRequest, stream grpc.ServerStreamingServer[fcfsapi.GetPredictedTimeseriesResponse]) error {
-	log.Info().Msg("GetPredictedTimeseries called")
+	l := log.With().Str("method", "GetPredictedTimeseries").Logger()
+	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(stream.Context())
 	if err != nil {
@@ -370,12 +386,32 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 	querier := db.New(tx)
 
 	for _, locationId := range req.LocationIds {
-		dbYields, err := querier.GetMinHorizonPredictedGenerationValuesForLocation(stream.Context(), int32(locationId))
+
+		// Get the latest forecast for the location
+		modelResp, err := querier.GetDefaultModel(stream.Context())
+		if err != nil {
+			return fmt.Errorf("failed to get default model: %v", err)
+		}
+		l.Debug().Msgf("Using default model with ID %d", modelResp.ModelID)
+		forecastResp, err := querier.GetLatestForecastForLocationAtHorizon(stream.Context(), db.GetLatestForecastForLocationAtHorizonParams{
+			LocationID:     locationId,
+			SourceTypeName: "solar",
+			ModelID:        modelResp.ModelID,
+			HorizonMins:    0,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get latest forecast for location %d: %v", locationId, err)
+		}
+		l.Debug().Msgf("Found latest forecast with ID %d for location %d", forecastResp.ForecastID, locationId)
+
+		dbYields, err := querier.GetPredictedGenerationValuesForForecast(stream.Context(), forecastResp.ForecastID)
 		if err != nil {
 			return fmt.Errorf("failed to get predicted generation values: %v", err)
 		}
+		l.Debug().Msgf("Found %d predicted generation values for forecast %d", len(dbYields), forecastResp.ForecastID)
 
-		yields := make([]*fcfsapi.PredictedYield, 0, len(dbYields))
+
+		yields := make([]*fcfsapi.PredictedYield, len(dbYields))
 		for i, yield := range dbYields {
 			yields[i] = &fcfsapi.PredictedYield{
 				YieldKw:       int32(yield.P50),

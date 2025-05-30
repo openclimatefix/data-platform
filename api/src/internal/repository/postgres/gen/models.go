@@ -17,12 +17,12 @@ type LocLocation struct {
 }
 
 type LocLocationSource struct {
-	RecordID                 int32
-	LocationID               int32
 	SourceTypeID             int16
 	Capacity                 int16
 	CapacityUnitPrefixFactor int16
 	CapacityLimit            *int16
+	RecordID                 int32
+	LocationID               int32
 	Metadata                 []byte
 	SysPeriod                pgtype.Range[pgtype.Timestamp]
 }
@@ -55,8 +55,9 @@ type PredForecast struct {
 
 type PredModel struct {
 	ModelID      int32
-	Name         string
-	Version      string
+	ModelName    string
+	ModelVersion string
+	IsDefault    *bool
 	CreatedAtUtc pgtype.Timestamp
 }
 
@@ -66,7 +67,6 @@ type PredPredictedGenerationValue struct {
 	P50           int16
 	P90           *int16
 	ForecastID    int32
-	LocationID    int32
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
 }

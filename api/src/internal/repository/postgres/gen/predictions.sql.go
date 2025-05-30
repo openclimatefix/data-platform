@@ -12,6 +12,7 @@ import (
 )
 
 const createForecast = `-- name: CreateForecast :one
+
 INSERT INTO pred.forecasts(
     source_type_id, location_id, model_id, init_time_utc
 ) VALUES (
@@ -26,6 +27,7 @@ type CreateForecastParams struct {
 	InitTimeUtc    pgtype.Timestamp
 }
 
+// --- Forecasts ---
 func (q *Queries) CreateForecast(ctx context.Context, arg CreateForecastParams) (int32, error) {
 	row := q.db.QueryRow(ctx, createForecast,
 		arg.LocationID,
@@ -39,18 +41,20 @@ func (q *Queries) CreateForecast(ctx context.Context, arg CreateForecastParams) 
 }
 
 const createModel = `-- name: CreateModel :one
-INSERT INTO pred.models (name, version) VALUES (
+
+INSERT INTO pred.models (model_name, model_version) VALUES (
     $1, $2
 ) RETURNING model_id
 `
 
 type CreateModelParams struct {
-	Name    string
-	Version string
+	ModelName    string
+	ModelVersion string
 }
 
+// --- Models ---
 func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (int32, error) {
-	row := q.db.QueryRow(ctx, createModel, arg.Name, arg.Version)
+	row := q.db.QueryRow(ctx, createModel, arg.ModelName, arg.ModelVersion)
 	var model_id int32
 	err := row.Scan(&model_id)
 	return model_id, err
@@ -62,64 +66,177 @@ type CreatePredictedGenerationValuesParams struct {
 	P50           int16
 	P90           *int16
 	ForecastID    int32
-	LocationID    int32
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
 }
 
-const getMinHorizonPredictedGenerationValuesForLocation = `-- name: GetMinHorizonPredictedGenerationValuesForLocation :many
-WITH ranked_predictions AS (
-    SELECT
-        pgv.target_time_utc,
-        pgv.p10,
-        pgv.p50,
-        pgv.p90,
-        pgv.horizon_mins,
-        pgv.forecast_id,
-        ROW_NUMBER() OVER (PARTITION BY pgv.target_time_utc ORDER BY pgv.horizon_mins ASC) as rn
-    FROM
-        pred.predicted_generation_values pgv
-    WHERE
-        pgv.location_id = $1
-        AND pgv.target_time_utc >= CURRENT_TIMESTAMP - make_interval(hours => 36)
-)
+const getDefaultModel = `-- name: GetDefaultModel :one
 SELECT
-    rp.target_time_utc,
-    rp.p10,
-    rp.p50,
-    rp.p90,
-    rp.horizon_mins,
-    rp.forecast_id
-FROM ranked_predictions rp
-WHERE rp.rn = 1
-ORDER BY rp.target_time_utc ASC
+    model_id, model_name, model_version, created_at_utc
+FROM pred.models
+WHERE is_default = true
+LIMIT 1
 `
 
-type GetMinHorizonPredictedGenerationValuesForLocationRow struct {
-	TargetTimeUtc pgtype.Timestamp
+type GetDefaultModelRow struct {
+	ModelID      int32
+	ModelName    string
+	ModelVersion string
+	CreatedAtUtc pgtype.Timestamp
+}
+
+func (q *Queries) GetDefaultModel(ctx context.Context) (GetDefaultModelRow, error) {
+	row := q.db.QueryRow(ctx, getDefaultModel)
+	var i GetDefaultModelRow
+	err := row.Scan(
+		&i.ModelID,
+		&i.ModelName,
+		&i.ModelVersion,
+		&i.CreatedAtUtc,
+	)
+	return i, err
+}
+
+const getLatestForecastForLocationAtHorizon = `-- name: GetLatestForecastForLocationAtHorizon :one
+SELECT
+    f.forecast_id,
+    f.init_time_utc,
+    f.source_type_id,
+    f.location_id,
+    f.model_id
+FROM pred.forecasts f
+WHERE f.location_id = $1
+AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+AND f.model_id = $3
+AND f.init_time_utc <= CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => $4::integer)
+ORDER BY f.init_time_utc DESC
+LIMIT 1
+`
+
+type GetLatestForecastForLocationAtHorizonParams struct {
+	LocationID     int32
+	SourceTypeName string
+	ModelID        int32
+	HorizonMins    int32
+}
+
+type GetLatestForecastForLocationAtHorizonRow struct {
+	ForecastID   int32
+	InitTimeUtc  pgtype.Timestamp
+	SourceTypeID int16
+	LocationID   int32
+	ModelID      int32
+}
+
+func (q *Queries) GetLatestForecastForLocationAtHorizon(ctx context.Context, arg GetLatestForecastForLocationAtHorizonParams) (GetLatestForecastForLocationAtHorizonRow, error) {
+	row := q.db.QueryRow(ctx, getLatestForecastForLocationAtHorizon,
+		arg.LocationID,
+		arg.SourceTypeName,
+		arg.ModelID,
+		arg.HorizonMins,
+	)
+	var i GetLatestForecastForLocationAtHorizonRow
+	err := row.Scan(
+		&i.ForecastID,
+		&i.InitTimeUtc,
+		&i.SourceTypeID,
+		&i.LocationID,
+		&i.ModelID,
+	)
+	return i, err
+}
+
+const getLatestModelByName = `-- name: GetLatestModelByName :one
+SELECT
+    model_id, model_name, model_version, created_at_utc
+FROM pred.models
+WHERE model_name = $1
+ORDER BY created_at_utc DESC
+LIMIT 1
+`
+
+type GetLatestModelByNameRow struct {
+	ModelID      int32
+	ModelName    string
+	ModelVersion string
+	CreatedAtUtc pgtype.Timestamp
+}
+
+func (q *Queries) GetLatestModelByName(ctx context.Context, modelName string) (GetLatestModelByNameRow, error) {
+	row := q.db.QueryRow(ctx, getLatestModelByName, modelName)
+	var i GetLatestModelByNameRow
+	err := row.Scan(
+		&i.ModelID,
+		&i.ModelName,
+		&i.ModelVersion,
+		&i.CreatedAtUtc,
+	)
+	return i, err
+}
+
+const getModelById = `-- name: GetModelById :one
+SELECT
+    model_id, model_name, model_version, created_at_utc
+FROM pred.models
+WHERE model_id = $1
+`
+
+type GetModelByIdRow struct {
+	ModelID      int32
+	ModelName    string
+	ModelVersion string
+	CreatedAtUtc pgtype.Timestamp
+}
+
+func (q *Queries) GetModelById(ctx context.Context, modelID int32) (GetModelByIdRow, error) {
+	row := q.db.QueryRow(ctx, getModelById, modelID)
+	var i GetModelByIdRow
+	err := row.Scan(
+		&i.ModelID,
+		&i.ModelName,
+		&i.ModelVersion,
+		&i.CreatedAtUtc,
+	)
+	return i, err
+}
+
+const getPredictedGenerationValuesForForecast = `-- name: GetPredictedGenerationValuesForForecast :many
+SELECT
+    horizon_mins,
+    p10,
+    p50,
+    p90,
+    target_time_utc,
+    metadata
+FROM pred.predicted_generation_values
+WHERE forecast_id = $1
+`
+
+type GetPredictedGenerationValuesForForecastRow struct {
+	HorizonMins   int16
 	P10           *int16
 	P50           int16
 	P90           *int16
-	HorizonMins   int16
-	ForecastID    int32
+	TargetTimeUtc pgtype.Timestamp
+	Metadata      []byte
 }
 
-func (q *Queries) GetMinHorizonPredictedGenerationValuesForLocation(ctx context.Context, locationID int32) ([]GetMinHorizonPredictedGenerationValuesForLocationRow, error) {
-	rows, err := q.db.Query(ctx, getMinHorizonPredictedGenerationValuesForLocation, locationID)
+func (q *Queries) GetPredictedGenerationValuesForForecast(ctx context.Context, forecastID int32) ([]GetPredictedGenerationValuesForForecastRow, error) {
+	rows, err := q.db.Query(ctx, getPredictedGenerationValuesForForecast, forecastID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetMinHorizonPredictedGenerationValuesForLocationRow{}
+	items := []GetPredictedGenerationValuesForForecastRow{}
 	for rows.Next() {
-		var i GetMinHorizonPredictedGenerationValuesForLocationRow
+		var i GetPredictedGenerationValuesForForecastRow
 		if err := rows.Scan(
-			&i.TargetTimeUtc,
+			&i.HorizonMins,
 			&i.P10,
 			&i.P50,
 			&i.P90,
-			&i.HorizonMins,
-			&i.ForecastID,
+			&i.TargetTimeUtc,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -129,4 +246,127 @@ func (q *Queries) GetMinHorizonPredictedGenerationValuesForLocation(ctx context.
 		return nil, err
 	}
 	return items, nil
+}
+
+const getPredictedGenerationValuesForLocationAtHorizon = `-- name: GetPredictedGenerationValuesForLocationAtHorizon :many
+WITH relevant_forecasts AS (
+    SELECT
+        f.forecast_id
+    FROM pred.forecasts f
+    WHERE f.location_id = $1
+    AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+    AND f.model_id = $2
+    AND f.init_time_utc BETWEEN 
+        -- Default window is 36 hours backwards
+        CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => $3::integer, hours => 36)
+        AND CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => $3::integer)
+)
+SELECT
+    pgv.horizon_mins,
+    pgv.p10,
+    pgv.p50,
+    pgv.p90,
+    pgv.target_time_utc,
+    pgv.metadata
+FROM pred.predicted_generation_values pgv
+INNER JOIN relevant_forecasts ON pgv.forecast_id = relevant_forecasts.forecast_id
+WHERE pgv.target_time_utc BETWEEN
+    CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => $3::integer, hours => 36)
+    AND CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => $3::integer)
+AND pgv.horizon_mins = $3::smallint
+`
+
+type GetPredictedGenerationValuesForLocationAtHorizonParams struct {
+	LocationID     int32
+	SourceTypeName string
+	HorizonMins    int32
+}
+
+type GetPredictedGenerationValuesForLocationAtHorizonRow struct {
+	HorizonMins   int16
+	P10           *int16
+	P50           int16
+	P90           *int16
+	TargetTimeUtc pgtype.Timestamp
+	Metadata      []byte
+}
+
+func (q *Queries) GetPredictedGenerationValuesForLocationAtHorizon(ctx context.Context, arg GetPredictedGenerationValuesForLocationAtHorizonParams) ([]GetPredictedGenerationValuesForLocationAtHorizonRow, error) {
+	rows, err := q.db.Query(ctx, getPredictedGenerationValuesForLocationAtHorizon, arg.LocationID, arg.SourceTypeName, arg.HorizonMins)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPredictedGenerationValuesForLocationAtHorizonRow{}
+	for rows.Next() {
+		var i GetPredictedGenerationValuesForLocationAtHorizonRow
+		if err := rows.Scan(
+			&i.HorizonMins,
+			&i.P10,
+			&i.P50,
+			&i.P90,
+			&i.TargetTimeUtc,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModels = `-- name: ListModels :many
+SELECT
+    model_id, model_name, model_version, created_at_utc
+FROM pred.models
+ORDER BY created_at_utc DESC
+`
+
+type ListModelsRow struct {
+	ModelID      int32
+	ModelName    string
+	ModelVersion string
+	CreatedAtUtc pgtype.Timestamp
+}
+
+func (q *Queries) ListModels(ctx context.Context) ([]ListModelsRow, error) {
+	rows, err := q.db.Query(ctx, listModels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListModelsRow{}
+	for rows.Next() {
+		var i ListModelsRow
+		if err := rows.Scan(
+			&i.ModelID,
+			&i.ModelName,
+			&i.ModelVersion,
+			&i.CreatedAtUtc,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setDefaultModel = `-- name: SetDefaultModel :exec
+UPDATE pred.models AS m SET
+    is_default = c.new_is_default
+FROM (VALUES
+    ((SELECT model_id FROM pred.models WHERE is_default = true), false), ($1, true)
+) AS c(model_id, new_is_default)
+WHERE m.model_id = c.model_id
+`
+
+func (q *Queries) SetDefaultModel(ctx context.Context, dollar_1 interface{}) error {
+	_, err := q.db.Exec(ctx, setDefaultModel, dollar_1)
+	return err
 }

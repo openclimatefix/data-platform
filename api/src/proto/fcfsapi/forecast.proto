@@ -13,6 +13,7 @@ option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfs
 message CreateModelRequest {
   string name = 1;
   string version = 2;
+  bool make_default = 3;
 }
 
 message CreateModelResponse {

@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/devsjc/fcfs/api/src/internal/models/fcfsapi"
+	"github.com/jackc/pgx/v5"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
@@ -102,6 +104,22 @@ func setupSuite(tb testing.TB, ctx context.Context) (fcfsapi.QuartzAPIClient, fu
     }()
 	tb.Logf("Created server backed by fully migrated postgres container at %s", pgConnString)
 
+	// Write seed data to the Postgres container
+	seedfiles, _ := filepath.Glob(filepath.Join(".", "sql", "seeding", "*.sql"))
+	conn, err := pgx.Connect(ctx, pgConnString)
+	require.NoError(tb, err)
+	defer conn.Close(ctx)
+	// Run the seeding SQL files
+	for _, f := range seedfiles {
+		tb.Logf("Running seed file: %s", f)
+		sql, err := os.ReadFile(f)
+		require.NoError(tb, err)
+		// Execute the SQL file
+		_, err = conn.Exec(ctx, string(sql))
+		require.NoError(tb, err)
+		tb.Logf("Seed file %s executed successfully", f)
+	}
+
 	// Create client using same in-memory listener
 	bufDialer := func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
@@ -156,6 +174,7 @@ func TestCreateForecast(t *testing.T) {
 	modelResp, err := s.CreateModel(ctx, &fcfsapi.CreateModelRequest{
 		Name: "testmodel01",
 		Version: "0.1.0",
+		MakeDefault: true,
 	})
 	require.NoError(t, err)
 
@@ -181,6 +200,7 @@ func TestCreateForecast(t *testing.T) {
 	resp, err := s.CreateSolarForecast(ctx, req)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
+	require.Equal(t, int64(0), resp.ForecastId)
 }
 
 func TestGetPredictedTimeseries(t *testing.T) {
@@ -192,31 +212,34 @@ func TestGetPredictedTimeseries(t *testing.T) {
 	modelResp, err := s.CreateModel(ctx, &fcfsapi.CreateModelRequest{
 		Name: "testmodel01",
 		Version: "0.1.0",
+		MakeDefault: true,
 	})
 	require.NoError(t, err)
 
 
 	// Make 10 forecasts created an hour apart from each other
-	init_time := time.Now().Truncate(24 * time.Hour)
-	for i := 9; i >= 0; i-- {
+	latest_forecast_time := time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC)
 
-		init_time_i := init_time.Add(-1 * time.Duration(i) * time.Hour)
-		predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, 0, 12 * 48) // 12 predictions per hour, 48 hours
-		for j, _ := range predictedGenerationValues {
-			// Each forecast predicts the value of its time offset as the generation value
-			predictedGenerationValues[i] = &fcfsapi.PredictedGenerationValue{
-					HorizonMins:       int64(j * 5),
-					P50:               int32(i),
-					P10:               int32(i),
-					P90:               int32(i),
-					Metadata:          `{"group": "test"}`,
+	for i := 9; i >= 0; i-- {
+		init_time := latest_forecast_time.Add(-1 * time.Duration(i) * time.Hour)
+		// One prediction every five minutes for 2 days
+		predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, 12 * 48)
+		
+		for j := 0; j < 12 * 48; j++ {
+			predictedGenerationValues[j] = &fcfsapi.PredictedGenerationValue{
+				HorizonMins: int64(j * 5),
+				// Each forecast's P50 will be equal to their hour difference from the 
+				P50:         int32(i),
+				P10:         int32(i),
+				P90:         int32(i),
+				Metadata:    "",
 			}
 		}
 
 		req := &fcfsapi.CreateForecastRequest{
 			Forecast: &fcfsapi.Forecast{
 				ModelId: modelResp.ModelId,
-				InitTimeUtc: timestamppb.New(init_time_i),
+				InitTimeUtc: timestamppb.New(init_time),
 				LocationId: 0,
 			},
 			PredictedGenerationValues: predictedGenerationValues,
@@ -226,24 +249,24 @@ func TestGetPredictedTimeseries(t *testing.T) {
 		require.NotNil(t, resp)
 	}
 
-	// Now get the predicted timeseries for the last 10 hours
+	// Now get the predicted timeseries
 	stream, err := s.GetPredictedTimeseries(ctx, &fcfsapi.GetPredictedTimeseriesRequest{
 		LocationIds: []int32{0},
 	})
 	
 	require.NoError(t, err)
-	var count int
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
 			break // End of stream
 		}
 		require.NotNil(t, resp)
-		require.Equal(t, int64(0), resp.LocationId)
+		require.Equal(t, int32(0), resp.LocationId)
+		require.Equal(t, len(resp.Yields), 12 * 48)
 
 		for _, v := range resp.Yields {
-			count++
-			require.Equal(t, int32(10), v.YieldKw) // All forecasts should have P50 = 10
+			// All forecast values should be from the latest forecast, which has P10s of 0
+			require.Equal(t, int32(0), v.YieldKw)
 		}
 	}
 

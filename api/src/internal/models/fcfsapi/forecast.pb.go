@@ -28,6 +28,7 @@ type CreateModelRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	MakeDefault   bool                   `protobuf:"varint,3,opt,name=make_default,json=makeDefault,proto3" json:"make_default,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -74,6 +75,13 @@ func (x *CreateModelRequest) GetVersion() string {
 		return x.Version
 	}
 	return ""
+}
+
+func (x *CreateModelRequest) GetMakeDefault() bool {
+	if x != nil {
+		return x.MakeDefault
+	}
+	return false
 }
 
 type CreateModelResponse struct {
@@ -356,10 +364,11 @@ var File_fcfsapi_forecast_proto protoreflect.FileDescriptor
 
 const file_fcfsapi_forecast_proto_rawDesc = "" +
 	"\n" +
-	"\x16fcfsapi/forecast.proto\x12\afcfsapi\x1a\x1fgoogle/protobuf/timestamp.proto\"B\n" +
+	"\x16fcfsapi/forecast.proto\x12\afcfsapi\x1a\x1fgoogle/protobuf/timestamp.proto\"e\n" +
 	"\x12CreateModelRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"0\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12!\n" +
+	"\fmake_default\x18\x03 \x01(\bR\vmakeDefault\"0\n" +
 	"\x13CreateModelResponse\x12\x19\n" +
 	"\bmodel_id\x18\x01 \x01(\x03R\amodelId\"\x8f\x01\n" +
 	"\x18PredictedGenerationValue\x12!\n" +

@@ -71,10 +71,6 @@ CREATE INDEX ON loc.locations (location_type_id);
 
 -- Table to store the current and historic generation capability of locations
 CREATE TABLE loc.location_sources (
-    record_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    location_id INTEGER NOT NULL
-        REFERENCES loc.locations(location_id)
-        ON DELETE CASCADE,
     source_type_id SMALLINT NOT NULL
         REFERENCES loc.source_types(source_type_id)
         ON DELETE RESTRICT,
@@ -87,6 +83,10 @@ CREATE TABLE loc.location_sources (
     -- Capacity cap, measured in percent of the capacity (e.g. curtailment)
     capacity_limit SMALLINT
         CHECK ( capacity_limit IS NULL OR (capacity_limit >= 0 AND capacity_limit < 100) ),
+    record_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    location_id INTEGER NOT NULL
+        REFERENCES loc.locations(location_id)
+        ON DELETE CASCADE,
     metadata JSONB
         CHECK ( metadata IS NULL OR metadata <> '{}'::jsonb ),
     sys_period TSRANGE NOT NULL

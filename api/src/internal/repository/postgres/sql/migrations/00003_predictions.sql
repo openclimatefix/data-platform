@@ -19,16 +19,29 @@ CREATE SCHEMA pred;
 /*
 A forecast model is an ML model that generated predicted generation values.
 Each model's name and version number uniquely identifies it.
+
+is_default is a boolean that indicates whether this model is the default.
+It is NULL everywhere except for one row where it is TRUE; enforced by the
+CHECK and the UNIQUE constraint.
 */
 CREATE TABLE pred.models (
     model_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    name TEXT NOT NULL
-        CHECK ( LENGTH(name) > 0 and LENGTH(name) < 64 ),
-    version TEXT NOT NULL
-        CHECK ( LENGTH(version) > 0 and LENGTH(version) < 64 ),
+    model_name TEXT NOT NULL
+        CHECK (
+            LENGTH(model_name) > 0 AND LENGTH(model_name) < 64
+            AND model_name = LOWER(model_name)
+        ),
+    model_version TEXT NOT NULL
+        CHECK (
+            LENGTH(model_version) > 0 AND LENGTH(model_version) < 64
+            AND model_version = LOWER(model_version)
+        ),
+    is_default BOOLEAN DEFAULT NULL
+        CHECK (is_default),
     created_at_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (model_id),
-    UNIQUE (name, version)
+    UNIQUE (model_name, model_version),
+    UNIQUE (is_default)
 );
 
 /*
@@ -53,11 +66,8 @@ CREATE TABLE pred.forecasts (
         ON UPDATE CASCADE,
     init_time_utc TIMESTAMP NOT NULL,
     PRIMARY KEY (forecast_id),
-    UNIQUE (location_id, init_time_utc, source_type_id, model_id)
+    UNIQUE (location_id, source_type_id, model_id, init_time_utc)
 );
-
--- Index for efficiently finding a location's forecasts
-CREATE INDEX ON pred.forecasts (location_id, init_time_utc);
 
 /*
 Table to store predicted generation values.
@@ -76,38 +86,25 @@ CREATE TABLE pred.predicted_generation_values (
     -- represented by the smallint range. Since it isn't impossible to predict a little
     -- over capacity, 30000 represents 100% of capacity intead of the max smallint value
     -- (32767). This is to allow for a little bit of leeway in the predictions.
-    p10 SMALLINT
+    p10 SMALLINT DEFAULT NULL
         CHECK (p10 IS NULL or p10 >= 0),
     p50 SMALLINT NOT NULL
         CHECK (p50 >= 0),
-    p90 SMALLINT
+    p90 SMALLINT DEFAULT NULL
         CHECK (p90 IS NULL or p90 >= 0),
     forecast_id INTEGER NOT NULL
         REFERENCES pred.forecasts(forecast_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
-    -- Denormalisation from the location table to avoid joins
-    location_id INTEGER NOT NULL
-        REFERENCES loc.locations(location_id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
     -- Time that the predicted generation value corresponds to
     target_time_utc TIMESTAMP NOT NULL,
-    metadata JSONB
-        CHECK (metadata IS NULL or metadata != '{}'),
-    PRIMARY KEY (target_time_utc, horizon_mins, forecast_id)
+    metadata JSONB DEFAULT NULL
+        CHECK (metadata IS NULL OR metadata != '{}'),
+    PRIMARY KEY (forecast_id, target_time_utc, horizon_mins)
 )
 -- Native partitioning. Note that unique indexes will only work if they include
 -- the partition key.
 PARTITION BY RANGE (target_time_utc);
-
--- Index for cross section queries (one target time, many locations)
-CREATE INDEX ON pred.predicted_generation_values (target_time_utc, horizon_mins);
--- Index for timeseries queries (one location, many target times)
-CREATE INDEX ON pred.predicted_generation_values (location_id, target_time_utc, horizon_mins);
--- Index for getting specific forecast values
-CREATE INDEX ON pred.predicted_generation_values (forecast_id, target_time_utc, horizon_mins);
-
 
 -- Manage partitions with pg_partman
 SELECT partman.create_parent(

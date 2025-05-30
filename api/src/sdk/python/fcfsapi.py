@@ -13,6 +13,7 @@ import grpclib
 class CreateModelRequest(betterproto.Message):
     name: str = betterproto.string_field(1)
     version: str = betterproto.string_field(2)
+    make_default: bool = betterproto.bool_field(3)
 
 
 @dataclass
@@ -305,11 +306,12 @@ class QuartzAPIStub(betterproto.ServiceStub):
         )
 
     async def create_model(
-        self, *, name: str = "", version: str = ""
+        self, *, name: str = "", version: str = "", make_default: bool = False
     ) -> CreateModelResponse:
         request = CreateModelRequest()
         request.name = name
         request.version = version
+        request.make_default = make_default
 
         return await self._unary_unary(
             "/fcfsapi.QuartzAPI/CreateModel",
