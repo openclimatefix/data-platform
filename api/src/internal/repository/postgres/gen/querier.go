@@ -29,7 +29,7 @@ type Querier interface {
 	GetLocationSourceByType(ctx context.Context, arg GetLocationSourceByTypeParams) (GetLocationSourceByTypeRow, error)
 	GetModelById(ctx context.Context, modelID int32) (GetModelByIdRow, error)
 	GetPredictedGenerationValuesForForecast(ctx context.Context, forecastID int32) ([]GetPredictedGenerationValuesForForecastRow, error)
-	GetPredictedGenerationValuesForLocationAtHorizon(ctx context.Context, arg GetPredictedGenerationValuesForLocationAtHorizonParams) ([]GetPredictedGenerationValuesForLocationAtHorizonRow, error)
+	GetWindowedPredictedGenerationValuesAtHorizon(ctx context.Context, arg GetWindowedPredictedGenerationValuesAtHorizonParams) ([]GetWindowedPredictedGenerationValuesAtHorizonRow, error)
 	ListLocationGeometryByType(ctx context.Context, locationTypeName string) ([]ListLocationGeometryByTypeRow, error)
 	ListLocationIdsByType(ctx context.Context, locationTypeName string) ([]ListLocationIdsByTypeRow, error)
 	ListLocationSourceHistoryByType(ctx context.Context, arg ListLocationSourceHistoryByTypeParams) ([]ListLocationSourceHistoryByTypeRow, error)

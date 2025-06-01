@@ -106,11 +106,15 @@ class GetLocationsAsGeoJSONResponse(betterproto.Message):
 @dataclass
 class GetPredictedTimeseriesRequest(betterproto.Message):
     """
-    --- GetPredictedTimeseries
-    --------------------------------------------------------
+    * --- GetPredictedTimeseries
+    -------------------------------------------------------- A query for a 1D
+    timeseries of predicted yields for the given locations.
     """
 
     location_ids: List[int] = betterproto.int32_field(1)
+    # * The desired difference between the initialisation time and the target
+    # time in minutes. 0 gives the most recently predicted values.
+    horizon_mins: int = betterproto.int32_field(2)
 
 
 @dataclass
@@ -203,10 +207,11 @@ class ActualYieldAtLocation(betterproto.Message):
 
 class QuartzAPIStub(betterproto.ServiceStub):
     async def get_predicted_timeseries(
-        self, *, location_ids: List[int] = []
+        self, *, location_ids: List[int] = [], horizon_mins: int = 0
     ) -> AsyncGenerator[GetPredictedTimeseriesResponse, None]:
         request = GetPredictedTimeseriesRequest()
         request.location_ids = location_ids
+        request.horizon_mins = horizon_mins
 
         async for response in self._unary_stream(
             "/fcfsapi.QuartzAPI/GetPredictedTimeseries",

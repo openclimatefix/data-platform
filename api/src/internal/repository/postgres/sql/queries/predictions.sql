@@ -82,31 +82,50 @@ SELECT
 FROM pred.predicted_generation_values
 WHERE forecast_id = $1;
 
--- name: GetPredictedGenerationValuesForLocationAtHorizon :many
+-- name: GetWindowedPredictedGenerationValuesAtHorizon :many
 WITH relevant_forecasts AS (
+    -- Get all the forecasts that fall within the time window for the given location, source, and model
     SELECT
         f.forecast_id
     FROM pred.forecasts f
     WHERE f.location_id = $1
     AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-    AND f.model_id = $2
-    AND f.init_time_utc BETWEEN 
-        -- Default window is 36 hours backwards
-        CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer, hours => 36)
-        AND CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
+    AND f.model_id = $3
+    AND f.init_time_utc >= CURRENT_TIMESTAMP - MAKE_INTERVAL(
+        mins => sqlc.arg(horizon_mins)::integer, hours => 36
+    )
+),
+filteredPredictions AS (
+    -- Get all the predicted generation values for the relevant forecasts who's horizon is greater than
+    -- or equal to the specified horizon_mins
+    SELECT
+        pv.horizon_mins,
+        pv.p10,
+        pv.p50,
+        pv.p90,
+        pv.target_time_utc,
+        pv.metadata
+    FROM pred.predicted_generation_values pv
+    INNER JOIN relevant_forecasts rf ON pv.forecast_id = rf.forecast_id
+    WHERE pv.target_time_utc >= CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer, hours => 36)
+    AND pv.horizon_mins >= sqlc.arg(horizon_mins)::integer
+),
+rankedPredictions AS (
+    -- Rank the predictions by horizon_mins for each target_time_utc
+    SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY target_time_utc ORDER BY horizon_mins ASC) AS rn
+    FROM filteredPredictions
 )
 SELECT
-    pgv.horizon_mins,
-    pgv.p10,
-    pgv.p50,
-    pgv.p90,
-    pgv.target_time_utc,
-    pgv.metadata
-FROM pred.predicted_generation_values pgv
-INNER JOIN relevant_forecasts ON pgv.forecast_id = relevant_forecasts.forecast_id
-WHERE pgv.target_time_utc BETWEEN
-    CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer, hours => 36)
-    AND CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
-AND pgv.horizon_mins = sqlc.arg(horizon_mins)::smallint;
-
+    -- For each target time, choose the value with the lowest available horizon
+    rp.horizon_mins,
+    rp.p10,
+    rp.p50,
+    rp.p90,
+    rp.target_time_utc,
+    rp.metadata
+FROM rankedPredictions rp
+WHERE rp.rn = 1
+ORDER BY rp.target_time_utc ASC;
 

@@ -30,7 +30,7 @@ CREATE TABLE loc.source_types(
     PRIMARY KEY (source_type_id),
     UNIQUE (source_type_name)
 );
-INSERT INTO loc.source_types (source_type_name) VALUES ('solar'), ('wind');
+INSERT INTO loc.source_types (source_type_name) VALUES ('solar'), ('wind'), ('hydro');
 
 -- Lookup table to store different location types
 CREATE TABLE loc.location_types(
@@ -83,12 +83,16 @@ CREATE TABLE loc.location_sources (
     source_type_id SMALLINT NOT NULL
         REFERENCES loc.source_types(source_type_id)
         ON DELETE RESTRICT,
-    -- Capacity in factors of Watts
+    -- Capacity in factors of powers of 10 Watts
     capacity SMALLINT NOT NULL
         CHECK ( capacity >= 0 ),
-    -- Factor defining power of 10 to multiply the capacity by
+    -- Factor defining power of 10 to multiply the capacity by to get Watts
     capacity_unit_prefix_factor SMALLINT DEFAULT (0) NOT NULL
-        CHECK ( capacity_unit_prefix_factor IN (0, 3, 6, 9, 12, 15) ),
+        CHECK (
+            capacity_unit_prefix_factor >= 0
+            AND capacity_unit_prefix_factor % 3 = 0
+            AND capacity_unit_prefix_factor <= 18 -- ExaWatts surely sufficient...
+        ),
     -- Capacity cap, measured in percent of the capacity (e.g. curtailment)
     capacity_limit SMALLINT
         CHECK ( capacity_limit IS NULL OR (capacity_limit >= 0 AND capacity_limit < 100) ),
@@ -96,8 +100,9 @@ CREATE TABLE loc.location_sources (
     location_id INTEGER NOT NULL
         REFERENCES loc.locations(location_id)
         ON DELETE CASCADE,
+    -- Metadata about the source, e.g. tilt, orientation, etc.
     metadata JSONB
-        CHECK ( metadata IS NULL OR metadata <> '{}'::jsonb ),
+        CHECK ( metadata IS NULL OR metadata <> '{}'::jsonb ), -- Null is cheaper than empty JSON
     sys_period TSRANGE NOT NULL
         DEFAULT TSRANGE(NOW()::TIMESTAMP, NULL, '[)')
         CHECK ( sys_period <> 'empty'::tsrange ),
@@ -111,8 +116,6 @@ CREATE TABLE loc.location_sources (
 );
 -- Index to support exclusion constraint and lookups by location, type, and time
 CREATE INDEX ON loc.location_sources USING GIST (location_id, source_type_id, sys_period);
--- Index for looking up a specific location generator's history
-CREATE INDEX ON loc.location_sources (location_id, source_type_id);
 -- Index for purely time-based queries across all records
 CREATE INDEX ON loc.location_sources USING GIST (sys_period);
 

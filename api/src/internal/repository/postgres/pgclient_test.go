@@ -22,6 +22,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	// Buffer size for the in-memory GRPC server
+	bufSize = 1024 * 1024 // 1MB
+	// Time resolution for forecast's predicted generation values in minutes
+	pgvResolutionMins = 5
+	// Time between successive forecasts in minutes
+	forecastResolutionMins = 30
+	// Forecast length in hours
+	forecastLengthHours = 48
+	// Number of predicted generation values in an individual forecast
+	numPgvsPerForecast = (forecastLengthHours * 60) / pgvResolutionMins
+)
+
 func TestCapacityKWToMultiplier(t *testing.T) {
 	// Test cases
 	type TestCase struct{
@@ -89,7 +102,7 @@ func setupSuite(tb testing.TB, ctx context.Context) (fcfsapi.QuartzAPIClient, fu
 	host, err := pgC.Host(ctx)
 	require.NoError(tb, err)
 
-	lis := bufconn.Listen(1024 * 1024)
+	lis := bufconn.Listen(bufSize)
 
 	// Create server using in-memory listener
 	s := grpc.NewServer()
@@ -167,12 +180,12 @@ func TestCreateSolarSite(t *testing.T) {
 		shouldError bool
 	}{
 		{
-			name: "Create default site",
+			name: "Should create default site",
 			site: defaultSite,
 			shouldError: false,
 		},
 		{
-			name: "Create site with large capacity",
+			name: "Should create site with large capacity",
 			site: &fcfsapi.CreateSiteRequest{
 				Name: "LARGE CAPACITY SITE",
 				Latitude: defaultSite.Latitude,
@@ -183,7 +196,7 @@ func TestCreateSolarSite(t *testing.T) {
 			shouldError: false,
 		},
 		{
-			name: "Create site with negative capacity",
+			name: "Shouldn't create site with negative capacity",
 			site: &fcfsapi.CreateSiteRequest{
 				Name: "NEGATIVE CAPACITY SITE",
 				Latitude: defaultSite.Latitude,
@@ -194,7 +207,7 @@ func TestCreateSolarSite(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			name: "Create site with invalid metadata",
+			name: "Shoudln't create site with invalid metadata",
 			site: &fcfsapi.CreateSiteRequest{
 				Name: "INVALID METADATA SITE",
 				Latitude: defaultSite.Latitude,
@@ -205,7 +218,7 @@ func TestCreateSolarSite(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			name: "Create site with invalid name",
+			name: "Shouldn't create site with invalid name",
 			site: &fcfsapi.CreateSiteRequest{
 				Name: "",
 				Latitude: defaultSite.Latitude,
@@ -218,26 +231,29 @@ func TestCreateSolarSite(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
-		resp, err := s.CreateSolarSite(ctx, tt.site)
-		if tt.shouldError {
-			t.Logf("Expected error: %v", err)
-			require.Error(t, err)
-			continue
-		} 
-		require.NoError(t, err)
-
-		resp2, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: resp.LocationId})
-		require.Equal(t, tt.site.Name, resp2.Name)
-		require.Equal(t, tt.site.Latitude, resp2.Latitude)
-		require.Equal(t, tt.site.Longitude, resp2.Longitude)
-		require.Equal(t, tt.site.CapacityKw, resp2.CapacityKw)
-		require.Equal(t, tt.site.Metadata, resp2.Metadata)
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := s.CreateSolarSite(ctx, tt.site)
+			if tt.shouldError {
+				t.Logf("Expected error: %v", err)
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				// Try to read it back
+				resp2, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: resp.LocationId})
+				require.NoError(t, err)
+				require.Equal(t, tt.site.Name, resp2.Name)
+				require.Equal(t, tt.site.Latitude, resp2.Latitude)
+				require.Equal(t, tt.site.Longitude, resp2.Longitude)
+				require.Equal(t, tt.site.CapacityKw, resp2.CapacityKw)
+				require.Equal(t, tt.site.Metadata, resp2.Metadata)
+			}
+		})  
 	}
-    
-	_, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: 999999})
-	t.Log("Expected error for non-existent location: ", err)
-	require.Error(t, err)
+	t.Run("Shouldn't get non-existent site", func(t *testing.T) {
+		_, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: 999999})
+		t.Log("Expected error for non-existent location: ", err)
+		require.Error(t, err)
+	})
 }
 
 func TestCreateSolarGSP(t *testing.T) {
@@ -258,12 +274,12 @@ func TestCreateSolarGSP(t *testing.T) {
 		shouldError bool
 	}{
 		{
-			name: "Create default GSP",
+			name: "Should create default GSP",
 			gsp:  defaultGsp,
 			shouldError: false,
 		},
 		{
-			name: "Create GSP with large capacity",
+			name: "Should create GSP with large capacity",
 			gsp: &fcfsapi.CreateGspRequest{
 				Name:       "LARGE CAPACITY GSP",
 				Metadata:   defaultGsp.Metadata,
@@ -273,7 +289,7 @@ func TestCreateSolarGSP(t *testing.T) {
 			shouldError: false,
 		},
 		{
-			name: "Create GSP with negative capacity",
+			name: "Shouldn't create GSP with negative capacity",
 			gsp: &fcfsapi.CreateGspRequest{
 				Name:       "NEGATIVE CAPACITY GSP",
 				Metadata:   defaultGsp.Metadata,
@@ -283,7 +299,7 @@ func TestCreateSolarGSP(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			name: "Create GSP with invalid geometry 1 (non-WKT)",
+			name: "Shouldn't create GSP with invalid geometry 1 (non-WKT)",
 			gsp: &fcfsapi.CreateGspRequest{
 				Name:       "INVALID GEOMETRY GSP",
 				Metadata:   defaultGsp.Metadata,
@@ -293,7 +309,7 @@ func TestCreateSolarGSP(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			name: "Create a GSP with invalid geometry 2 (3D geometry)",
+			name: "Shouldn't create a GSP with invalid geometry 2 (3D geometry)",
 			gsp: &fcfsapi.CreateGspRequest{
 				Name:       "3D GEOMETRY GSP",
 				Metadata:   defaultGsp.Metadata,
@@ -303,7 +319,7 @@ func TestCreateSolarGSP(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			name: "Create GSP with empty geometry",
+			name: "Shouldn't create GSP with empty geometry",
 			gsp: &fcfsapi.CreateGspRequest{
 				Name:       "EMPTY GEOMETRY GSP",
 				Metadata:   defaultGsp.Metadata,
@@ -313,7 +329,7 @@ func TestCreateSolarGSP(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			name: "Create GSP with empty name",
+			name: "Shouldn't create GSP with empty name",
 			gsp: &fcfsapi.CreateGspRequest{
 				Name:       "",
 				Metadata:   defaultGsp.Metadata,
@@ -325,24 +341,28 @@ func TestCreateSolarGSP(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		resp, err := s.CreateSolarGsp(ctx, tt.gsp)
-		if tt.shouldError {
-			t.Logf("Expected error: %v", err)
-			require.Error(t, err)
-			continue
-		} 
-		require.NoError(t, err)
-
-		resp2, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: resp.LocationId})
-		require.NoError(t, err)
-		require.Equal(t, tt.gsp.Name, resp2.Name)
-		require.Equal(t, tt.gsp.Metadata, resp2.Metadata)
-		require.Equal(t, tt.gsp.CapacityMw * 1000, resp2.CapacityKw)
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := s.CreateSolarGsp(ctx, tt.gsp)
+			if tt.shouldError {
+				t.Logf("Expected error: %v", err)
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				// Try to read it back
+				resp2, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: resp.LocationId})
+				require.NoError(t, err)
+				require.Equal(t, tt.gsp.Name, resp2.Name)
+				require.Equal(t, tt.gsp.Metadata, resp2.Metadata)
+				require.Equal(t, tt.gsp.CapacityMw * 1000, resp2.CapacityKw)
+			}
+		})
 	}
-
-	_, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: 999999})
-	t.Log("Expected error for non-existent GSP: ", err)
-	require.Error(t, err)
+	
+	t.Run("Shouldn't get non-existent GSP", func(t *testing.T) {
+		_, err := s.GetSolarLocation(ctx, &fcfsapi.GetLocationRequest{LocationId: 999999})
+		t.Log("Expected error for non-existent GSP: ", err)
+		require.Error(t, err)
+	})
 }
 
 func TestGetLocationsAsGeoJSON(t *testing.T) {
@@ -374,27 +394,25 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 	require.Equal(t, len(siteIds), len(features))
 }
 
-
-
 func TestGetPredictedTimeseries(t *testing.T) {
 	ctx := context.Background()
 	s, cleanup := setupSuite(t, ctx)
 	defer cleanup(t)
 
+	numForecasts := 10
 
-	// Make 10 forecasts created an hour apart from each other
-	latest_forecast_time := time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC)
+	latest_forecast_time := time.Now().Truncate(time.Minute)
 
-	for i := 9; i >= 0; i-- {
-		init_time := latest_forecast_time.Add(-1 * time.Duration(i) * time.Hour)
-		// One prediction every five minutes for 2 days
-		predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, 12 * 48)
-		
-		for j := 0; j < 12 * 48; j++ {
+	for i := numForecasts; i >= 0; i-- {
+		init_time := latest_forecast_time.Add(-1 * time.Duration(i) * forecastResolutionMins * time.Minute)
+		predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, numPgvsPerForecast)
+	
+		for j := 0; j < numPgvsPerForecast; j++ {
 			predictedGenerationValues[j] = &fcfsapi.PredictedGenerationValue{
-				HorizonMins: int32(j * 5),
-				// Each forecast's P50 will be equal to their hour difference from the 
-				P50:         int32(i),
+				HorizonMins: int32(j * pgvResolutionMins),
+				// Each forecast's P50 will be equal to their difference from the 
+				// latest forecast time, plus the horizon
+				P50:         int32(i * forecastResolutionMins) + int32(j * pgvResolutionMins),
 				P10:         int32(i),
 				P90:         int32(i),
 				Metadata:    "",
@@ -414,25 +432,32 @@ func TestGetPredictedTimeseries(t *testing.T) {
 		require.NotNil(t, resp)
 	}
 
-	// Now get the predicted timeseries
-	stream, err := s.GetPredictedTimeseries(ctx, &fcfsapi.GetPredictedTimeseriesRequest{
-		LocationIds: []int32{0},
-	})
+	// For each horizon, get the predicted timeseries
+	for f := range numForecasts {
+		t.Run(fmt.Sprintf("Should get timeseries for horizon %d", f * forecastResolutionMins), func(t *testing.T) {
+			stream, err := s.GetPredictedTimeseries(ctx, &fcfsapi.GetPredictedTimeseriesRequest{
+				LocationIds: []int32{0},
+				HorizonMins: int32(f * forecastResolutionMins),
+			})
 	
-	require.NoError(t, err)
-	for {
-		resp, err := stream.Recv()
-		if err != nil {
-			break
-		}
-		require.NotNil(t, resp)
-		require.Equal(t, int32(0), resp.LocationId)
-		require.Equal(t, len(resp.Yields), 12 * 48)
+			require.NoError(t, err)
+			for {
+				resp, err := stream.Recv()
+				if err != nil {
+					break
+				}
+				require.NotNil(t, resp)
+				require.Equal(t, int32(0), resp.LocationId)
+				require.Greater(t, len(resp.Yields), numPgvsPerForecast)
+				t.Logf("Received %d predicted values for horizon %d mins", len(resp.Yields), f * forecastResolutionMins)
 
-		for _, v := range resp.Yields {
-			// All forecast values should be from the latest forecast, which has P10s of 0
-			require.Equal(t, int32(0), v.YieldKw)
-		}
+				targetTimes := make([]int64, len(resp.Yields))
+				for i, v := range resp.Yields {
+					targetTimes[i] = v.TimestampUnix
+				}
+				require.IsIncreasing(t, targetTimes)
+			}
+		})
 	}
 }
 
@@ -441,11 +466,10 @@ func BenchmarkCreateForecast(b *testing.B) {
 	s, cleanup := setupSuite(b, ctx)
 	defer cleanup(b)
 
-	num_sites := 500
-	num_predictions := 12 * 48 // 12 predictions per hour, 48 hours
+	numLocations := 500
 
 	// Create Sites
-	siteIds := make([]int32, num_sites)
+	siteIds := make([]int32, numLocations)
 	for i := range siteIds {
 		createSiteResponse, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
 			Name:       fmt.Sprintf("TESTSITE%03d", i),
@@ -460,10 +484,10 @@ func BenchmarkCreateForecast(b *testing.B) {
 
 	// Create a forecast and set of predicted values for each site
 	init_time := time.Now().Truncate(24 * time.Hour)
-	predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, num_predictions)
+	predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, numPgvsPerForecast)
 	for i := range predictedGenerationValues {
 		predictedGenerationValues[i] = &fcfsapi.PredictedGenerationValue{
-			HorizonMins:       int32(i * 5),
+			HorizonMins:       int32(i * pgvResolutionMins),
 			P50:               85,
 			P10:               81,
 			P90:               88,
@@ -487,7 +511,7 @@ func BenchmarkCreateForecast(b *testing.B) {
 		}
 	}
 
-	b.Logf("Inserted %d forecasts with %d predictions each (%d rows)", num_sites, num_predictions, num_sites*num_predictions)
+	b.Logf("Inserted %d location forecasts with %d predictions each (%d rows)", numLocations, numPgvsPerForecast, numLocations*numPgvsPerForecast)
 }
 
 func BenchmarkGetPredictedTimeseries(b *testing.B) {
@@ -495,12 +519,11 @@ func BenchmarkGetPredictedTimeseries(b *testing.B) {
 	s, cleanup := setupSuite(b, ctx)
 	defer cleanup(b)
 
-	num_locations := 500
-	num_predictions_per_forecast := 12 * 48 // 12 predictions per hour, 48 hours
-	num_forecasts_per_site := 48 // One day of half hourly forecasts
+	numLocations := 500
+	numForecastsPerLocation := int((24 * 60) / forecastResolutionMins) // One day of forecasts
 
 	// Create locations and forecasts
-	siteIds := make([]int32, num_locations)
+	siteIds := make([]int32, numLocations)
 	for i := range siteIds {
 		createSiteResponse, err := s.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
 			Name:       fmt.Sprintf("TESTSITE%03d", i),
@@ -512,9 +535,9 @@ func BenchmarkGetPredictedTimeseries(b *testing.B) {
 		require.NoError(b, err)
 		siteIds[i] = createSiteResponse.LocationId
 
-		for j := range num_forecasts_per_site {
+		for j := range numForecastsPerLocation {
 			init_time := time.Now().Truncate(24 * time.Hour).Add(-time.Duration(j) * 24 * time.Hour)
-			predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, num_predictions_per_forecast)
+			predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, numPgvsPerForecast)
 			for k := range predictedGenerationValues {
 				predictedGenerationValues[k] = &fcfsapi.PredictedGenerationValue{
 					HorizonMins: int32(k * 5),
@@ -550,14 +573,13 @@ func BenchmarkGetPredictedTimeseries(b *testing.B) {
 			}
 			require.NotNil(b, resp)
 			require.Equal(b, siteIds[0], resp.LocationId)
-			require.Equal(b, num_predictions_per_forecast, len(resp.Yields))
+			require.Equal(b, numPgvsPerForecast, len(resp.Yields))
 		}
 	}
 
 	b.Logf(
 		"Retrieved forecast values from table of size %d rows",
-		num_locations*num_predictions_per_forecast*num_forecasts_per_site,
+		numLocations*numPgvsPerForecast*numForecastsPerLocation,
 	)
 }
-
 

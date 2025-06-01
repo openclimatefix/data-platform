@@ -23,10 +23,14 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// --- GetPredictedTimeseries --------------------------------------------------------
+// * --- GetPredictedTimeseries --------------------------------------------------------
+// A query for a 1D timeseries of predicted yields for the given locations.
 type GetPredictedTimeseriesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds   []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	LocationIds []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	// * The desired difference between the initialisation time and the target time in minutes.
+	// 0 gives the most recently predicted values.
+	HorizonMins   int32 `protobuf:"varint,2,opt,name=horizon_mins,json=horizonMins,proto3" json:"horizon_mins,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -66,6 +70,13 @@ func (x *GetPredictedTimeseriesRequest) GetLocationIds() []int32 {
 		return x.LocationIds
 	}
 	return nil
+}
+
+func (x *GetPredictedTimeseriesRequest) GetHorizonMins() int32 {
+	if x != nil {
+		return x.HorizonMins
+	}
+	return 0
 }
 
 type GetPredictedTimeseriesResponse struct {
@@ -707,9 +718,10 @@ var File_fcfsapi_quartzui_proto protoreflect.FileDescriptor
 
 const file_fcfsapi_quartzui_proto_rawDesc = "" +
 	"\n" +
-	"\x16fcfsapi/quartzui.proto\x12\afcfsapi\"B\n" +
+	"\x16fcfsapi/quartzui.proto\x12\afcfsapi\"e\n" +
 	"\x1dGetPredictedTimeseriesRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\"r\n" +
+	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12!\n" +
+	"\fhorizon_mins\x18\x02 \x01(\x05R\vhorizonMins\"r\n" +
 	"\x1eGetPredictedTimeseriesResponse\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12/\n" +

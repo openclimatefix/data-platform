@@ -6,9 +6,16 @@ package fcfsapi;
 
 option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
 
-// --- GetPredictedTimeseries --------------------------------------------------------
+/** --- GetPredictedTimeseries --------------------------------------------------------
+ * A query for a 1D timeseries of predicted yields for the given locations.
+ */
 message GetPredictedTimeseriesRequest {
   repeated int32 location_ids = 1;
+
+  /** The desired difference between the initialisation time and the target time in minutes.
+   * 0 gives the most recently predicted values.
+   */
+  int32 horizon_mins = 2;
 }
 
 message GetPredictedTimeseriesResponse {

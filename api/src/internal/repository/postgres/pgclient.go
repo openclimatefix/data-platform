@@ -15,8 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/devsjc/fcfs/api/src/internal/models/fcfsapi"
 	db "github.com/devsjc/fcfs/api/src/internal/repository/postgres/gen"
@@ -96,7 +96,7 @@ func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *fcf
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
 		l.Err(err).Msg("failed to begin transaction")
-		return nil, status.Error(codes.Internal,"Encountered database connection error")
+		return nil, status.Error(codes.Internal, "Encountered database connection error")
 	}
 	defer tx.Rollback(ctx)
 	querier := db.New(tx)
@@ -116,7 +116,7 @@ func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *fcf
 	})
 	if err != nil {
 		l.Err(err).Msg("failed to get solar source for location")
-		return nil, status.Errorf( codes.NotFound, "No solar source associated with location with id %d", req.LocationId)
+		return nil, status.Errorf(codes.NotFound, "No solar source associated with location with id %d", req.LocationId)
 	}
 	l.Debug().Msgf("Retrieved solar source for location %d", req.LocationId)
 
@@ -353,7 +353,7 @@ func (q *QuartzAPIPostgresServer) GetLocationsAsGeoJSON(ctx context.Context, req
 	querier := db.New(tx)
 
 	// Get the locations as GeoJSON
-	var simplificationLevel float32;
+	var simplificationLevel float32
 	if req.Unsimplified {
 		simplificationLevel = 0
 	} else {
@@ -379,7 +379,8 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(stream.Context())
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %v", err)
+		l.Err(err).Msg("q.pool.Begin()")
+		return status.Errorf(codes.Internal, "Encountered database connection error")
 	}
 	defer tx.Rollback(stream.Context())
 	querier := db.New(tx)
@@ -389,28 +390,38 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 		// Get the latest forecast for the location
 		modelResp, err := querier.GetDefaultModel(stream.Context())
 		if err != nil {
-			return fmt.Errorf("failed to get default model: %v", err)
+			l.Err(err).Msg("querier.GetDefaultModel()")
+			return status.Errorf(codes.Internal, "Couldn't get default model. Ensure a default model is set.")
 		}
 		l.Debug().Msgf("Using default model with ID %d", modelResp.ModelID)
-		forecastResp, err := querier.GetLatestForecastForLocationAtHorizon(stream.Context(), db.GetLatestForecastForLocationAtHorizonParams{
-			LocationID:     locationId,
-			SourceTypeName: "solar",
-			ModelID:        modelResp.ModelID,
-			HorizonMins:    0,
-		})
+		dbValues, err := querier.GetWindowedPredictedGenerationValuesAtHorizon(
+			stream.Context(), db.GetWindowedPredictedGenerationValuesAtHorizonParams{
+				LocationID:     locationId,
+				SourceTypeName: "solar",
+				ModelID:        modelResp.ModelID,
+				HorizonMins:    req.HorizonMins,
+			},
+		)
 		if err != nil {
-			return fmt.Errorf("failed to get latest forecast for location %d: %v", locationId, err)
+			l.Err(err).Msgf(
+				"querier.GetWindowedPredictedGenerationValuesAtHorizon("+
+					"{locationID: %d, sourceTypeName: 'solar', modelID: %d, horizonMins: %d}"+
+					")",
+				locationId, modelResp.ModelID, req.HorizonMins,
+			)
+			return status.Errorf(
+				codes.NotFound,
+				"No values found for location %d with horizon %d minutes",
+				locationId, req.HorizonMins,
+			)
 		}
-		l.Debug().Msgf("Found latest forecast with ID %d for location %d", forecastResp.ForecastID, locationId)
+		l.Debug().Msgf(
+			"Found %d values for location %d with horizon %d minutes",
+			len(dbValues), locationId, req.HorizonMins,
+		)
 
-		dbYields, err := querier.GetPredictedGenerationValuesForForecast(stream.Context(), forecastResp.ForecastID)
-		if err != nil {
-			return fmt.Errorf("failed to get predicted generation values: %v", err)
-		}
-		l.Debug().Msgf("Found %d predicted generation values for forecast %d", len(dbYields), forecastResp.ForecastID)
-
-		yields := make([]*fcfsapi.PredictedYield, len(dbYields))
-		for i, yield := range dbYields {
+		yields := make([]*fcfsapi.PredictedYield, len(dbValues))
+		for i, yield := range dbValues {
 			yields[i] = &fcfsapi.PredictedYield{
 				YieldKw:       int32(yield.P50),
 				TimestampUnix: yield.TargetTimeUtc.Time.Unix(),
@@ -423,7 +434,11 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 			Yields:     yields,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to send predicted timeseries response: %v", err)
+			l.Err(err).Msgf(
+				"stream.Send(GetPredictedTimeseriesResponse({locationID: %d, yields: (arr, len %d)}))",
+				locationId, len(yields),
+			)
+			return status.Errorf(codes.Internal, "Failed to send predicted timeseries response for location %d", locationId)
 		}
 	}
 
