@@ -9,6 +9,12 @@ import betterproto
 import grpclib
 
 
+class EnergySource(betterproto.Enum):
+    ENERGY_SOURCE_UNSPECIFIED = 0
+    ENERGY_SOURCE_SOLAR = 1
+    ENERGY_SOURCE_WIND = 2
+
+
 @dataclass
 class CreateModelRequest(betterproto.Message):
     name: str = betterproto.string_field(1)
@@ -104,113 +110,100 @@ class GetLocationsAsGeoJSONResponse(betterproto.Message):
 
 
 @dataclass
-class GetPredictedTimeseriesRequest(betterproto.Message):
-    """
-    * --- GetPredictedTimeseries
-    -------------------------------------------------------- A query for a 1D
-    timeseries of predicted yields for the given locations.
-    """
+class Yield(betterproto.Message):
+    yield_kw: int = betterproto.int64_field(1)
+    timestamp_unix: int = betterproto.int64_field(2)
 
+
+@dataclass
+class YieldPrediction(betterproto.Message):
+    yield_kw: int = betterproto.int64_field(1)
+    timestamp_unix: int = betterproto.int64_field(2)
+    uncertainty: "YieldPredictionUncertainty" = betterproto.message_field(3)
+
+
+@dataclass
+class YieldPredictionUncertainty(betterproto.Message):
+    lower_kw: int = betterproto.int64_field(1)
+    upper_kw: int = betterproto.int64_field(2)
+
+
+@dataclass
+class YieldDelta(betterproto.Message):
+    delta_kw: int = betterproto.sint64_field(1)
+    timestamp_unix: int = betterproto.int64_field(2)
+
+
+@dataclass
+class GetPredictedTimeseriesRequest(betterproto.Message):
     location_ids: List[int] = betterproto.int32_field(1)
+    energy_source: "EnergySource" = betterproto.enum_field(2)
     # * The desired difference between the initialisation time and the target
     # time in minutes. 0 gives the most recently predicted values.
-    horizon_mins: int = betterproto.int32_field(2)
+    horizon_mins: int = betterproto.int32_field(3)
 
 
 @dataclass
 class GetPredictedTimeseriesResponse(betterproto.Message):
     location_id: int = betterproto.int32_field(1)
-    yields: List["PredictedYield"] = betterproto.message_field(2)
+    yields: List["YieldPrediction"] = betterproto.message_field(2)
 
 
 @dataclass
-class PredictedYield(betterproto.Message):
-    yield_kw: int = betterproto.int32_field(1)
-    timestamp_unix: int = betterproto.int64_field(2)
-    uncertainty: "PredictedYieldUncertainty" = betterproto.message_field(3)
-
-
-@dataclass
-class PredictedYieldUncertainty(betterproto.Message):
-    lower_kw: int = betterproto.int32_field(1)
-    upper_kw: int = betterproto.int32_field(2)
-
-
-@dataclass
-class GetActualTimeseriesRequest(betterproto.Message):
-    """
-    --- GetActualTimeseries
-    -----------------------------------------------------------
-    """
-
-    location_ids: List[str] = betterproto.string_field(1)
-
-
-@dataclass
-class GetActualTimeseriesResponse(betterproto.Message):
+class GetPredictedTimeseriesDeltasResponse(betterproto.Message):
     location_id: int = betterproto.int32_field(1)
-    yields: List["ActualYield"] = betterproto.message_field(2)
+    deltas: List["YieldDelta"] = betterproto.message_field(2)
 
 
 @dataclass
-class ActualYield(betterproto.Message):
-    yield_kw: int = betterproto.int32_field(1)
-    timestamp_unix: int = betterproto.int64_field(2)
+class GetObservedTimeseriesRequest(betterproto.Message):
+    location_ids: List[str] = betterproto.string_field(1)
+    energy_source: "EnergySource" = betterproto.enum_field(2)
+
+
+@dataclass
+class GetObservedTimeseriesResponse(betterproto.Message):
+    location_id: int = betterproto.int32_field(1)
+    yields: List["Yield"] = betterproto.message_field(2)
 
 
 @dataclass
 class GetPredictedCrossSectionRequest(betterproto.Message):
-    """
-    --- GetPredictedCrossSection
-    ------------------------------------------------------
-    """
-
     location_ids: List[int] = betterproto.int32_field(1)
-    timestamp_unix: int = betterproto.int64_field(2)
+    energy_source: "EnergySource" = betterproto.enum_field(2)
+    timestamp_unix: int = betterproto.int64_field(3)
 
 
 @dataclass
 class GetPredictedCrossSectionResponse(betterproto.Message):
     timestamp_unix: int = betterproto.int64_field(1)
-    yields: List["PredictedYieldAtLocation"] = betterproto.message_field(2)
+    yields_kw: List[int] = betterproto.int64_field(2)
 
 
 @dataclass
-class PredictedYieldAtLocation(betterproto.Message):
+class GetLatestForecastRequest(betterproto.Message):
     location_id: int = betterproto.int32_field(1)
-    yield_kw: int = betterproto.int32_field(2)
-    uncertainty: "PredictedYieldUncertainty" = betterproto.message_field(3)
+    energy_source: "EnergySource" = betterproto.enum_field(2)
 
 
 @dataclass
-class GetActualCrossSectionRequest(betterproto.Message):
-    """
-    --- GetActualCrossSection
-    ---------------------------------------------------------
-    """
-
-    location_ids: List[int] = betterproto.int32_field(1)
-    timestamp_unix: int = betterproto.int64_field(2)
-
-
-@dataclass
-class GetActualCrossSectionResponse(betterproto.Message):
-    timestamp_unix: int = betterproto.int64_field(1)
-    yields: List["ActualYieldAtLocation"] = betterproto.message_field(2)
-
-
-@dataclass
-class ActualYieldAtLocation(betterproto.Message):
+class GetLatestForecastResponse(betterproto.Message):
     location_id: int = betterproto.int32_field(1)
-    yield_kw: int = betterproto.int32_field(2)
+    forecast_id: int = betterproto.int64_field(2)
+    yields: List["YieldPrediction"] = betterproto.message_field(3)
 
 
 class QuartzAPIStub(betterproto.ServiceStub):
     async def get_predicted_timeseries(
-        self, *, location_ids: List[int] = [], horizon_mins: int = 0
+        self,
+        *,
+        location_ids: List[int] = [],
+        energy_source: "EnergySource" = 0,
+        horizon_mins: int = 0,
     ) -> AsyncGenerator[GetPredictedTimeseriesResponse, None]:
         request = GetPredictedTimeseriesRequest()
         request.location_ids = location_ids
+        request.energy_source = energy_source
         request.horizon_mins = horizon_mins
 
         async for response in self._unary_stream(
@@ -220,43 +213,81 @@ class QuartzAPIStub(betterproto.ServiceStub):
         ):
             yield response
 
-    async def get_actual_timeseries(
-        self, *, location_ids: List[str] = []
-    ) -> AsyncGenerator[GetActualTimeseriesResponse, None]:
-        request = GetActualTimeseriesRequest()
+    async def get_predicted_timeseries_deltas(
+        self,
+        *,
+        location_ids: List[int] = [],
+        energy_source: "EnergySource" = 0,
+        horizon_mins: int = 0,
+    ) -> AsyncGenerator[GetPredictedTimeseriesDeltasResponse, None]:
+        request = GetPredictedTimeseriesRequest()
         request.location_ids = location_ids
+        request.energy_source = energy_source
+        request.horizon_mins = horizon_mins
 
         async for response in self._unary_stream(
-            "/fcfsapi.QuartzAPI/GetActualTimeseries",
+            "/fcfsapi.QuartzAPI/GetPredictedTimeseriesDeltas",
             request,
-            GetActualTimeseriesResponse,
+            GetPredictedTimeseriesDeltasResponse,
         ):
             yield response
 
-    async def get_actual_cross_section(
-        self, *, location_ids: List[int] = [], timestamp_unix: int = 0
-    ) -> GetActualCrossSectionResponse:
-        request = GetActualCrossSectionRequest()
-        request.location_ids = location_ids
-        request.timestamp_unix = timestamp_unix
-
-        return await self._unary_unary(
-            "/fcfsapi.QuartzAPI/GetActualCrossSection",
-            request,
-            GetActualCrossSectionResponse,
-        )
-
     async def get_predicted_cross_section(
-        self, *, location_ids: List[int] = [], timestamp_unix: int = 0
+        self,
+        *,
+        location_ids: List[int] = [],
+        energy_source: "EnergySource" = 0,
+        timestamp_unix: int = 0,
     ) -> GetPredictedCrossSectionResponse:
         request = GetPredictedCrossSectionRequest()
         request.location_ids = location_ids
+        request.energy_source = energy_source
         request.timestamp_unix = timestamp_unix
 
         return await self._unary_unary(
             "/fcfsapi.QuartzAPI/GetPredictedCrossSection",
             request,
             GetPredictedCrossSectionResponse,
+        )
+
+    async def get_observed_timeseries(
+        self, *, location_ids: List[str] = [], energy_source: "EnergySource" = 0
+    ) -> AsyncGenerator[GetObservedTimeseriesResponse, None]:
+        request = GetObservedTimeseriesRequest()
+        request.location_ids = location_ids
+        request.energy_source = energy_source
+
+        async for response in self._unary_stream(
+            "/fcfsapi.QuartzAPI/GetObservedTimeseries",
+            request,
+            GetObservedTimeseriesResponse,
+        ):
+            yield response
+
+    async def get_latest_forecast(
+        self, *, location_id: int = 0, energy_source: "EnergySource" = 0
+    ) -> GetLatestForecastResponse:
+        request = GetLatestForecastRequest()
+        request.location_id = location_id
+        request.energy_source = energy_source
+
+        return await self._unary_unary(
+            "/fcfsapi.QuartzAPI/GetLatestForecast",
+            request,
+            GetLatestForecastResponse,
+        )
+
+    async def get_locations_as_geo_j_s_o_n(
+        self, *, location_ids: List[int] = [], unsimplified: bool = False
+    ) -> GetLocationsAsGeoJSONResponse:
+        request = GetLocationsAsGeoJSONRequest()
+        request.location_ids = location_ids
+        request.unsimplified = unsimplified
+
+        return await self._unary_unary(
+            "/fcfsapi.QuartzAPI/GetLocationsAsGeoJSON",
+            request,
+            GetLocationsAsGeoJSONResponse,
         )
 
     async def create_solar_site(
@@ -309,19 +340,6 @@ class QuartzAPIStub(betterproto.ServiceStub):
             "/fcfsapi.QuartzAPI/GetSolarLocation",
             request,
             GetLocationResponse,
-        )
-
-    async def get_locations_as_geo_j_s_o_n(
-        self, *, location_ids: List[int] = [], unsimplified: bool = False
-    ) -> GetLocationsAsGeoJSONResponse:
-        request = GetLocationsAsGeoJSONRequest()
-        request.location_ids = location_ids
-        request.unsimplified = unsimplified
-
-        return await self._unary_unary(
-            "/fcfsapi.QuartzAPI/GetLocationsAsGeoJSON",
-            request,
-            GetLocationsAsGeoJSONResponse,
         )
 
     async def create_model(

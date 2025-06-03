@@ -11,11 +11,14 @@ option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfs
 service QuartzAPI {
 
   // --- QuartzUI ----------------------------------------------------------------
+  // Procedures that will be used by the frontend
 
   rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesResponse) {}
-  rpc GetActualTimeseries(GetActualTimeseriesRequest) returns (stream GetActualTimeseriesResponse) {}
-  rpc GetActualCrossSection(GetActualCrossSectionRequest) returns (GetActualCrossSectionResponse) {}
+  rpc GetPredictedTimeseriesDeltas(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesDeltasResponse) {}
   rpc GetPredictedCrossSection(GetPredictedCrossSectionRequest) returns (GetPredictedCrossSectionResponse) {}
+  rpc GetObservedTimeseries(GetObservedTimeseriesRequest) returns (stream GetObservedTimeseriesResponse) {}
+  rpc GetLatestForecast(GetLatestForecastRequest) returns (GetLatestForecastResponse) {}
+  rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
 
   // --- Locations ----------------------------------------------------------------
   // These could be split as they are, with a procedure for each type of location
@@ -26,7 +29,6 @@ service QuartzAPI {
 
   rpc GetSolarLocation(GetLocationRequest) returns (GetLocationResponse) {}
 
-  rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
 
   // --- Predictions ---------------------------------------------------------------
 

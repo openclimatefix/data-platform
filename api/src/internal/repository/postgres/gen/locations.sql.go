@@ -16,7 +16,7 @@ const createLocation = `-- name: CreateLocation :one
 INSERT INTO loc.locations AS l (
     location_name, geom, location_type_id 
 ) VALUES (
-    $2,
+    UPPER($2::text),
     ST_GeomFromText($3::text, 4326), --Ensure in WSG84
     (SELECT location_type_id FROM loc.location_types AS lt WHERE lt.location_type_name = $1)
 ) RETURNING l.location_id
@@ -42,7 +42,7 @@ INSERT INTO loc.location_sources (
     capacity_unit_prefix_factor, metadata
 ) VALUES (
     $1, (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2),
-    $3, $4, $5
+    $3, $4, $5::jsonb
 ) RETURNING record_id
 `
 
@@ -150,7 +150,7 @@ func (q *Queries) GetLocationGeoJSONByIds(ctx context.Context, arg GetLocationGe
 	return geojson, err
 }
 
-const getLocationSourceByType = `-- name: GetLocationSourceByType :one
+const getLocationSource = `-- name: GetLocationSource :one
 /*- Queries for the location_sources table ---------------------------
 */
 
@@ -163,12 +163,12 @@ WHERE
     AND UPPER(sys_period) IS NULL
 `
 
-type GetLocationSourceByTypeParams struct {
+type GetLocationSourceParams struct {
 	LocationID     int32
 	SourceTypeName string
 }
 
-type GetLocationSourceByTypeRow struct {
+type GetLocationSourceRow struct {
 	RecordID                 int32
 	Capacity                 int16
 	CapacityUnitPrefixFactor int16
@@ -176,9 +176,9 @@ type GetLocationSourceByTypeRow struct {
 }
 
 // Get latest active record via the UPPER(sys_period) IS NULL condition
-func (q *Queries) GetLocationSourceByType(ctx context.Context, arg GetLocationSourceByTypeParams) (GetLocationSourceByTypeRow, error) {
-	row := q.db.QueryRow(ctx, getLocationSourceByType, arg.LocationID, arg.SourceTypeName)
-	var i GetLocationSourceByTypeRow
+func (q *Queries) GetLocationSource(ctx context.Context, arg GetLocationSourceParams) (GetLocationSourceRow, error) {
+	row := q.db.QueryRow(ctx, getLocationSource, arg.LocationID, arg.SourceTypeName)
+	var i GetLocationSourceRow
 	err := row.Scan(
 		&i.RecordID,
 		&i.Capacity,
@@ -255,7 +255,48 @@ func (q *Queries) ListLocationIdsByType(ctx context.Context, locationTypeName st
 	return items, nil
 }
 
-const listLocationSourceHistoryByType = `-- name: ListLocationSourceHistoryByType :many
+const listLocationSourceCapacityHistory = `-- name: ListLocationSourceCapacityHistory :many
+SELECT
+    (capacity * POWER(10, capacity_unit_prefix_factor))::real AS capacity_watts,
+    LOWER(sys_period) AS valid_from
+FROM loc.location_sources
+WHERE
+    location_id = $1
+    AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+    ORDER BY LOWER(sys_period) ASC
+`
+
+type ListLocationSourceCapacityHistoryParams struct {
+	LocationID     int32
+	SourceTypeName string
+}
+
+type ListLocationSourceCapacityHistoryRow struct {
+	CapacityWatts float32
+	ValidFrom     string
+}
+
+func (q *Queries) ListLocationSourceCapacityHistory(ctx context.Context, arg ListLocationSourceCapacityHistoryParams) ([]ListLocationSourceCapacityHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listLocationSourceCapacityHistory, arg.LocationID, arg.SourceTypeName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLocationSourceCapacityHistoryRow{}
+	for rows.Next() {
+		var i ListLocationSourceCapacityHistoryRow
+		if err := rows.Scan(&i.CapacityWatts, &i.ValidFrom); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationSourceHistory = `-- name: ListLocationSourceHistory :many
 SELECT
     record_id, capacity, capacity_unit_prefix_factor, metadata, sys_period
 FROM loc.location_sources
@@ -265,12 +306,12 @@ WHERE
     ORDER BY LOWER(sys_period) DESC
 `
 
-type ListLocationSourceHistoryByTypeParams struct {
+type ListLocationSourceHistoryParams struct {
 	LocationID     int32
 	SourceTypeName string
 }
 
-type ListLocationSourceHistoryByTypeRow struct {
+type ListLocationSourceHistoryRow struct {
 	RecordID                 int32
 	Capacity                 int16
 	CapacityUnitPrefixFactor int16
@@ -278,15 +319,15 @@ type ListLocationSourceHistoryByTypeRow struct {
 	SysPeriod                pgtype.Range[pgtype.Timestamp]
 }
 
-func (q *Queries) ListLocationSourceHistoryByType(ctx context.Context, arg ListLocationSourceHistoryByTypeParams) ([]ListLocationSourceHistoryByTypeRow, error) {
-	rows, err := q.db.Query(ctx, listLocationSourceHistoryByType, arg.LocationID, arg.SourceTypeName)
+func (q *Queries) ListLocationSourceHistory(ctx context.Context, arg ListLocationSourceHistoryParams) ([]ListLocationSourceHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listLocationSourceHistory, arg.LocationID, arg.SourceTypeName)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListLocationSourceHistoryByTypeRow{}
+	items := []ListLocationSourceHistoryRow{}
 	for rows.Next() {
-		var i ListLocationSourceHistoryByTypeRow
+		var i ListLocationSourceHistoryRow
 		if err := rows.Scan(
 			&i.RecordID,
 			&i.Capacity,

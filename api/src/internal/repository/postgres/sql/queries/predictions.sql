@@ -36,7 +36,7 @@ LIMIT 1;
 UPDATE pred.models AS m SET
     is_default = c.new_is_default
 FROM (VALUES
-    ((SELECT model_id FROM pred.models WHERE is_default = true), false), (sqlc.arg(model_id)::integer, true)
+    ((SELECT model_id FROM pred.models WHERE is_default = true), NULL), (sqlc.arg(model_id)::integer, true)
 ) AS c(model_id, new_is_default)
 WHERE m.model_id = c.model_id;
 
@@ -48,7 +48,7 @@ INSERT INTO pred.forecasts(
 ) VALUES (
     (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $1, $3, $4
 ) RETURNING forecast_id;
-    
+
 -- name: CreatePredictedGenerationValues :copyfrom
 INSERT INTO pred.predicted_generation_values (
     horizon_mins, p10, p50, p90, forecast_id, target_time_utc, metadata
@@ -70,6 +70,42 @@ AND f.model_id = $3
 AND f.init_time_utc <= CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
 ORDER BY f.init_time_utc DESC
 LIMIT 1;
+
+-- name: GetForecastByInitTime :one
+SELECT
+    f.forecast_id,
+    f.init_time_utc,
+    f.source_type_id,
+    f.location_id,
+    f.model_id
+FROM pred.forecasts f
+WHERE f.location_id = $1
+AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+AND f.model_id = $3
+AND f.init_time_utc = $4;
+
+-- name: GetForecastsByInitTimeTimeComponent :many
+WITH desired_init_times AS (
+    SELECT 
+        (d.day::date + make_time(sqlq.arg(hour)::integer, sqlc.arg(minute)::integer, 0))::timestamp AS init_time_utc 
+    FROM generate_series(
+        NOW() - INTERVAL '7 days',
+        NOW() - INTERVAL '1 day',
+        INTERVAL '1 day'
+    ) AS d(day)
+    ORDER BY d.day ASC
+)
+SELECT
+    f.forecast_id,
+    f.init_time_utc,
+    f.source_type_id,
+    f.location_id,
+    f.model_id
+FROM pred.forecasts f
+INNER JOIN desired_init_times dit ON f.init_time_utc = dit.init_time_utc
+WHERE f.location_id = $1
+AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+AND f.model_id = $3;
 
 -- name: GetPredictedGenerationValuesForForecast :many
 SELECT

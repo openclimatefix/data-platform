@@ -78,7 +78,12 @@ CREATE INDEX ON loc.locations (ST_GeometryType(geom));
 -- Index for finding all locations of a certain type
 CREATE INDEX ON loc.locations (location_type_id);
 
--- Table to store the current and historic generation capability of locations
+/*
+Table to store the current and historic generation capability of locations.
+Each location can have multiple sources of generation (solar, wind, etc),
+and each source can change over time. This is handled via a temporal range
+for each record and a trigger to update records when the source is modified.
+*/
 CREATE TABLE loc.location_sources (
     source_type_id SMALLINT NOT NULL
         REFERENCES loc.source_types(source_type_id)
@@ -170,7 +175,19 @@ BEGIN
         -- Cancel the original delete action
         RETURN NULL;
     END IF;
-    -- Handle INSERT operations representing new sources
+    -- Handle INSERT operations representing new sources, prevent if source type exists already
+    IF (TG_OP = 'INSERT') THEN
+        -- Check if a record with the same location_id and source_type_id already exists
+        IF EXISTS (
+            SELECT 1 FROM loc.location_sources
+            WHERE location_id = NEW.location_id
+            AND source_type_id = NEW.source_type_id
+        ) THEN
+            RAISE EXCEPTION 'A record for location_id % and source_type_id % already exists.
+            Use an UPDATE directive to modify the existing record.',
+                NEW.location_id, NEW.source_type_id;
+        END IF;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

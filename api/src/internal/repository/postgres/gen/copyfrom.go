@@ -31,7 +31,8 @@ func (r iteratorForCreateObservations) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].LocationID,
 		r.rows[0].SourceTypeID,
-		r.rows[0].TimeUtc,
+		r.rows[0].ObserverID,
+		r.rows[0].ObservationTimeUtc,
 		r.rows[0].Value,
 	}, nil
 }
@@ -41,7 +42,7 @@ func (r iteratorForCreateObservations) Err() error {
 }
 
 func (q *Queries) CreateObservations(ctx context.Context, arg []CreateObservationsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"obs", "observed_generation_values"}, []string{"location_id", "source_type_id", "time_utc", "value"}, &iteratorForCreateObservations{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"obs", "observed_generation_values"}, []string{"location_id", "source_type_id", "observer_id", "observation_time_utc", "value"}, &iteratorForCreateObservations{rows: arg})
 }
 
 // iteratorForCreatePredictedGenerationValues implements pgx.CopyFromSource.

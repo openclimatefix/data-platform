@@ -4,7 +4,7 @@
 INSERT INTO loc.locations AS l (
     location_name, geom, location_type_id 
 ) VALUES (
-    $2,
+    UPPER(sqlc.arg(location_name)::text),
     ST_GeomFromText(sqlc.arg(geom)::text, 4326), --Ensure in WSG84
     (SELECT location_type_id FROM loc.location_types AS lt WHERE lt.location_type_name = $1)
 ) RETURNING l.location_id;
@@ -65,7 +65,7 @@ FROM (
 -- Get latest active record via the UPPER(sys_period) IS NULL condition
 */
 
--- name: GetLocationSourceByType :one
+-- name: GetLocationSource :one
 SELECT 
     record_id, capacity, capacity_unit_prefix_factor, metadata
 FROM loc.location_sources
@@ -80,7 +80,7 @@ INSERT INTO loc.location_sources (
     capacity_unit_prefix_factor, metadata
 ) VALUES (
     $1, (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2),
-    $3, $4, $5
+    $3, $4, sqlc.narg(metadata)::jsonb
 ) RETURNING record_id;
 
 -- name: UpdateLocationSourceCapacity :exec
@@ -117,7 +117,7 @@ WHERE
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
     AND UPPER(sys_period) IS NULL;
 
--- name: ListLocationSourceHistoryByType :many
+-- name: ListLocationSourceHistory :many
 SELECT
     record_id, capacity, capacity_unit_prefix_factor, metadata, sys_period
 FROM loc.location_sources
@@ -125,4 +125,14 @@ WHERE
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
     ORDER BY LOWER(sys_period) DESC;
+
+-- name: ListLocationSourceCapacityHistory :many
+SELECT
+    (capacity * POWER(10, capacity_unit_prefix_factor))::real AS capacity_watts,
+    LOWER(sys_period) AS valid_from
+FROM loc.location_sources
+WHERE
+    location_id = $1
+    AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+    ORDER BY LOWER(sys_period) ASC;
 

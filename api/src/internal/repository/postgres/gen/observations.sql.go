@@ -11,65 +11,180 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createObservation = `-- name: CreateObservation :one
-WITH source_type_id AS (
-    SELECT source_type_id FROM loc.source_types
-    WHERE source_type_name = $2
-)
+const createObservation = `-- name: CreateObservation :exec
 INSERT INTO obs.observed_generation_values (
-    location_id, source_type_id, time_utc, value
+    location_id, source_type_id, observer_id, observation_time_utc, value
 ) VALUES (
-    $1, source_type_id, $3, $4
-) RETURNING observation_id
+    $1, (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $3, $4, $5
+)
 `
 
 type CreateObservationParams struct {
-	LocationID     int32
-	SourceTypeName string
-	TimeUtc        pgtype.Timestamp
-	Value          int16
+	LocationID         int32
+	SourceTypeName     string
+	ObserverID         int32
+	ObservationTimeUtc pgtype.Timestamp
+	Value              int16
 }
 
-func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationParams) (int32, error) {
-	row := q.db.QueryRow(ctx, createObservation,
+func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationParams) error {
+	_, err := q.db.Exec(ctx, createObservation,
 		arg.LocationID,
 		arg.SourceTypeName,
-		arg.TimeUtc,
+		arg.ObserverID,
+		arg.ObservationTimeUtc,
 		arg.Value,
 	)
-	var observation_id int32
-	err := row.Scan(&observation_id)
-	return observation_id, err
+	return err
 }
 
 type CreateObservationsParams struct {
-	LocationID   int32
-	SourceTypeID int16
-	TimeUtc      pgtype.Timestamp
-	Value        int16
+	LocationID         int32
+	SourceTypeID       int16
+	ObserverID         int32
+	ObservationTimeUtc pgtype.Timestamp
+	Value              int16
 }
 
-const listObservationsByLocationId = `-- name: ListObservationsByLocationId :many
-SELECT value, source_type_id, observation_id, location_id, time_utc FROM obs.observed_generation_values
-WHERE location_id = $1
+const createObserver = `-- name: CreateObserver :one
+INSERT INTO obs.observers (observer_name) VALUES ($1) RETURNING observer_id
 `
 
-func (q *Queries) ListObservationsByLocationId(ctx context.Context, locationID int32) ([]ObsObservedGenerationValue, error) {
-	rows, err := q.db.Query(ctx, listObservationsByLocationId, locationID)
+func (q *Queries) CreateObserver(ctx context.Context, observerName string) (int32, error) {
+	row := q.db.QueryRow(ctx, createObserver, observerName)
+	var observer_id int32
+	err := row.Scan(&observer_id)
+	return observer_id, err
+}
+
+const getObservations = `-- name: GetObservations :many
+SELECT
+    location_id, source_type_id, observation_time_utc, value
+FROM obs.observed_generation_values
+WHERE
+    location_id = $1
+    AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+    AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = LOWER($3))
+    AND observation_time_utc = ANY($4::timestamp[])
+`
+
+type GetObservationsParams struct {
+	LocationID         int32
+	SourceTypeName     string
+	Lower              string
+	ObservationTimeUtc []pgtype.Timestamp
+}
+
+type GetObservationsRow struct {
+	LocationID         int32
+	SourceTypeID       int16
+	ObservationTimeUtc pgtype.Timestamp
+	Value              int16
+}
+
+func (q *Queries) GetObservations(ctx context.Context, arg GetObservationsParams) ([]GetObservationsRow, error) {
+	rows, err := q.db.Query(ctx, getObservations,
+		arg.LocationID,
+		arg.SourceTypeName,
+		arg.Lower,
+		arg.ObservationTimeUtc,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ObsObservedGenerationValue{}
+	items := []GetObservationsRow{}
 	for rows.Next() {
-		var i ObsObservedGenerationValue
+		var i GetObservationsRow
 		if err := rows.Scan(
-			&i.Value,
-			&i.SourceTypeID,
-			&i.ObservationID,
 			&i.LocationID,
-			&i.TimeUtc,
+			&i.SourceTypeID,
+			&i.ObservationTimeUtc,
+			&i.Value,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listObservations = `-- name: ListObservations :many
+SELECT
+    location_id, source_type_id, observation_time_utc, value
+FROM obs.observed_generation_values
+WHERE
+    location_id = $1
+    AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+    AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = LOWER($3))
+    AND observation_time_utc BETWEEN $4::timestamp AND $5::timestamp
+`
+
+type ListObservationsParams struct {
+	LocationID     int32
+	SourceTypeName string
+	Lower          string
+	StartTimeUtc   pgtype.Timestamp
+	EndTimeUtc     pgtype.Timestamp
+}
+
+type ListObservationsRow struct {
+	LocationID         int32
+	SourceTypeID       int16
+	ObservationTimeUtc pgtype.Timestamp
+	Value              int16
+}
+
+func (q *Queries) ListObservations(ctx context.Context, arg ListObservationsParams) ([]ListObservationsRow, error) {
+	rows, err := q.db.Query(ctx, listObservations,
+		arg.LocationID,
+		arg.SourceTypeName,
+		arg.Lower,
+		arg.StartTimeUtc,
+		arg.EndTimeUtc,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListObservationsRow{}
+	for rows.Next() {
+		var i ListObservationsRow
+		if err := rows.Scan(
+			&i.LocationID,
+			&i.SourceTypeID,
+			&i.ObservationTimeUtc,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listObservers = `-- name: ListObservers :many
+SELECT
+    observer_id, observer_name
+FROM obs.observers
+`
+
+func (q *Queries) ListObservers(ctx context.Context) ([]ObsObserver, error) {
+	rows, err := q.db.Query(ctx, listObservers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ObsObserver{}
+	for rows.Next() {
+		var i ObsObserver
+		if err := rows.Scan(&i.ObserverID, &i.ObserverName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

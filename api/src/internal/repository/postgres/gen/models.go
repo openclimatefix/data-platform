@@ -39,11 +39,16 @@ type LocSourceType struct {
 }
 
 type ObsObservedGenerationValue struct {
-	Value         int16
-	SourceTypeID  int16
-	ObservationID int32
-	LocationID    int32
-	TimeUtc       pgtype.Timestamp
+	Value              int16
+	SourceTypeID       int16
+	ObserverID         int32
+	LocationID         int32
+	ObservationTimeUtc pgtype.Timestamp
+}
+
+type ObsObserver struct {
+	ObserverID   int32
+	ObserverName string
 }
 
 type PredForecast struct {

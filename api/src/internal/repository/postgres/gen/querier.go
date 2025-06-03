@@ -16,26 +16,32 @@ type Querier interface {
 	CreateLocationSource(ctx context.Context, arg CreateLocationSourceParams) (int32, error)
 	// --- Models ---
 	CreateModel(ctx context.Context, arg CreateModelParams) (int32, error)
-	CreateObservation(ctx context.Context, arg CreateObservationParams) (int32, error)
+	CreateObservation(ctx context.Context, arg CreateObservationParams) error
 	CreateObservations(ctx context.Context, arg []CreateObservationsParams) (int64, error)
+	CreateObserver(ctx context.Context, observerName string) (int32, error)
 	CreatePredictedGenerationValues(ctx context.Context, arg []CreatePredictedGenerationValuesParams) (int64, error)
 	DecomissionLocationSource(ctx context.Context, arg DecomissionLocationSourceParams) error
 	GetDefaultModel(ctx context.Context) (GetDefaultModelRow, error)
+	GetForecastByInitTime(ctx context.Context, arg GetForecastByInitTimeParams) (GetForecastByInitTimeRow, error)
+	GetForecastsByInitTimeTimeComponent(ctx context.Context, arg GetForecastsByInitTimeTimeComponentParams) ([]GetForecastsByInitTimeTimeComponentRow, error)
 	GetLatestForecastForLocationAtHorizon(ctx context.Context, arg GetLatestForecastForLocationAtHorizonParams) (GetLatestForecastForLocationAtHorizonRow, error)
 	GetLatestModelByName(ctx context.Context, modelName string) (GetLatestModelByNameRow, error)
 	GetLocationById(ctx context.Context, locationID int32) (GetLocationByIdRow, error)
 	GetLocationGeoJSONByIds(ctx context.Context, arg GetLocationGeoJSONByIdsParams) ([]byte, error)
 	// Get latest active record via the UPPER(sys_period) IS NULL condition
-	GetLocationSourceByType(ctx context.Context, arg GetLocationSourceByTypeParams) (GetLocationSourceByTypeRow, error)
+	GetLocationSource(ctx context.Context, arg GetLocationSourceParams) (GetLocationSourceRow, error)
 	GetModelById(ctx context.Context, modelID int32) (GetModelByIdRow, error)
+	GetObservations(ctx context.Context, arg GetObservationsParams) ([]GetObservationsRow, error)
 	GetPredictedGenerationValuesForForecast(ctx context.Context, forecastID int32) ([]GetPredictedGenerationValuesForForecastRow, error)
 	GetWindowedPredictedGenerationValuesAtHorizon(ctx context.Context, arg GetWindowedPredictedGenerationValuesAtHorizonParams) ([]GetWindowedPredictedGenerationValuesAtHorizonRow, error)
 	ListLocationGeometryByType(ctx context.Context, locationTypeName string) ([]ListLocationGeometryByTypeRow, error)
 	ListLocationIdsByType(ctx context.Context, locationTypeName string) ([]ListLocationIdsByTypeRow, error)
-	ListLocationSourceHistoryByType(ctx context.Context, arg ListLocationSourceHistoryByTypeParams) ([]ListLocationSourceHistoryByTypeRow, error)
+	ListLocationSourceCapacityHistory(ctx context.Context, arg ListLocationSourceCapacityHistoryParams) ([]ListLocationSourceCapacityHistoryRow, error)
+	ListLocationSourceHistory(ctx context.Context, arg ListLocationSourceHistoryParams) ([]ListLocationSourceHistoryRow, error)
 	ListLocationsByType(ctx context.Context, locationTypeName string) ([]LocLocation, error)
 	ListModels(ctx context.Context) ([]ListModelsRow, error)
-	ListObservationsByLocationId(ctx context.Context, locationID int32) ([]ObsObservedGenerationValue, error)
+	ListObservations(ctx context.Context, arg ListObservationsParams) ([]ListObservationsRow, error)
+	ListObservers(ctx context.Context) ([]ObsObserver, error)
 	SetDefaultModel(ctx context.Context, modelID int32) error
 	UpdateLocationSource(ctx context.Context, arg UpdateLocationSourceParams) error
 	UpdateLocationSourceCapacity(ctx context.Context, arg UpdateLocationSourceCapacityParams) error

@@ -125,6 +125,7 @@ SET retention = '1 month',
     infinite_time_partitions = true
 WHERE parent_table = 'public.predicted_generation_values';
 
+
 -- +goose Down
 DROP SCHEMA pred CASCADE;
 

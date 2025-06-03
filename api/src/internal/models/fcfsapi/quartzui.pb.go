@@ -23,21 +23,233 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// * --- GetPredictedTimeseries --------------------------------------------------------
-// A query for a 1D timeseries of predicted yields for the given locations.
+type EnergySource int32
+
+const (
+	EnergySource_ENERGY_SOURCE_UNSPECIFIED EnergySource = 0
+	EnergySource_ENERGY_SOURCE_SOLAR       EnergySource = 1
+	EnergySource_ENERGY_SOURCE_WIND        EnergySource = 2
+)
+
+// Enum value maps for EnergySource.
+var (
+	EnergySource_name = map[int32]string{
+		0: "ENERGY_SOURCE_UNSPECIFIED",
+		1: "ENERGY_SOURCE_SOLAR",
+		2: "ENERGY_SOURCE_WIND",
+	}
+	EnergySource_value = map[string]int32{
+		"ENERGY_SOURCE_UNSPECIFIED": 0,
+		"ENERGY_SOURCE_SOLAR":       1,
+		"ENERGY_SOURCE_WIND":        2,
+	}
+)
+
+func (x EnergySource) Enum() *EnergySource {
+	p := new(EnergySource)
+	*p = x
+	return p
+}
+
+func (x EnergySource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EnergySource) Descriptor() protoreflect.EnumDescriptor {
+	return file_fcfsapi_quartzui_proto_enumTypes[0].Descriptor()
+}
+
+func (EnergySource) Type() protoreflect.EnumType {
+	return &file_fcfsapi_quartzui_proto_enumTypes[0]
+}
+
+func (x EnergySource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EnergySource.Descriptor instead.
+func (EnergySource) EnumDescriptor() ([]byte, []int) {
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{0}
+}
+
+type Yield struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	YieldKw       int64                  `protobuf:"varint,1,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
+	TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Yield) Reset() {
+	*x = Yield{}
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Yield) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Yield) ProtoMessage() {}
+
+func (x *Yield) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Yield.ProtoReflect.Descriptor instead.
+func (*Yield) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Yield) GetYieldKw() int64 {
+	if x != nil {
+		return x.YieldKw
+	}
+	return 0
+}
+
+func (x *Yield) GetTimestampUnix() int64 {
+	if x != nil {
+		return x.TimestampUnix
+	}
+	return 0
+}
+
+type YieldPrediction struct {
+	state         protoimpl.MessageState       `protogen:"open.v1"`
+	YieldKw       int64                        `protobuf:"varint,1,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
+	TimestampUnix int64                        `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
+	Uncertainty   *YieldPrediction_Uncertainty `protobuf:"bytes,3,opt,name=uncertainty,proto3" json:"uncertainty,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *YieldPrediction) Reset() {
+	*x = YieldPrediction{}
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *YieldPrediction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*YieldPrediction) ProtoMessage() {}
+
+func (x *YieldPrediction) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use YieldPrediction.ProtoReflect.Descriptor instead.
+func (*YieldPrediction) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *YieldPrediction) GetYieldKw() int64 {
+	if x != nil {
+		return x.YieldKw
+	}
+	return 0
+}
+
+func (x *YieldPrediction) GetTimestampUnix() int64 {
+	if x != nil {
+		return x.TimestampUnix
+	}
+	return 0
+}
+
+func (x *YieldPrediction) GetUncertainty() *YieldPrediction_Uncertainty {
+	if x != nil {
+		return x.Uncertainty
+	}
+	return nil
+}
+
+type YieldDelta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeltaKw       int64                  `protobuf:"zigzag64,1,opt,name=delta_kw,json=deltaKw,proto3" json:"delta_kw,omitempty"`
+	TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *YieldDelta) Reset() {
+	*x = YieldDelta{}
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *YieldDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*YieldDelta) ProtoMessage() {}
+
+func (x *YieldDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use YieldDelta.ProtoReflect.Descriptor instead.
+func (*YieldDelta) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *YieldDelta) GetDeltaKw() int64 {
+	if x != nil {
+		return x.DeltaKw
+	}
+	return 0
+}
+
+func (x *YieldDelta) GetTimestampUnix() int64 {
+	if x != nil {
+		return x.TimestampUnix
+	}
+	return 0
+}
+
 type GetPredictedTimeseriesRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	LocationIds  []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	EnergySource EnergySource           `protobuf:"varint,2,opt,name=energy_source,json=energySource,proto3,enum=fcfsapi.EnergySource" json:"energy_source,omitempty"`
 	// * The desired difference between the initialisation time and the target time in minutes.
 	// 0 gives the most recently predicted values.
-	HorizonMins   int32 `protobuf:"varint,2,opt,name=horizon_mins,json=horizonMins,proto3" json:"horizon_mins,omitempty"`
+	HorizonMins   int32 `protobuf:"varint,3,opt,name=horizon_mins,json=horizonMins,proto3" json:"horizon_mins,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetPredictedTimeseriesRequest) Reset() {
 	*x = GetPredictedTimeseriesRequest{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[0]
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -49,7 +261,7 @@ func (x *GetPredictedTimeseriesRequest) String() string {
 func (*GetPredictedTimeseriesRequest) ProtoMessage() {}
 
 func (x *GetPredictedTimeseriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[0]
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62,7 +274,7 @@ func (x *GetPredictedTimeseriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPredictedTimeseriesRequest.ProtoReflect.Descriptor instead.
 func (*GetPredictedTimeseriesRequest) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{0}
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetPredictedTimeseriesRequest) GetLocationIds() []int32 {
@@ -70,6 +282,13 @@ func (x *GetPredictedTimeseriesRequest) GetLocationIds() []int32 {
 		return x.LocationIds
 	}
 	return nil
+}
+
+func (x *GetPredictedTimeseriesRequest) GetEnergySource() EnergySource {
+	if x != nil {
+		return x.EnergySource
+	}
+	return EnergySource_ENERGY_SOURCE_UNSPECIFIED
 }
 
 func (x *GetPredictedTimeseriesRequest) GetHorizonMins() int32 {
@@ -82,14 +301,14 @@ func (x *GetPredictedTimeseriesRequest) GetHorizonMins() int32 {
 type GetPredictedTimeseriesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	Yields        []*PredictedYield      `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
+	Yields        []*YieldPrediction     `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetPredictedTimeseriesResponse) Reset() {
 	*x = GetPredictedTimeseriesResponse{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[1]
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -101,7 +320,7 @@ func (x *GetPredictedTimeseriesResponse) String() string {
 func (*GetPredictedTimeseriesResponse) ProtoMessage() {}
 
 func (x *GetPredictedTimeseriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[1]
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -114,7 +333,7 @@ func (x *GetPredictedTimeseriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPredictedTimeseriesResponse.ProtoReflect.Descriptor instead.
 func (*GetPredictedTimeseriesResponse) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{1}
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetPredictedTimeseriesResponse) GetLocationId() int32 {
@@ -124,192 +343,35 @@ func (x *GetPredictedTimeseriesResponse) GetLocationId() int32 {
 	return 0
 }
 
-func (x *GetPredictedTimeseriesResponse) GetYields() []*PredictedYield {
+func (x *GetPredictedTimeseriesResponse) GetYields() []*YieldPrediction {
 	if x != nil {
 		return x.Yields
 	}
 	return nil
 }
 
-type PredictedYield struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	YieldKw       int32                      `protobuf:"varint,1,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
-	TimestampUnix int64                      `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
-	Uncertainty   *PredictedYieldUncertainty `protobuf:"bytes,3,opt,name=uncertainty,proto3" json:"uncertainty,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PredictedYield) Reset() {
-	*x = PredictedYield{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PredictedYield) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PredictedYield) ProtoMessage() {}
-
-func (x *PredictedYield) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PredictedYield.ProtoReflect.Descriptor instead.
-func (*PredictedYield) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *PredictedYield) GetYieldKw() int32 {
-	if x != nil {
-		return x.YieldKw
-	}
-	return 0
-}
-
-func (x *PredictedYield) GetTimestampUnix() int64 {
-	if x != nil {
-		return x.TimestampUnix
-	}
-	return 0
-}
-
-func (x *PredictedYield) GetUncertainty() *PredictedYieldUncertainty {
-	if x != nil {
-		return x.Uncertainty
-	}
-	return nil
-}
-
-type PredictedYieldUncertainty struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LowerKw       int32                  `protobuf:"varint,1,opt,name=lower_kw,json=lowerKw,proto3" json:"lower_kw,omitempty"`
-	UpperKw       int32                  `protobuf:"varint,2,opt,name=upper_kw,json=upperKw,proto3" json:"upper_kw,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PredictedYieldUncertainty) Reset() {
-	*x = PredictedYieldUncertainty{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PredictedYieldUncertainty) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PredictedYieldUncertainty) ProtoMessage() {}
-
-func (x *PredictedYieldUncertainty) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PredictedYieldUncertainty.ProtoReflect.Descriptor instead.
-func (*PredictedYieldUncertainty) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *PredictedYieldUncertainty) GetLowerKw() int32 {
-	if x != nil {
-		return x.LowerKw
-	}
-	return 0
-}
-
-func (x *PredictedYieldUncertainty) GetUpperKw() int32 {
-	if x != nil {
-		return x.UpperKw
-	}
-	return 0
-}
-
-// --- GetActualTimeseries -----------------------------------------------------------
-type GetActualTimeseriesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds   []string               `protobuf:"bytes,1,rep,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetActualTimeseriesRequest) Reset() {
-	*x = GetActualTimeseriesRequest{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetActualTimeseriesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetActualTimeseriesRequest) ProtoMessage() {}
-
-func (x *GetActualTimeseriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetActualTimeseriesRequest.ProtoReflect.Descriptor instead.
-func (*GetActualTimeseriesRequest) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *GetActualTimeseriesRequest) GetLocationIds() []string {
-	if x != nil {
-		return x.LocationIds
-	}
-	return nil
-}
-
-type GetActualTimeseriesResponse struct {
+type GetPredictedTimeseriesDeltasResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	Yields        []*ActualYield         `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
+	Deltas        []*YieldDelta          `protobuf:"bytes,2,rep,name=deltas,proto3" json:"deltas,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetActualTimeseriesResponse) Reset() {
-	*x = GetActualTimeseriesResponse{}
+func (x *GetPredictedTimeseriesDeltasResponse) Reset() {
+	*x = GetPredictedTimeseriesDeltasResponse{}
 	mi := &file_fcfsapi_quartzui_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetActualTimeseriesResponse) String() string {
+func (x *GetPredictedTimeseriesDeltasResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetActualTimeseriesResponse) ProtoMessage() {}
+func (*GetPredictedTimeseriesDeltasResponse) ProtoMessage() {}
 
-func (x *GetActualTimeseriesResponse) ProtoReflect() protoreflect.Message {
+func (x *GetPredictedTimeseriesDeltasResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_fcfsapi_quartzui_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -321,47 +383,47 @@ func (x *GetActualTimeseriesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetActualTimeseriesResponse.ProtoReflect.Descriptor instead.
-func (*GetActualTimeseriesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetPredictedTimeseriesDeltasResponse.ProtoReflect.Descriptor instead.
+func (*GetPredictedTimeseriesDeltasResponse) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetActualTimeseriesResponse) GetLocationId() int32 {
+func (x *GetPredictedTimeseriesDeltasResponse) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
 	return 0
 }
 
-func (x *GetActualTimeseriesResponse) GetYields() []*ActualYield {
+func (x *GetPredictedTimeseriesDeltasResponse) GetDeltas() []*YieldDelta {
 	if x != nil {
-		return x.Yields
+		return x.Deltas
 	}
 	return nil
 }
 
-type ActualYield struct {
+type GetObservedTimeseriesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	YieldKw       int32                  `protobuf:"varint,1,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
-	TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
+	LocationIds   []string               `protobuf:"bytes,1,rep,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	EnergySource  EnergySource           `protobuf:"varint,2,opt,name=energy_source,json=energySource,proto3,enum=fcfsapi.EnergySource" json:"energy_source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ActualYield) Reset() {
-	*x = ActualYield{}
+func (x *GetObservedTimeseriesRequest) Reset() {
+	*x = GetObservedTimeseriesRequest{}
 	mi := &file_fcfsapi_quartzui_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ActualYield) String() string {
+func (x *GetObservedTimeseriesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ActualYield) ProtoMessage() {}
+func (*GetObservedTimeseriesRequest) ProtoMessage() {}
 
-func (x *ActualYield) ProtoReflect() protoreflect.Message {
+func (x *GetObservedTimeseriesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_fcfsapi_quartzui_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -373,37 +435,89 @@ func (x *ActualYield) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ActualYield.ProtoReflect.Descriptor instead.
-func (*ActualYield) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetObservedTimeseriesRequest.ProtoReflect.Descriptor instead.
+func (*GetObservedTimeseriesRequest) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ActualYield) GetYieldKw() int32 {
+func (x *GetObservedTimeseriesRequest) GetLocationIds() []string {
 	if x != nil {
-		return x.YieldKw
+		return x.LocationIds
+	}
+	return nil
+}
+
+func (x *GetObservedTimeseriesRequest) GetEnergySource() EnergySource {
+	if x != nil {
+		return x.EnergySource
+	}
+	return EnergySource_ENERGY_SOURCE_UNSPECIFIED
+}
+
+type GetObservedTimeseriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	Yields        []*Yield               `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetObservedTimeseriesResponse) Reset() {
+	*x = GetObservedTimeseriesResponse{}
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetObservedTimeseriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetObservedTimeseriesResponse) ProtoMessage() {}
+
+func (x *GetObservedTimeseriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetObservedTimeseriesResponse.ProtoReflect.Descriptor instead.
+func (*GetObservedTimeseriesResponse) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetObservedTimeseriesResponse) GetLocationId() int32 {
+	if x != nil {
+		return x.LocationId
 	}
 	return 0
 }
 
-func (x *ActualYield) GetTimestampUnix() int64 {
+func (x *GetObservedTimeseriesResponse) GetYields() []*Yield {
 	if x != nil {
-		return x.TimestampUnix
+		return x.Yields
 	}
-	return 0
+	return nil
 }
 
-// --- GetPredictedCrossSection ------------------------------------------------------
 type GetPredictedCrossSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	LocationIds   []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
-	TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
+	EnergySource  EnergySource           `protobuf:"varint,2,opt,name=energy_source,json=energySource,proto3,enum=fcfsapi.EnergySource" json:"energy_source,omitempty"`
+	TimestampUnix int64                  `protobuf:"varint,3,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetPredictedCrossSectionRequest) Reset() {
 	*x = GetPredictedCrossSectionRequest{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[7]
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -415,7 +529,7 @@ func (x *GetPredictedCrossSectionRequest) String() string {
 func (*GetPredictedCrossSectionRequest) ProtoMessage() {}
 
 func (x *GetPredictedCrossSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[7]
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -428,7 +542,7 @@ func (x *GetPredictedCrossSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPredictedCrossSectionRequest.ProtoReflect.Descriptor instead.
 func (*GetPredictedCrossSectionRequest) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{7}
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetPredictedCrossSectionRequest) GetLocationIds() []int32 {
@@ -436,6 +550,13 @@ func (x *GetPredictedCrossSectionRequest) GetLocationIds() []int32 {
 		return x.LocationIds
 	}
 	return nil
+}
+
+func (x *GetPredictedCrossSectionRequest) GetEnergySource() EnergySource {
+	if x != nil {
+		return x.EnergySource
+	}
+	return EnergySource_ENERGY_SOURCE_UNSPECIFIED
 }
 
 func (x *GetPredictedCrossSectionRequest) GetTimestampUnix() int64 {
@@ -446,16 +567,16 @@ func (x *GetPredictedCrossSectionRequest) GetTimestampUnix() int64 {
 }
 
 type GetPredictedCrossSectionResponse struct {
-	state         protoimpl.MessageState      `protogen:"open.v1"`
-	TimestampUnix int64                       `protobuf:"varint,1,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
-	Yields        []*PredictedYieldAtLocation `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TimestampUnix int64                  `protobuf:"varint,1,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
+	YieldsKw      []int64                `protobuf:"varint,2,rep,packed,name=yields_kw,json=yieldsKw,proto3" json:"yields_kw,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetPredictedCrossSectionResponse) Reset() {
 	*x = GetPredictedCrossSectionResponse{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[8]
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -467,7 +588,7 @@ func (x *GetPredictedCrossSectionResponse) String() string {
 func (*GetPredictedCrossSectionResponse) ProtoMessage() {}
 
 func (x *GetPredictedCrossSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[8]
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -480,7 +601,7 @@ func (x *GetPredictedCrossSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPredictedCrossSectionResponse.ProtoReflect.Descriptor instead.
 func (*GetPredictedCrossSectionResponse) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{8}
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetPredictedCrossSectionResponse) GetTimestampUnix() int64 {
@@ -490,96 +611,35 @@ func (x *GetPredictedCrossSectionResponse) GetTimestampUnix() int64 {
 	return 0
 }
 
-func (x *GetPredictedCrossSectionResponse) GetYields() []*PredictedYieldAtLocation {
+func (x *GetPredictedCrossSectionResponse) GetYieldsKw() []int64 {
 	if x != nil {
-		return x.Yields
+		return x.YieldsKw
 	}
 	return nil
 }
 
-type PredictedYieldAtLocation struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	LocationId    int32                      `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	YieldKw       int32                      `protobuf:"varint,2,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
-	Uncertainty   *PredictedYieldUncertainty `protobuf:"bytes,3,opt,name=uncertainty,proto3" json:"uncertainty,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PredictedYieldAtLocation) Reset() {
-	*x = PredictedYieldAtLocation{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PredictedYieldAtLocation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PredictedYieldAtLocation) ProtoMessage() {}
-
-func (x *PredictedYieldAtLocation) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PredictedYieldAtLocation.ProtoReflect.Descriptor instead.
-func (*PredictedYieldAtLocation) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *PredictedYieldAtLocation) GetLocationId() int32 {
-	if x != nil {
-		return x.LocationId
-	}
-	return 0
-}
-
-func (x *PredictedYieldAtLocation) GetYieldKw() int32 {
-	if x != nil {
-		return x.YieldKw
-	}
-	return 0
-}
-
-func (x *PredictedYieldAtLocation) GetUncertainty() *PredictedYieldUncertainty {
-	if x != nil {
-		return x.Uncertainty
-	}
-	return nil
-}
-
-// --- GetActualCrossSection ---------------------------------------------------------
-type GetActualCrossSectionRequest struct {
+type GetLatestForecastRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds   []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
-	TimestampUnix int64                  `protobuf:"varint,2,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	EnergySource  EnergySource           `protobuf:"varint,2,opt,name=energy_source,json=energySource,proto3,enum=fcfsapi.EnergySource" json:"energy_source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetActualCrossSectionRequest) Reset() {
-	*x = GetActualCrossSectionRequest{}
+func (x *GetLatestForecastRequest) Reset() {
+	*x = GetLatestForecastRequest{}
 	mi := &file_fcfsapi_quartzui_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetActualCrossSectionRequest) String() string {
+func (x *GetLatestForecastRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetActualCrossSectionRequest) ProtoMessage() {}
+func (*GetLatestForecastRequest) ProtoMessage() {}
 
-func (x *GetActualCrossSectionRequest) ProtoReflect() protoreflect.Message {
+func (x *GetLatestForecastRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_fcfsapi_quartzui_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -591,125 +651,133 @@ func (x *GetActualCrossSectionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetActualCrossSectionRequest.ProtoReflect.Descriptor instead.
-func (*GetActualCrossSectionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetLatestForecastRequest.ProtoReflect.Descriptor instead.
+func (*GetLatestForecastRequest) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *GetActualCrossSectionRequest) GetLocationIds() []int32 {
-	if x != nil {
-		return x.LocationIds
-	}
-	return nil
-}
-
-func (x *GetActualCrossSectionRequest) GetTimestampUnix() int64 {
-	if x != nil {
-		return x.TimestampUnix
-	}
-	return 0
-}
-
-type GetActualCrossSectionResponse struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	TimestampUnix int64                    `protobuf:"varint,1,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
-	Yields        []*ActualYieldAtLocation `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetActualCrossSectionResponse) Reset() {
-	*x = GetActualCrossSectionResponse{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetActualCrossSectionResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetActualCrossSectionResponse) ProtoMessage() {}
-
-func (x *GetActualCrossSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetActualCrossSectionResponse.ProtoReflect.Descriptor instead.
-func (*GetActualCrossSectionResponse) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *GetActualCrossSectionResponse) GetTimestampUnix() int64 {
-	if x != nil {
-		return x.TimestampUnix
-	}
-	return 0
-}
-
-func (x *GetActualCrossSectionResponse) GetYields() []*ActualYieldAtLocation {
-	if x != nil {
-		return x.Yields
-	}
-	return nil
-}
-
-type ActualYieldAtLocation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
-	YieldKw       int32                  `protobuf:"varint,2,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActualYieldAtLocation) Reset() {
-	*x = ActualYieldAtLocation{}
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActualYieldAtLocation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActualYieldAtLocation) ProtoMessage() {}
-
-func (x *ActualYieldAtLocation) ProtoReflect() protoreflect.Message {
-	mi := &file_fcfsapi_quartzui_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActualYieldAtLocation.ProtoReflect.Descriptor instead.
-func (*ActualYieldAtLocation) Descriptor() ([]byte, []int) {
-	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ActualYieldAtLocation) GetLocationId() int32 {
+func (x *GetLatestForecastRequest) GetLocationId() int32 {
 	if x != nil {
 		return x.LocationId
 	}
 	return 0
 }
 
-func (x *ActualYieldAtLocation) GetYieldKw() int32 {
+func (x *GetLatestForecastRequest) GetEnergySource() EnergySource {
 	if x != nil {
-		return x.YieldKw
+		return x.EnergySource
+	}
+	return EnergySource_ENERGY_SOURCE_UNSPECIFIED
+}
+
+type GetLatestForecastResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	ForecastId    int64                  `protobuf:"varint,2,opt,name=forecast_id,json=forecastId,proto3" json:"forecast_id,omitempty"`
+	Yields        []*YieldPrediction     `protobuf:"bytes,3,rep,name=yields,proto3" json:"yields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLatestForecastResponse) Reset() {
+	*x = GetLatestForecastResponse{}
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLatestForecastResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLatestForecastResponse) ProtoMessage() {}
+
+func (x *GetLatestForecastResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLatestForecastResponse.ProtoReflect.Descriptor instead.
+func (*GetLatestForecastResponse) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetLatestForecastResponse) GetLocationId() int32 {
+	if x != nil {
+		return x.LocationId
+	}
+	return 0
+}
+
+func (x *GetLatestForecastResponse) GetForecastId() int64 {
+	if x != nil {
+		return x.ForecastId
+	}
+	return 0
+}
+
+func (x *GetLatestForecastResponse) GetYields() []*YieldPrediction {
+	if x != nil {
+		return x.Yields
+	}
+	return nil
+}
+
+type YieldPrediction_Uncertainty struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LowerKw       int64                  `protobuf:"varint,1,opt,name=lower_kw,json=lowerKw,proto3" json:"lower_kw,omitempty"`
+	UpperKw       int64                  `protobuf:"varint,2,opt,name=upper_kw,json=upperKw,proto3" json:"upper_kw,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *YieldPrediction_Uncertainty) Reset() {
+	*x = YieldPrediction_Uncertainty{}
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *YieldPrediction_Uncertainty) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*YieldPrediction_Uncertainty) ProtoMessage() {}
+
+func (x *YieldPrediction_Uncertainty) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use YieldPrediction_Uncertainty.ProtoReflect.Descriptor instead.
+func (*YieldPrediction_Uncertainty) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{1, 0}
+}
+
+func (x *YieldPrediction_Uncertainty) GetLowerKw() int64 {
+	if x != nil {
+		return x.LowerKw
+	}
+	return 0
+}
+
+func (x *YieldPrediction_Uncertainty) GetUpperKw() int64 {
+	if x != nil {
+		return x.UpperKw
 	}
 	return 0
 }
@@ -718,51 +786,61 @@ var File_fcfsapi_quartzui_proto protoreflect.FileDescriptor
 
 const file_fcfsapi_quartzui_proto_rawDesc = "" +
 	"\n" +
-	"\x16fcfsapi/quartzui.proto\x12\afcfsapi\"e\n" +
+	"\x16fcfsapi/quartzui.proto\x12\afcfsapi\"I\n" +
+	"\x05Yield\x12\x19\n" +
+	"\byield_kw\x18\x01 \x01(\x03R\ayieldKw\x12%\n" +
+	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"\xe0\x01\n" +
+	"\x0fYieldPrediction\x12\x19\n" +
+	"\byield_kw\x18\x01 \x01(\x03R\ayieldKw\x12%\n" +
+	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\x12F\n" +
+	"\vuncertainty\x18\x03 \x01(\v2$.fcfsapi.YieldPrediction.UncertaintyR\vuncertainty\x1aC\n" +
+	"\vUncertainty\x12\x19\n" +
+	"\blower_kw\x18\x01 \x01(\x03R\alowerKw\x12\x19\n" +
+	"\bupper_kw\x18\x02 \x01(\x03R\aupperKw\"N\n" +
+	"\n" +
+	"YieldDelta\x12\x19\n" +
+	"\bdelta_kw\x18\x01 \x01(\x12R\adeltaKw\x12%\n" +
+	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"\xa1\x01\n" +
 	"\x1dGetPredictedTimeseriesRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12!\n" +
-	"\fhorizon_mins\x18\x02 \x01(\x05R\vhorizonMins\"r\n" +
+	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12:\n" +
+	"\renergy_source\x18\x02 \x01(\x0e2\x15.fcfsapi.EnergySourceR\fenergySource\x12!\n" +
+	"\fhorizon_mins\x18\x03 \x01(\x05R\vhorizonMins\"s\n" +
 	"\x1eGetPredictedTimeseriesResponse\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
-	"locationId\x12/\n" +
-	"\x06yields\x18\x02 \x03(\v2\x17.fcfsapi.PredictedYieldR\x06yields\"\x98\x01\n" +
-	"\x0ePredictedYield\x12\x19\n" +
-	"\byield_kw\x18\x01 \x01(\x05R\ayieldKw\x12%\n" +
-	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\x12D\n" +
-	"\vuncertainty\x18\x03 \x01(\v2\".fcfsapi.PredictedYieldUncertaintyR\vuncertainty\"Q\n" +
-	"\x19PredictedYieldUncertainty\x12\x19\n" +
-	"\blower_kw\x18\x01 \x01(\x05R\alowerKw\x12\x19\n" +
-	"\bupper_kw\x18\x02 \x01(\x05R\aupperKw\"?\n" +
-	"\x1aGetActualTimeseriesRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\tR\vlocationIds\"l\n" +
-	"\x1bGetActualTimeseriesResponse\x12\x1f\n" +
+	"locationId\x120\n" +
+	"\x06yields\x18\x02 \x03(\v2\x18.fcfsapi.YieldPredictionR\x06yields\"t\n" +
+	"$GetPredictedTimeseriesDeltasResponse\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
-	"locationId\x12,\n" +
-	"\x06yields\x18\x02 \x03(\v2\x14.fcfsapi.ActualYieldR\x06yields\"O\n" +
-	"\vActualYield\x12\x19\n" +
-	"\byield_kw\x18\x01 \x01(\x05R\ayieldKw\x12%\n" +
-	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"k\n" +
+	"locationId\x12+\n" +
+	"\x06deltas\x18\x02 \x03(\v2\x13.fcfsapi.YieldDeltaR\x06deltas\"}\n" +
+	"\x1cGetObservedTimeseriesRequest\x12!\n" +
+	"\flocation_ids\x18\x01 \x03(\tR\vlocationIds\x12:\n" +
+	"\renergy_source\x18\x02 \x01(\x0e2\x15.fcfsapi.EnergySourceR\fenergySource\"h\n" +
+	"\x1dGetObservedTimeseriesResponse\x12\x1f\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
+	"locationId\x12&\n" +
+	"\x06yields\x18\x02 \x03(\v2\x0e.fcfsapi.YieldR\x06yields\"\xa7\x01\n" +
 	"\x1fGetPredictedCrossSectionRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12%\n" +
-	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"\x84\x01\n" +
+	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12:\n" +
+	"\renergy_source\x18\x02 \x01(\x0e2\x15.fcfsapi.EnergySourceR\fenergySource\x12%\n" +
+	"\x0etimestamp_unix\x18\x03 \x01(\x03R\rtimestampUnix\"f\n" +
 	" GetPredictedCrossSectionResponse\x12%\n" +
-	"\x0etimestamp_unix\x18\x01 \x01(\x03R\rtimestampUnix\x129\n" +
-	"\x06yields\x18\x02 \x03(\v2!.fcfsapi.PredictedYieldAtLocationR\x06yields\"\x9c\x01\n" +
-	"\x18PredictedYieldAtLocation\x12\x1f\n" +
+	"\x0etimestamp_unix\x18\x01 \x01(\x03R\rtimestampUnix\x12\x1b\n" +
+	"\tyields_kw\x18\x02 \x03(\x03R\byieldsKw\"w\n" +
+	"\x18GetLatestForecastRequest\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
-	"locationId\x12\x19\n" +
-	"\byield_kw\x18\x02 \x01(\x05R\ayieldKw\x12D\n" +
-	"\vuncertainty\x18\x03 \x01(\v2\".fcfsapi.PredictedYieldUncertaintyR\vuncertainty\"h\n" +
-	"\x1cGetActualCrossSectionRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12%\n" +
-	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\"~\n" +
-	"\x1dGetActualCrossSectionResponse\x12%\n" +
-	"\x0etimestamp_unix\x18\x01 \x01(\x03R\rtimestampUnix\x126\n" +
-	"\x06yields\x18\x02 \x03(\v2\x1e.fcfsapi.ActualYieldAtLocationR\x06yields\"S\n" +
-	"\x15ActualYieldAtLocation\x12\x1f\n" +
+	"locationId\x12:\n" +
+	"\renergy_source\x18\x02 \x01(\x0e2\x15.fcfsapi.EnergySourceR\fenergySource\"\x8f\x01\n" +
+	"\x19GetLatestForecastResponse\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
-	"locationId\x12\x19\n" +
-	"\byield_kw\x18\x02 \x01(\x05R\ayieldKwB@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
+	"locationId\x12\x1f\n" +
+	"\vforecast_id\x18\x02 \x01(\x03R\n" +
+	"forecastId\x120\n" +
+	"\x06yields\x18\x03 \x03(\v2\x18.fcfsapi.YieldPredictionR\x06yields*^\n" +
+	"\fEnergySource\x12\x1d\n" +
+	"\x19ENERGY_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13ENERGY_SOURCE_SOLAR\x10\x01\x12\x16\n" +
+	"\x12ENERGY_SOURCE_WIND\x10\x02B@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
 
 var (
 	file_fcfsapi_quartzui_proto_rawDescOnce sync.Once
@@ -776,34 +854,39 @@ func file_fcfsapi_quartzui_proto_rawDescGZIP() []byte {
 	return file_fcfsapi_quartzui_proto_rawDescData
 }
 
+var file_fcfsapi_quartzui_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_fcfsapi_quartzui_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_fcfsapi_quartzui_proto_goTypes = []any{
-	(*GetPredictedTimeseriesRequest)(nil),    // 0: fcfsapi.GetPredictedTimeseriesRequest
-	(*GetPredictedTimeseriesResponse)(nil),   // 1: fcfsapi.GetPredictedTimeseriesResponse
-	(*PredictedYield)(nil),                   // 2: fcfsapi.PredictedYield
-	(*PredictedYieldUncertainty)(nil),        // 3: fcfsapi.PredictedYieldUncertainty
-	(*GetActualTimeseriesRequest)(nil),       // 4: fcfsapi.GetActualTimeseriesRequest
-	(*GetActualTimeseriesResponse)(nil),      // 5: fcfsapi.GetActualTimeseriesResponse
-	(*ActualYield)(nil),                      // 6: fcfsapi.ActualYield
-	(*GetPredictedCrossSectionRequest)(nil),  // 7: fcfsapi.GetPredictedCrossSectionRequest
-	(*GetPredictedCrossSectionResponse)(nil), // 8: fcfsapi.GetPredictedCrossSectionResponse
-	(*PredictedYieldAtLocation)(nil),         // 9: fcfsapi.PredictedYieldAtLocation
-	(*GetActualCrossSectionRequest)(nil),     // 10: fcfsapi.GetActualCrossSectionRequest
-	(*GetActualCrossSectionResponse)(nil),    // 11: fcfsapi.GetActualCrossSectionResponse
-	(*ActualYieldAtLocation)(nil),            // 12: fcfsapi.ActualYieldAtLocation
+	(EnergySource)(0),                            // 0: fcfsapi.EnergySource
+	(*Yield)(nil),                                // 1: fcfsapi.Yield
+	(*YieldPrediction)(nil),                      // 2: fcfsapi.YieldPrediction
+	(*YieldDelta)(nil),                           // 3: fcfsapi.YieldDelta
+	(*GetPredictedTimeseriesRequest)(nil),        // 4: fcfsapi.GetPredictedTimeseriesRequest
+	(*GetPredictedTimeseriesResponse)(nil),       // 5: fcfsapi.GetPredictedTimeseriesResponse
+	(*GetPredictedTimeseriesDeltasResponse)(nil), // 6: fcfsapi.GetPredictedTimeseriesDeltasResponse
+	(*GetObservedTimeseriesRequest)(nil),         // 7: fcfsapi.GetObservedTimeseriesRequest
+	(*GetObservedTimeseriesResponse)(nil),        // 8: fcfsapi.GetObservedTimeseriesResponse
+	(*GetPredictedCrossSectionRequest)(nil),      // 9: fcfsapi.GetPredictedCrossSectionRequest
+	(*GetPredictedCrossSectionResponse)(nil),     // 10: fcfsapi.GetPredictedCrossSectionResponse
+	(*GetLatestForecastRequest)(nil),             // 11: fcfsapi.GetLatestForecastRequest
+	(*GetLatestForecastResponse)(nil),            // 12: fcfsapi.GetLatestForecastResponse
+	(*YieldPrediction_Uncertainty)(nil),          // 13: fcfsapi.YieldPrediction.Uncertainty
 }
 var file_fcfsapi_quartzui_proto_depIdxs = []int32{
-	2,  // 0: fcfsapi.GetPredictedTimeseriesResponse.yields:type_name -> fcfsapi.PredictedYield
-	3,  // 1: fcfsapi.PredictedYield.uncertainty:type_name -> fcfsapi.PredictedYieldUncertainty
-	6,  // 2: fcfsapi.GetActualTimeseriesResponse.yields:type_name -> fcfsapi.ActualYield
-	9,  // 3: fcfsapi.GetPredictedCrossSectionResponse.yields:type_name -> fcfsapi.PredictedYieldAtLocation
-	3,  // 4: fcfsapi.PredictedYieldAtLocation.uncertainty:type_name -> fcfsapi.PredictedYieldUncertainty
-	12, // 5: fcfsapi.GetActualCrossSectionResponse.yields:type_name -> fcfsapi.ActualYieldAtLocation
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	13, // 0: fcfsapi.YieldPrediction.uncertainty:type_name -> fcfsapi.YieldPrediction.Uncertainty
+	0,  // 1: fcfsapi.GetPredictedTimeseriesRequest.energy_source:type_name -> fcfsapi.EnergySource
+	2,  // 2: fcfsapi.GetPredictedTimeseriesResponse.yields:type_name -> fcfsapi.YieldPrediction
+	3,  // 3: fcfsapi.GetPredictedTimeseriesDeltasResponse.deltas:type_name -> fcfsapi.YieldDelta
+	0,  // 4: fcfsapi.GetObservedTimeseriesRequest.energy_source:type_name -> fcfsapi.EnergySource
+	1,  // 5: fcfsapi.GetObservedTimeseriesResponse.yields:type_name -> fcfsapi.Yield
+	0,  // 6: fcfsapi.GetPredictedCrossSectionRequest.energy_source:type_name -> fcfsapi.EnergySource
+	0,  // 7: fcfsapi.GetLatestForecastRequest.energy_source:type_name -> fcfsapi.EnergySource
+	2,  // 8: fcfsapi.GetLatestForecastResponse.yields:type_name -> fcfsapi.YieldPrediction
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_fcfsapi_quartzui_proto_init() }
@@ -816,13 +899,14 @@ func file_fcfsapi_quartzui_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_fcfsapi_quartzui_proto_rawDesc), len(file_fcfsapi_quartzui_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_fcfsapi_quartzui_proto_goTypes,
 		DependencyIndexes: file_fcfsapi_quartzui_proto_depIdxs,
+		EnumInfos:         file_fcfsapi_quartzui_proto_enumTypes,
 		MessageInfos:      file_fcfsapi_quartzui_proto_msgTypes,
 	}.Build()
 	File_fcfsapi_quartzui_proto = out.File

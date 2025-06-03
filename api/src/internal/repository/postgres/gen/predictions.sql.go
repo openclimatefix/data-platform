@@ -97,6 +97,123 @@ func (q *Queries) GetDefaultModel(ctx context.Context) (GetDefaultModelRow, erro
 	return i, err
 }
 
+const getForecastByInitTime = `-- name: GetForecastByInitTime :one
+SELECT
+    f.forecast_id,
+    f.init_time_utc,
+    f.source_type_id,
+    f.location_id,
+    f.model_id
+FROM pred.forecasts f
+WHERE f.location_id = $1
+AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+AND f.model_id = $3
+AND f.init_time_utc = $4
+`
+
+type GetForecastByInitTimeParams struct {
+	LocationID     int32
+	SourceTypeName string
+	ModelID        int32
+	InitTimeUtc    pgtype.Timestamp
+}
+
+type GetForecastByInitTimeRow struct {
+	ForecastID   int32
+	InitTimeUtc  pgtype.Timestamp
+	SourceTypeID int16
+	LocationID   int32
+	ModelID      int32
+}
+
+func (q *Queries) GetForecastByInitTime(ctx context.Context, arg GetForecastByInitTimeParams) (GetForecastByInitTimeRow, error) {
+	row := q.db.QueryRow(ctx, getForecastByInitTime,
+		arg.LocationID,
+		arg.SourceTypeName,
+		arg.ModelID,
+		arg.InitTimeUtc,
+	)
+	var i GetForecastByInitTimeRow
+	err := row.Scan(
+		&i.ForecastID,
+		&i.InitTimeUtc,
+		&i.SourceTypeID,
+		&i.LocationID,
+		&i.ModelID,
+	)
+	return i, err
+}
+
+const getForecastsByInitTimeTimeComponent = `-- name: GetForecastsByInitTimeTimeComponent :many
+WITH desired_init_times AS (
+    SELECT 
+        (d.day::date + make_time(sqlq.arg(hour)::integer, $4::integer, 0))::timestamp AS init_time_utc 
+    FROM generate_series(
+        NOW() - INTERVAL '7 days',
+        NOW() - INTERVAL '1 day',
+        INTERVAL '1 day'
+    ) AS d(day)
+    ORDER BY d.day ASC
+)
+SELECT
+    f.forecast_id,
+    f.init_time_utc,
+    f.source_type_id,
+    f.location_id,
+    f.model_id
+FROM pred.forecasts f
+INNER JOIN desired_init_times dit ON f.init_time_utc = dit.init_time_utc
+WHERE f.location_id = $1
+AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
+AND f.model_id = $3
+`
+
+type GetForecastsByInitTimeTimeComponentParams struct {
+	LocationID     int32
+	SourceTypeName string
+	ModelID        int32
+	Minute         int32
+}
+
+type GetForecastsByInitTimeTimeComponentRow struct {
+	ForecastID   int32
+	InitTimeUtc  pgtype.Timestamp
+	SourceTypeID int16
+	LocationID   int32
+	ModelID      int32
+}
+
+func (q *Queries) GetForecastsByInitTimeTimeComponent(ctx context.Context, arg GetForecastsByInitTimeTimeComponentParams) ([]GetForecastsByInitTimeTimeComponentRow, error) {
+	rows, err := q.db.Query(ctx, getForecastsByInitTimeTimeComponent,
+		arg.LocationID,
+		arg.SourceTypeName,
+		arg.ModelID,
+		arg.Minute,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetForecastsByInitTimeTimeComponentRow{}
+	for rows.Next() {
+		var i GetForecastsByInitTimeTimeComponentRow
+		if err := rows.Scan(
+			&i.ForecastID,
+			&i.InitTimeUtc,
+			&i.SourceTypeID,
+			&i.LocationID,
+			&i.ModelID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLatestForecastForLocationAtHorizon = `-- name: GetLatestForecastForLocationAtHorizon :one
 SELECT
     f.forecast_id,
@@ -387,7 +504,7 @@ const setDefaultModel = `-- name: SetDefaultModel :exec
 UPDATE pred.models AS m SET
     is_default = c.new_is_default
 FROM (VALUES
-    ((SELECT model_id FROM pred.models WHERE is_default = true), false), ($1::integer, true)
+    ((SELECT model_id FROM pred.models WHERE is_default = true), NULL), ($1::integer, true)
 ) AS c(model_id, new_is_default)
 WHERE m.model_id = c.model_id
 `

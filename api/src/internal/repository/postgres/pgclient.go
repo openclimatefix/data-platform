@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/devsjc/fcfs/api/src/internal/models/fcfsapi"
+	pb "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi"
 	db "github.com/devsjc/fcfs/api/src/internal/repository/postgres/gen"
 
 	"github.com/rs/zerolog/log"
@@ -84,13 +84,102 @@ func capacityKwToValueMultiplier(capacityKw int64) (int16, int16, error) {
 	return resultValue, exponent, nil
 }
 
+func capacityValueMultiplierToKw(value int16, exponent int16, capacity int16) (int64, error) {
+	if value < 0 || exponent < 0 || capacity <= 0 {
+		return 0, fmt.Errorf("recieved negative input value")
+	}
+	// Calculate the capacity in Watts
+	capacityWatts := int64(capacity) * int64(math.Pow10(int(exponent)))
+	// Get the value in Watts
+
+}
+
 type QuartzAPIPostgresServer struct {
 	pool *pgxpool.Pool
 }
 
-func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *fcfsapi.GetLocationRequest) (*fcfsapi.GetLocationResponse, error) {
+// GetObservedTimeseries implements pb.QuartzAPIServer.
+func (q *QuartzAPIPostgresServer) GetObservedTimeseries(*pb.GetObservedTimeseriesRequest, grpc.ServerStreamingServer[pb.GetObservedTimeseriesResponse]) error {
+	panic("unimplemented")
+}
+
+// GetPredictedCrossSection implements pb.QuartzAPIServer.
+func (q *QuartzAPIPostgresServer) GetPredictedCrossSection(context.Context, *pb.GetPredictedCrossSectionRequest) (*pb.GetPredictedCrossSectionResponse, error) {
+	panic("unimplemented")
+}
+
+// GetPredictedTimeseriesDeltas implements pb.QuartzAPIServer.
+func (q *QuartzAPIPostgresServer) GetPredictedTimeseriesDeltas(*pb.GetPredictedTimeseriesRequest, grpc.ServerStreamingServer[pb.GetPredictedTimeseriesDeltasResponse]) error {
+	panic("unimplemented")
+}
+
+func (q *QuartzAPIPostgresServer) GetLatestForecast(ctx context.Context, req *pb.GetLatestForecastRequest) (*pb.GetLatestForecastResponse, error) {
+	l := log.With().Str("method", "GetLatestForecast").Logger()
+	l.Debug().Str("params", fmt.Sprintf("%+v", "GetLatestForecastRequest")).Msg("recieved method call")
+
+	// Establish a transaction with the database
+	tx, err := q.pool.Begin(ctx)
+	if err != nil {
+		l.Err(err).Msg("failed to begin transaction")
+		return nil, status.Error(codes.Internal, "Encountered database connection error")
+	}
+	defer tx.Rollback(ctx)
+	querier := db.New(tx)
+
+	dbModel, err := querier.GetDefaultModel(ctx)
+	if err != nil {
+		l.Err(err).Msg("querier.GetDefaultModel()")
+		return nil, status.Error(codes.Internal, "Failed to get default model. Ensure a default model is set.")
+	}
+
+	dbLocation, err := querier.GetLocationSource(ctx, db.GetLocationSourceParams{
+		LocationID:     int32(req.LocationId),
+		SourceTypeName: "solar",
+	})
+	if err != nil {
+		l.Err(err).Msgf("querier.GetLocationSource({locationID: %d, sourceTypeName: 'solar'})", req.LocationId)
+		return nil, status.Errorf(codes.NotFound, "No solar source found for location %d", req.LocationId)
+	}
+
+	dbForecast, err := querier.GetLatestForecastForLocationAtHorizon(
+		ctx,
+		db.GetLatestForecastForLocationAtHorizonParams{
+			LocationID:     req.LocationId,
+			ModelID:        dbModel.ModelID,
+			HorizonMins:    0,
+		},
+	)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetLatestForecastForLocationAtHorizon({locationID: %d, sourceTypeName: 'solar', modelID: %d, horizonMins: 0})", req.LocationId, dbModel.ModelID)
+		return nil, status.Errorf(codes.NotFound, "No forecast found for location %d", req.LocationId)
+	}
+
+	l.Debug().Msgf("Found forecast with ID %d for location %d", dbForecast.ForecastID, req.LocationId)
+
+	dbValues, err := querier.GetPredictedGenerationValuesForForecast(ctx, dbForecast.ForecastID)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetPredictedGenerationValuesForForecast({forecastID: %d})", dbForecast.ForecastID)
+		return nil, status.Errorf(codes.NotFound, "No predicted generation values found for forecast %d", dbForecast.ForecastID)
+	}
+	l.Debug().Msgf("Found %d predicted generation values for forecast %d", len(dbValues), dbForecast.ForecastID)
+	predictedYields := make([]*pb.YieldPrediction, len(dbValues))
+	for i, value := range dbValues {
+		predictedYields[i] = &pb.YieldPrediction{
+			YieldKw:       int64(float64((value.P50 / 30000) * dbLocation.Capacity) * math.Pow10(int(dbLocation.CapacityUnitPrefixFactor)) / 1000),
+			TimestampUnix: value.TargetTimeUtc.Time.Unix(),
+			Uncertainty:   &pb.YieldPrediction_Uncertainty{},
+		}
+	}
+
+	return &pb.GetLatestForecastResponse{
+		LocationId: int32(req.LocationId),
+		Yields:     predictedYields,
+	}, tx.Commit(ctx)
+}
+
+func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *pb.GetLocationRequest) (*pb.GetLocationResponse, error) {
 	l := log.With().Str("method", "GetLocation").Logger()
-	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+	l.Debug().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
 
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
@@ -110,7 +199,7 @@ func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *fcf
 	l.Debug().Msgf("Retrieved location with id %d", dbLocationData.LocationID)
 
 	// Get the solar sources associated with the location
-	dbSourceData, err := querier.GetLocationSourceByType(ctx, db.GetLocationSourceByTypeParams{
+	dbSourceData, err := querier.GetLocationSource(ctx, db.GetLocationSourceParams{
 		LocationID:     int32(req.LocationId),
 		SourceTypeName: "solar",
 	})
@@ -120,7 +209,7 @@ func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *fcf
 	}
 	l.Debug().Msgf("Retrieved solar source for location %d", req.LocationId)
 
-	return &fcfsapi.GetLocationResponse{
+	return &pb.GetLocationResponse{
 		LocationId: int32(req.LocationId),
 		Name:       dbLocationData.LocationName,
 		Latitude:   dbLocationData.Latitude,
@@ -130,9 +219,9 @@ func (q *QuartzAPIPostgresServer) GetSolarLocation(ctx context.Context, req *fcf
 	}, tx.Commit(ctx)
 }
 
-func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *fcfsapi.CreateForecastRequest) (*fcfsapi.CreateForecastResponse, error) {
+func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *pb.CreateForecastRequest) (*pb.CreateForecastResponse, error) {
 	l := log.With().Str("method", "CreateSolarForecast").Logger()
-	l.Info().Str("params", fmt.Sprintf("%+v", req.Forecast)).Msg("recieved method call")
+	l.Debug().Str("params", fmt.Sprintf("%+v", req.Forecast)).Msg("recieved method call")
 
 	if len(req.PredictedGenerationValues) == 0 {
 		return nil, fmt.Errorf("no predicted generation values provided")
@@ -197,15 +286,18 @@ func (q *QuartzAPIPostgresServer) CreateSolarForecast(ctx context.Context, req *
 	}
 	l.Debug().Msgf("Inserted %d predicted generation values for forecast %d", len(predictedGenerationValues), forecastID)
 
-	return &fcfsapi.CreateForecastResponse{}, tx.Commit(ctx)
+	return &pb.CreateForecastResponse{}, tx.Commit(ctx)
 }
 
-func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *fcfsapi.CreateModelRequest) (*fcfsapi.CreateModelResponse, error) {
-	log.Info().Msg("CreateModel called")
+func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *pb.CreateModelRequest) (*pb.CreateModelResponse, error) {
+	l := log.With().Str("method", "CreateModel").Logger()
+	l.Debug().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %v", err)
+		l.Err(err).Msg("q.pool.Begin()")
+		return nil, status.Error(codes.Internal, "Encountered database connection error")
 	}
 	defer tx.Rollback(ctx)
 	querier := db.New(tx)
@@ -216,19 +308,24 @@ func (q *QuartzAPIPostgresServer) CreateModel(ctx context.Context, req *fcfsapi.
 		ModelVersion: req.Version,
 	}
 	modelID, err := querier.CreateModel(ctx, params)
-	if req.MakeDefault == true {
-		err = querier.SetDefaultModel(ctx, modelID)
-	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to create model: %v", err)
+		l.Err(err).Msgf("querier.CreateModel({ModelName: %s, ModelVersion: %s})", req.Name, req.Version)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid model. Ensure name and version are not empty and are lowercase")
+	}
+	if req.MakeDefault {
+		err = querier.SetDefaultModel(ctx, modelID)
+		if err != nil {
+			l.Err(err).Msgf("querier.SetDefaultModel({modelID: %d})", modelID)
+			return nil, status.Errorf(codes.NotFound, "Model with ID %d not found to set as default", modelID)
+		}
 	}
 
-	return &fcfsapi.CreateModelResponse{ModelId: modelID}, tx.Commit(ctx)
+	return &pb.CreateModelResponse{ModelId: modelID}, tx.Commit(ctx)
 }
 
-func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfsapi.CreateSiteRequest) (*fcfsapi.CreateLocationResponse, error) {
+func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *pb.CreateSiteRequest) (*pb.CreateLocationResponse, error) {
 	l := log.With().Str("method", "CreateSolarSite").Logger()
-	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+	l.Debug().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
 
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
@@ -275,12 +372,12 @@ func (q *QuartzAPIPostgresServer) CreateSolarSite(ctx context.Context, req *fcfs
 		return nil, status.Error(codes.InvalidArgument, "Invalid site. Ensure metadata is NULL or a non-empty JSON object.")
 	}
 	l.Debug().Msgf("Created source of type 'solar' for location %d with capacity %dx10^%dW", locationID, capacity, prefix)
-	return &fcfsapi.CreateLocationResponse{LocationId: locationID}, tx.Commit(ctx)
+	return &pb.CreateLocationResponse{LocationId: locationID}, tx.Commit(ctx)
 }
 
-func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *fcfsapi.CreateGspRequest) (*fcfsapi.CreateLocationResponse, error) {
+func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *pb.CreateGspRequest) (*pb.CreateLocationResponse, error) {
 	l := log.With().Str("method", "CreateSolarGsp").Logger()
-	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+	l.Debug().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
 
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
@@ -321,27 +418,12 @@ func (q *QuartzAPIPostgresServer) CreateSolarGsp(ctx context.Context, req *fcfsa
 		return nil, status.Error(codes.InvalidArgument, "Invalid GSP. Ensure metadata is NULL or a non-empty JSON object.")
 	}
 
-	return &fcfsapi.CreateLocationResponse{LocationId: locationID}, tx.Commit(ctx)
+	return &pb.CreateLocationResponse{LocationId: locationID}, tx.Commit(ctx)
 }
 
-// GetActualCrossSection implements proto.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) GetActualCrossSection(context.Context, *fcfsapi.GetActualCrossSectionRequest) (*fcfsapi.GetActualCrossSectionResponse, error) {
-	panic("unimplemented")
-}
-
-// GetActualTimeseries implements proto.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) GetActualTimeseries(*fcfsapi.GetActualTimeseriesRequest, grpc.ServerStreamingServer[fcfsapi.GetActualTimeseriesResponse]) error {
-	panic("unimplemented")
-}
-
-// GetPredictedCrossSection implements proto.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) GetPredictedCrossSection(context.Context, *fcfsapi.GetPredictedCrossSectionRequest) (*fcfsapi.GetPredictedCrossSectionResponse, error) {
-	panic("unimplemented")
-}
-
-func (q *QuartzAPIPostgresServer) GetLocationsAsGeoJSON(ctx context.Context, req *fcfsapi.GetLocationsAsGeoJSONRequest) (*fcfsapi.GetLocationsAsGeoJSONResponse, error) {
+func (q *QuartzAPIPostgresServer) GetLocationsAsGeoJSON(ctx context.Context, req *pb.GetLocationsAsGeoJSONRequest) (*pb.GetLocationsAsGeoJSONResponse, error) {
 	l := log.With().Str("method", "GetLocationsAsGeoJSON").Logger()
-	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+	l.Debug().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
 
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(ctx)
@@ -368,13 +450,13 @@ func (q *QuartzAPIPostgresServer) GetLocationsAsGeoJSON(ctx context.Context, req
 		return nil, status.Error(codes.InvalidArgument, "No locations found for input IDs")
 	}
 
-	return &fcfsapi.GetLocationsAsGeoJSONResponse{Geojson: string(geojson)}, tx.Commit(ctx)
+	return &pb.GetLocationsAsGeoJSONResponse{Geojson: string(geojson)}, tx.Commit(ctx)
 }
 
 // GetPredictedTimeseries implements proto.QuartzAPIServer.
-func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredictedTimeseriesRequest, stream grpc.ServerStreamingServer[fcfsapi.GetPredictedTimeseriesResponse]) error {
+func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *pb.GetPredictedTimeseriesRequest, stream grpc.ServerStreamingServer[pb.GetPredictedTimeseriesResponse]) error {
 	l := log.With().Str("method", "GetPredictedTimeseries").Logger()
-	l.Info().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
+	l.Debug().Str("params", fmt.Sprintf("%+v", req)).Msg("recieved method call")
 
 	// Establish a transaction with the database
 	tx, err := q.pool.Begin(stream.Context())
@@ -387,18 +469,28 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 
 	for _, locationId := range req.LocationIds {
 
+		// Get the location source data
+		dbSource, err := querier.GetLocationSource(stream.Context(), db.GetLocationSourceParams{
+			LocationID:     locationId,
+			SourceTypeName: "solar",
+		})
+		if err != nil {
+			l.Err(err).Msgf("querier.GetLocationSource({locationID: %d, sourceTypeName: 'solar'})", locationId)
+			return status.Errorf(codes.NotFound, "No solar source found for location %d", locationId)
+		}
+
 		// Get the latest forecast for the location
-		modelResp, err := querier.GetDefaultModel(stream.Context())
+		dbModel, err := querier.GetDefaultModel(stream.Context())
 		if err != nil {
 			l.Err(err).Msg("querier.GetDefaultModel()")
 			return status.Errorf(codes.Internal, "Couldn't get default model. Ensure a default model is set.")
 		}
-		l.Debug().Msgf("Using default model with ID %d", modelResp.ModelID)
+
 		dbValues, err := querier.GetWindowedPredictedGenerationValuesAtHorizon(
 			stream.Context(), db.GetWindowedPredictedGenerationValuesAtHorizonParams{
 				LocationID:     locationId,
 				SourceTypeName: "solar",
-				ModelID:        modelResp.ModelID,
+				ModelID:        dbModel.ModelID,
 				HorizonMins:    req.HorizonMins,
 			},
 		)
@@ -407,7 +499,7 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 				"querier.GetWindowedPredictedGenerationValuesAtHorizon("+
 					"{locationID: %d, sourceTypeName: 'solar', modelID: %d, horizonMins: %d}"+
 					")",
-				locationId, modelResp.ModelID, req.HorizonMins,
+				locationId, dbModel.ModelID, req.HorizonMins,
 			)
 			return status.Errorf(
 				codes.NotFound,
@@ -420,16 +512,19 @@ func (q *QuartzAPIPostgresServer) GetPredictedTimeseries(req *fcfsapi.GetPredict
 			len(dbValues), locationId, req.HorizonMins,
 		)
 
-		yields := make([]*fcfsapi.PredictedYield, len(dbValues))
+		yields := make([]*pb.YieldPrediction, len(dbValues))
 		for i, yield := range dbValues {
-			yields[i] = &fcfsapi.PredictedYield{
-				YieldKw:       int32(yield.P50),
+
+			yieldKw := int64((float64(yield.P50) * float64(dbSource.Capacity) * math.Pow10(int(dbSource.CapacityUnitPrefixFactor)) / 1000) / 30000)
+
+			yields[i] = &pb.YieldPrediction{
+				YieldKw: yieldKw,
 				TimestampUnix: yield.TargetTimeUtc.Time.Unix(),
-				Uncertainty:   &fcfsapi.PredictedYieldUncertainty{},
+				Uncertainty:   &pb.YieldPrediction_Uncertainty{},
 			}
 		}
 
-		err = stream.Send(&fcfsapi.GetPredictedTimeseriesResponse{
+		err = stream.Send(&pb.GetPredictedTimeseriesResponse{
 			LocationId: locationId,
 			Yields:     yields,
 		})
@@ -470,4 +565,4 @@ func NewQuartzAPIPostgresServer(connString string) *QuartzAPIPostgresServer {
 	return &QuartzAPIPostgresServer{pool: pool}
 }
 
-var _ fcfsapi.QuartzAPIServer = (*QuartzAPIPostgresServer)(nil)
+var _ pb.QuartzAPIServer = (*QuartzAPIPostgresServer)(nil)

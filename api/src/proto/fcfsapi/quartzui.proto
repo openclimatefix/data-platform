@@ -6,79 +6,91 @@ package fcfsapi;
 
 option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
 
-/** --- GetPredictedTimeseries --------------------------------------------------------
- * A query for a 1D timeseries of predicted yields for the given locations.
- */
+
+// --- Common Message Types ---------------------------------------------------
+
+message Yield {
+  int64 yield_kw = 1;
+  int64 timestamp_unix = 2;
+}
+
+message YieldPrediction {
+
+  message Uncertainty {
+    int64 lower_kw = 1; 
+    int64 upper_kw = 2; 
+  }
+  
+  int64 yield_kw = 1;
+  int64 timestamp_unix = 2;
+  Uncertainty uncertainty = 3;
+}
+
+message YieldDelta {
+  sint64 delta_kw = 1;
+  int64 timestamp_unix = 2;
+}
+
+enum EnergySource {
+  ENERGY_SOURCE_UNSPECIFIED = 0;
+  ENERGY_SOURCE_SOLAR = 1;
+  ENERGY_SOURCE_WIND = 2;
+}
+
+// --- Requests and Responses --------------------------------------------------------
+
 message GetPredictedTimeseriesRequest {
   repeated int32 location_ids = 1;
+  EnergySource energy_source = 2;
 
   /** The desired difference between the initialisation time and the target time in minutes.
    * 0 gives the most recently predicted values.
    */
-  int32 horizon_mins = 2;
+  int32 horizon_mins = 3;
 }
 
 message GetPredictedTimeseriesResponse {
   int32 location_id = 1;
-  repeated PredictedYield yields = 2;
+  repeated YieldPrediction yields = 2;
 }
 
-message PredictedYield {
-  int32 yield_kw = 1;
-  int64 timestamp_unix = 2;
-  PredictedYieldUncertainty uncertainty = 3;
-}
-
-message PredictedYieldUncertainty {
-  int32 lower_kw = 1;
-  int32 upper_kw = 2;
-}
-
-// --- GetActualTimeseries -----------------------------------------------------------
-message GetActualTimeseriesRequest {
-  repeated string location_ids = 1;
-}
-
-message GetActualTimeseriesResponse {
+message GetPredictedTimeseriesDeltasResponse {
   int32 location_id = 1;
-  repeated ActualYield yields = 2;
+  repeated YieldDelta deltas = 2;
 }
 
-message ActualYield {
-  int32 yield_kw = 1;
-  int64 timestamp_unix = 2;
+
+message GetObservedTimeseriesRequest {
+  repeated string location_ids = 1;
+  EnergySource energy_source = 2;
 }
 
-// --- GetPredictedCrossSection ------------------------------------------------------
+message GetObservedTimeseriesResponse {
+  int32 location_id = 1;
+  repeated Yield yields = 2;
+}
+
+
 message GetPredictedCrossSectionRequest {
   repeated int32 location_ids = 1;
-  int64 timestamp_unix = 2;
+  EnergySource energy_source = 2;
+  int64 timestamp_unix = 3;
 }
 
 message GetPredictedCrossSectionResponse {
   int64 timestamp_unix = 1;
-  repeated PredictedYieldAtLocation yields = 2;
+  repeated int64 yields_kw = 2;
 }
 
-message PredictedYieldAtLocation {
+
+message GetLatestForecastRequest {
   int32 location_id = 1;
-  int32 yield_kw = 2;
-  PredictedYieldUncertainty uncertainty = 3;
+  EnergySource energy_source = 2;
 }
 
-// --- GetActualCrossSection ---------------------------------------------------------
-message GetActualCrossSectionRequest {
-  repeated int32 location_ids = 1;
-  int64 timestamp_unix = 2;
-}
-
-message GetActualCrossSectionResponse {
-  int64 timestamp_unix = 1;
-  repeated ActualYieldAtLocation yields = 2;
-}
-
-message ActualYieldAtLocation {
+message GetLatestForecastResponse {
   int32 location_id = 1;
-  int32 yield_kw = 2;
+  int64 forecast_id = 2;
+  repeated YieldPrediction yields = 3;
 }
 
