@@ -84,16 +84,6 @@ func capacityKwToValueMultiplier(capacityKw int64) (int16, int16, error) {
 	return resultValue, exponent, nil
 }
 
-func capacityValueMultiplierToKw(value int16, exponent int16, capacity int16) (int64, error) {
-	if value < 0 || exponent < 0 || capacity <= 0 {
-		return 0, fmt.Errorf("recieved negative input value")
-	}
-	// Calculate the capacity in Watts
-	capacityWatts := int64(capacity) * int64(math.Pow10(int(exponent)))
-	// Get the value in Watts
-
-}
-
 type QuartzAPIPostgresServer struct {
 	pool *pgxpool.Pool
 }
