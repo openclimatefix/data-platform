@@ -12,10 +12,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: '1.24'
           cache: true
@@ -24,11 +24,11 @@ jobs:
         run: cd api && go mod download
 
       - name: Run unit tests
-        run: cd api && go test -v ./... -coverprofile=coverage.out
+        run: cd api && go run gotest.tools/gotestsum@latest --junitfile unit-tests.xml --format testname
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - name: Test Summary
+        uses: test-summary/action@v2
         with:
-          name: coverage-report
-          path: api/coverage.out
+          paths: "unit-tests.xml"
+        if: always()
 
