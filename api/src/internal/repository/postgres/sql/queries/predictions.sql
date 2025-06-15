@@ -47,13 +47,34 @@ INSERT INTO pred.forecasts(
     source_type_id, location_id, model_id, init_time_utc
 ) VALUES (
     (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $1, $3, $4
-) RETURNING forecast_id;
+) RETURNING *;
 
--- name: CreatePredictedGenerationValues :copyfrom
+-- name: BatchCreateForecasts :batchone
+INSERT INTO pred.forecasts(
+    source_type_id, location_id, model_id, init_time_utc
+) VALUES (
+    (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2),
+    $1, $3, $4
+) RETURNING *;
+
+-- name: CopyCreatePredictedGenerationValues :copyfrom
 INSERT INTO pred.predicted_generation_values (
     horizon_mins, p10, p50, p90, forecast_id, target_time_utc, metadata
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
+);
+
+-- name: BatchCreatePredictedGenerationValues :batchexec
+INSERT INTO pred.predicted_generation_values (
+    horizon_mins, p10, p50, p90, forecast_id, target_time_utc, metadata
+) VALUES (
+    sqlc.arg(horizon_mins)::integer,
+    encode_pct(sqlc.narg(p10_pct)::real),
+    encode_pct(sqlc.arg(p50_pct)::real),
+    encode_pct(sqlc.narg(p90_pct)::real),
+    sqlc.arg(forecast_id)::integer,
+    sqlc.arg(target_time_utc)::timestamp,
+    sqlc.narg(metadata)::jsonb
 );
 
 -- name: GetLatestForecastForLocationAtHorizon :one
@@ -110,9 +131,9 @@ AND f.model_id = $3;
 -- name: GetPredictedGenerationValuesForForecast :many
 SELECT
     horizon_mins,
-    p10,
-    p50,
-    p90,
+    decode_smallint(p10) AS p10_pct,
+    decode_smallint(p50) AS p50_pct,
+    decode_smallint(p90) AS p90_pct,
     target_time_utc,
     metadata
 FROM pred.predicted_generation_values
@@ -156,9 +177,9 @@ rankedPredictions AS (
 SELECT
     -- For each target time, choose the value with the lowest available horizon
     rp.horizon_mins,
-    rp.p10,
-    rp.p50,
-    rp.p90,
+    decode_smallint(p10) AS p10_pct,
+    decode_smallint(p50) AS p50_pct,
+    decode_smallint(p90) AS p90_pct,
     rp.target_time_utc,
     rp.metadata
 FROM rankedPredictions rp

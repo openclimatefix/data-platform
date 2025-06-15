@@ -1,9 +1,9 @@
 -- +goose Up
 
 /*
-Schema and tables to handle predicted generation data.
+Schema and tables to handle generation data.
 
-Predicted generation data is produced by various forecast models specific to a location.
+Predicted of generation data are produced by various forecast models specific to a location.
 A forecast is a set of predicted generations, beginning at the
 *initialisation time*. Each subsequent generation's *target time* is equivalent to the
 initialisation time plus the *horizon*.

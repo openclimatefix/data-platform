@@ -9,17 +9,19 @@ import (
 )
 
 type Querier interface {
+	BatchCreateForecasts(ctx context.Context, arg []BatchCreateForecastsParams) *BatchCreateForecastsBatchResults
+	BatchCreateObservations(ctx context.Context, arg []BatchCreateObservationsParams) *BatchCreateObservationsBatchResults
+	BatchCreatePredictedGenerationValues(ctx context.Context, arg []BatchCreatePredictedGenerationValuesParams) *BatchCreatePredictedGenerationValuesBatchResults
+	CopyCreateObservations(ctx context.Context, arg []CopyCreateObservationsParams) (int64, error)
+	CopyCreatePredictedGenerationValues(ctx context.Context, arg []CopyCreatePredictedGenerationValuesParams) (int64, error)
 	// --- Forecasts ---
-	CreateForecast(ctx context.Context, arg CreateForecastParams) (int32, error)
-	//- Queries for the locations table ------------------------------
-	CreateLocation(ctx context.Context, arg CreateLocationParams) (int32, error)
-	CreateLocationSource(ctx context.Context, arg CreateLocationSourceParams) (int32, error)
+	CreateForecast(ctx context.Context, arg CreateForecastParams) (PredForecast, error)
+	CreateLocation(ctx context.Context, arg CreateLocationParams) (CreateLocationRow, error)
+	CreateLocationSource(ctx context.Context, arg CreateLocationSourceParams) (CreateLocationSourceRow, error)
 	// --- Models ---
 	CreateModel(ctx context.Context, arg CreateModelParams) (int32, error)
 	CreateObservation(ctx context.Context, arg CreateObservationParams) error
-	CreateObservations(ctx context.Context, arg []CreateObservationsParams) (int64, error)
 	CreateObserver(ctx context.Context, observerName string) (int32, error)
-	CreatePredictedGenerationValues(ctx context.Context, arg []CreatePredictedGenerationValuesParams) (int64, error)
 	DecomissionLocationSource(ctx context.Context, arg DecomissionLocationSourceParams) error
 	GetDefaultModel(ctx context.Context) (GetDefaultModelRow, error)
 	GetForecastByInitTime(ctx context.Context, arg GetForecastByInitTimeParams) (GetForecastByInitTimeRow, error)
@@ -32,7 +34,10 @@ type Querier interface {
 	GetLocationSource(ctx context.Context, arg GetLocationSourceParams) (GetLocationSourceRow, error)
 	GetModelById(ctx context.Context, modelID int32) (GetModelByIdRow, error)
 	GetObservations(ctx context.Context, arg GetObservationsParams) ([]GetObservationsRow, error)
+	GetObservationsBetween(ctx context.Context, arg GetObservationsBetweenParams) ([]GetObservationsBetweenRow, error)
+	GetObserverByName(ctx context.Context, observerName string) (ObsObserver, error)
 	GetPredictedGenerationValuesForForecast(ctx context.Context, forecastID int32) ([]GetPredictedGenerationValuesForForecastRow, error)
+	GetSourceTypeByName(ctx context.Context, sourceTypeName string) (LocSourceType, error)
 	GetWindowedPredictedGenerationValuesAtHorizon(ctx context.Context, arg GetWindowedPredictedGenerationValuesAtHorizonParams) ([]GetWindowedPredictedGenerationValuesAtHorizonRow, error)
 	ListLocationGeometryByType(ctx context.Context, locationTypeName string) ([]ListLocationGeometryByTypeRow, error)
 	ListLocationIdsByType(ctx context.Context, locationTypeName string) ([]ListLocationIdsByTypeRow, error)
@@ -40,10 +45,10 @@ type Querier interface {
 	ListLocationSourceHistory(ctx context.Context, arg ListLocationSourceHistoryParams) ([]ListLocationSourceHistoryRow, error)
 	ListLocationsByType(ctx context.Context, locationTypeName string) ([]LocLocation, error)
 	ListModels(ctx context.Context) ([]ListModelsRow, error)
-	ListObservations(ctx context.Context, arg ListObservationsParams) ([]ListObservationsRow, error)
 	ListObservers(ctx context.Context) ([]ObsObserver, error)
+	//- Queries for the locations table ------------------------------
+	ListSourceTypes(ctx context.Context) ([]LocSourceType, error)
 	SetDefaultModel(ctx context.Context, modelID int32) error
-	UpdateLocationSource(ctx context.Context, arg UpdateLocationSourceParams) error
 	UpdateLocationSourceCapacity(ctx context.Context, arg UpdateLocationSourceCapacityParams) error
 	UpdateLocationSourceMetadata(ctx context.Context, arg UpdateLocationSourceMetadataParams) error
 }

@@ -4,16 +4,12 @@ syntax = "proto3";
 
 package fcfsapi;
 
+import "fcfsapi/common.proto";
+
 option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
 
 
 // --- Common Message Types ---------------------------------------------------
-
-message Yield {
-  int64 yield_kw = 1;
-  int64 timestamp_unix = 2;
-}
-
 message YieldPrediction {
 
   message Uncertainty {
@@ -31,20 +27,15 @@ message YieldDelta {
   int64 timestamp_unix = 2;
 }
 
-enum EnergySource {
-  ENERGY_SOURCE_UNSPECIFIED = 0;
-  ENERGY_SOURCE_SOLAR = 1;
-  ENERGY_SOURCE_WIND = 2;
-}
-
 // --- Requests and Responses --------------------------------------------------------
 
 message GetPredictedTimeseriesRequest {
   repeated int32 location_ids = 1;
-  EnergySource energy_source = 2;
+  fcfsapi.EnergySource energy_source = 2;
 
-  /** The desired difference between the initialisation time and the target time in minutes.
-   * 0 gives the most recently predicted values.
+  /** The desired minimum difference between the forecast initialisation time,
+   * and each target time in minutes.
+   * A value of 0 gives the most recently predicted values for each target time (default).
    */
   int32 horizon_mins = 3;
 }
@@ -52,6 +43,29 @@ message GetPredictedTimeseriesRequest {
 message GetPredictedTimeseriesResponse {
   int32 location_id = 1;
   repeated YieldPrediction yields = 2;
+}
+
+
+message GetPredictedTimeseriesDeltasRequest {
+  int32 location_id = 1;
+  fcfsapi.EnergySource energy_source = 2;
+
+  /** The desired difference between the initialisation time and the target time in minutes.
+   * 0 gives the most recently predicted deltas, and is the default if not specified.
+   */
+  int32 horizon_mins = 3;
+  /** The name of the desired model to fetch predicted yields from.
+   * If not specified, the default model will be used.
+   */
+  string model_name = 4;
+  /** The version of the model to fetch predicted yields from.
+   * If not specified, the latest version of the named model will be used.
+   */
+  string model_version = 5;
+  /** The name of the provider of observed yields to fetch from.
+   * If not specified, the default observer will be used.
+   */
+  string observer_name = 6;
 }
 
 message GetPredictedTimeseriesDeltasResponse {
@@ -67,13 +81,13 @@ message GetObservedTimeseriesRequest {
 
 message GetObservedTimeseriesResponse {
   int32 location_id = 1;
-  repeated Yield yields = 2;
+  repeated fcfsapi.Yield yields = 2;
 }
 
 
 message GetPredictedCrossSectionRequest {
   repeated int32 location_ids = 1;
-  EnergySource energy_source = 2;
+  fcfsapi.EnergySource energy_source = 2;
   int64 timestamp_unix = 3;
 }
 
@@ -85,7 +99,7 @@ message GetPredictedCrossSectionResponse {
 
 message GetLatestForecastRequest {
   int32 location_id = 1;
-  EnergySource energy_source = 2;
+  fcfsapi.EnergySource energy_source = 2;
 }
 
 message GetLatestForecastResponse {

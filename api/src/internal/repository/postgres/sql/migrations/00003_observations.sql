@@ -47,34 +47,11 @@ CREATE TABLE obs.observed_generation_values (
         REFERENCES loc.locations(location_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
-    observation_time_utc TIMESTAMP NOT NULL
-        CHECK ( observation_time_utc <= CURRENT_TIMESTAMP ),
+    observation_time_utc TIMESTAMP NOT NULL,
+        -- The following check is actually not wanted because of PVLive...
+        -- CHECK ( observation_time_utc <= CURRENT_TIMESTAMP ),
     PRIMARY KEY (location_id, source_type_id, observer_id, observation_time_utc)
 );
-
-/*- Functions -----------------------------------------------------------------*/
-
-CREATE OR REPLACE FUNCTION obs.encode_percent_as_smallint(value REAL) RETURNS SMALLINT
-    LANGUAGE plpgsql
-    IMMUTABLE
-AS $$
-BEGIN
-    -- Convert a float value in the range [0.0, 1.0] to a smallint in the range [0, 30000]
-    -- Allow a little leeway for measurement errors by using 30000 as the max value,
-    -- so values up to 1.09375 (32767 / 30000) are allowed.
-    IF value < 0.0 OR value > (32767::smallint * 100 / 30000)::real THEN
-        RAISE EXCEPTION 'Percentage value % must be in the range [0.0, 109.3]', value;
-    END IF;
-    RETURN CAST(value * 30000 AS SMALLINT);
-END;
-
-CREATE OR REPLACE FUNCTION obs.decode_smallint_to_percent(value SMALLINT) RETURNS REAL
-    LANGUAGE plpgsql
-    IMMUTABLE
-AS $$
-BEGIN
-    RETURN CAST(value AS REAL) * 100 / 30000.0;
-END;
 
 -- +goose Down
 DROP SCHEMA obs CASCADE;

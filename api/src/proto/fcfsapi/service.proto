@@ -2,8 +2,7 @@ syntax = "proto3";
 
 package fcfsapi;
 
-import "fcfsapi/location.proto";
-import "fcfsapi/forecast.proto";
+import "fcfsapi/crud.proto";
 import "fcfsapi/quartzui.proto";
 
 option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
@@ -14,27 +13,24 @@ service QuartzAPI {
   // Procedures that will be used by the frontend
 
   rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesResponse) {}
-  rpc GetPredictedTimeseriesDeltas(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesDeltasResponse) {}
+  rpc GetPredictedTimeseriesDeltas(GetPredictedTimeseriesDeltasRequest) returns (GetPredictedTimeseriesDeltasResponse) {}
   rpc GetPredictedCrossSection(GetPredictedCrossSectionRequest) returns (GetPredictedCrossSectionResponse) {}
   rpc GetObservedTimeseries(GetObservedTimeseriesRequest) returns (stream GetObservedTimeseriesResponse) {}
   rpc GetLatestForecast(GetLatestForecastRequest) returns (GetLatestForecastResponse) {}
   rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
 
-  // --- Locations ----------------------------------------------------------------
-  // These could be split as they are, with a procedure for each type of location
-  // or, they could be combined into a single procedure with a type field in the message
+  // --- Crud ---------------------------------------------------------------------
 
-  rpc CreateSolarSite(CreateSiteRequest) returns (CreateLocationResponse) {}
-  rpc CreateSolarGsp(CreateGspRequest) returns (CreateLocationResponse) {}
+  rpc CreateSite(CreateSiteRequest) returns (CreateLocationResponse) {}
+  rpc CreateGsp(CreateGspRequest) returns (CreateLocationResponse) {}
 
-  rpc GetSolarLocation(GetLocationRequest) returns (GetLocationResponse) {}
-
-
-  // --- Predictions ---------------------------------------------------------------
+  rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
 
   rpc CreateModel(CreateModelRequest) returns (CreateModelResponse) {}
+  rpc CreateForecast(CreateForecastRequest) returns (CreateForecastResponse) {}
 
-  rpc CreateSolarForecast(CreateForecastRequest) returns (CreateForecastResponse) {}
+  rpc CreateObserver(CreateObserverRequest) returns (CreateObserverResponse) {}
+  rpc CreateObservations(CreateObservationsRequest) returns (CreateObservationsResponse) {}
 }
 
 

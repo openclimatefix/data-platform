@@ -130,31 +130,52 @@ func setupClient(tb testing.TB, pgConnString string) fcfsapi.QuartzAPIClient {
 type seedDBParams struct {
 	NumLocations int
 	NumModels int
-	NumDaysOfForecastsPerLocation int
+	NumForecastsPerLocation int
 	PgvResolutionMins int
 	ForecastResolutionMins int
 	ForecastLengthHours int
+	SeedObservedValues bool
 }
 
 func (s *seedDBParams) NumPgvsPerForecast() int {
 	return (s.ForecastLengthHours * 60) / s.PgvResolutionMins
 }
 
-func (s *seedDBParams) NumForecastsPerLocation() int {
-	return (s.NumDaysOfForecastsPerLocation * 24 * 60) / s.ForecastResolutionMins
-}
-
 func (s *seedDBParams) NumPgvRows() int {
-	return s.NumLocations * s.NumForecastsPerLocation() * s.NumPgvsPerForecast()
+	return s.NumLocations * s.NumForecastsPerLocation * s.NumPgvsPerForecast()
 }
 
-// seedDB is a helper function to create a populated database
-// with a configurable number of entries.
+func (s *seedDBParams) SeededDataPeriod() (time.Time, time.Time) {
+	// Calculate the start and end times for the seeded data
+	endTime := time.Now().Truncate(time.Minute).Add(time.Duration(s.ForecastLengthHours) * time.Hour)
+	startTime := time.Now().Truncate(time.Minute).Add(-time.Duration(s.ForecastResolutionMins * (s.NumForecastsPerLocation - 1)) * time.Minute)
+	return startTime, endTime
+}
+
+func (s *seedDBParams) ObservationTimes() (times []time.Time) {
+	if !s.SeedObservedValues {
+		return times
+	}
+	start, end := s.SeededDataPeriod()
+	numObs := int(end.Sub(start).Minutes() / float64(s.PgvResolutionMins))
+	for i := range numObs {
+		t := start.Add(time.Duration(i) * time.Duration(s.PgvResolutionMins) * time.Minute)
+		times = append(times, t)
+	}
+	return times
+}
+
+// seedDB is a helper function to create a populated database.
+// The default behaviour is to write deterministic values according to the following testable rules:
+//
+// - Each site has a capacity of 1000kW
+// - Generation values move linearly from 0-100% of capacity over the forecast length
+// - All observed values are half of the capacity of the location 
 func seedDB(
-	c fcfsapi.QuartzAPIClient,
-	ps *seedDBParams,
 	ctx context.Context,
+	c fcfsapi.QuartzAPIClient,
 	rSeed int64,
+	ps *seedDBParams,
 ) (defaultModelId int32, locationIds[] int32, err error) {
 	r := rand.New(rand.NewSource(rSeed))
 
@@ -177,37 +198,43 @@ func seedDB(
 
 	for i := range ps.NumLocations {
 		// Seed the locations
-		locationResp, err := c.CreateSolarSite(ctx, &fcfsapi.CreateSiteRequest{
+		locationResp, err := c.CreateSite(ctx, &fcfsapi.CreateSiteRequest{
 			Name:       fmt.Sprintf("TESTSITE%03d", i),
 			Latitude:   float32(r.Intn(180) - 90),
 			Longitude:  float32(r.Intn(360) - 180),
-			CapacityKw: int64(r.Intn(100000)), // 100GW
+			EnergySource: fcfsapi.EnergySource_ENERGY_SOURCE_SOLAR,
+			CapacityKw: int64(1000),
 			Metadata:   "",
 		})
 		if err != nil {
-			return defaultModelId, locationIds, fmt.Errorf("failed to create solar site: %w", err)
+			return defaultModelId, locationIds, fmt.Errorf("failed to create site: %w", err)
 		}
 		locationIds = append(locationIds, locationResp.LocationId)
 
 		// Seed location source forecasts and predicted generation values
-		for j := range ps.NumForecastsPerLocation() {
-			initTime := latestInitTime.Add(-time.Duration(j) * time.Duration(ps.ForecastResolutionMins) * time.Minute)
-			predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, ps.NumPgvsPerForecast())
+		for j := range ps.NumForecastsPerLocation {
+			initTime := latestInitTime.Add(
+				-time.Duration(j) * time.Duration(ps.ForecastResolutionMins) * time.Minute,
+			)
+			predictedGenerationValues := make(
+				[]*fcfsapi.CreateForecastRequest_PredictedGenerationValue, ps.NumPgvsPerForecast(),
+			)
 
 			for k := range predictedGenerationValues {
-				p50 := int32(r.Intn(29000)) + 101
-				predictedGenerationValues[k] = &fcfsapi.PredictedGenerationValue{
+				p50pct := float32((100 / ps.NumPgvsPerForecast()) * k) 
+				predictedGenerationValues[k] = &fcfsapi.CreateForecastRequest_PredictedGenerationValue{
 					HorizonMins: int32(k * ps.PgvResolutionMins),
-					P50:         p50,
-					P10:         p50 - int32(r.Intn(100)),
-					P90:         p50 + int32(r.Intn(100)),
+					P50Pct: float32(p50pct),
+					P10Pct:         max(p50pct - r.Float32(), 0),
+					P90Pct:         min(p50pct + r.Float32(), 109),
 					Metadata:    "{\"source\": \"test\"}",
 				}
 			}
 
-			_, err := c.CreateSolarForecast(ctx, &fcfsapi.CreateForecastRequest{
+			_, err := c.CreateForecast(ctx, &fcfsapi.CreateForecastRequest{
 				Forecast:                  &fcfsapi.Forecast{
 					ModelId:     int32(defaultModelId),
+					EnergySource: fcfsapi.EnergySource_ENERGY_SOURCE_SOLAR,
 					LocationId:  locationResp.LocationId,
 					InitTimeUtc: timestamppb.New(initTime),
 				},
@@ -218,6 +245,32 @@ func seedDB(
 			}
 		}
 	}
+
+	if ps.SeedObservedValues {
+		_, err := c.CreateObserver(ctx, &fcfsapi.CreateObserverRequest{Name: "test-observer"})
+		if err != nil {
+			return defaultModelId, locationIds, fmt.Errorf("failed to create observer: %w", err)
+		}
+		for i, locationId := range locationIds {
+			observations := make([]*fcfsapi.Yield, len(ps.ObservationTimes()))
+			for i, t := range ps.ObservationTimes() {
+				observations[i] = &fcfsapi.Yield{
+					YieldKw:       int64(500), // Always half of capacity
+					TimestampUnix: t.UTC().Unix(),
+				}
+			}
+			_, err := c.CreateObservations(ctx, &fcfsapi.CreateObservationsRequest{
+				LocationId:   locationId,
+				EnergySource: fcfsapi.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: "test-observer",
+				Yields:       observations,
+			})
+			if err != nil {
+				return defaultModelId, locationIds, fmt.Errorf("failed to create observations for location %d: %w", i, err)
+			}
+		}
+	}
+
 
 	return defaultModelId, locationIds, nil
 }
@@ -267,6 +320,7 @@ func TestCreateSolarSite(t *testing.T) {
 		Longitude:  -0.0005,
 		CapacityKw: 1280,
 		Metadata:   `{"group": "test-sites"}`,
+		EnergySource: fcfsapi.EnergySource_ENERGY_SOURCE_SOLAR,
 	}
 
 	tests := []struct {
@@ -287,6 +341,7 @@ func TestCreateSolarSite(t *testing.T) {
 				Longitude: defaultSite.Longitude,
 				CapacityKw: 100000000, // 100 GW
 				Metadata: defaultSite.Metadata,
+				EnergySource: defaultSite.EnergySource,
 			},
 			shouldError: false,
 		},
@@ -298,17 +353,19 @@ func TestCreateSolarSite(t *testing.T) {
 				Longitude: defaultSite.Longitude,
 				CapacityKw: -1000, // Invalid capacity
 				Metadata: defaultSite.Metadata,
+				EnergySource: defaultSite.EnergySource,
 			},
 			shouldError: true,
 		},
 		{
-			name: "Shoudln't create site with invalid metadata",
+			name: "Shouldn't create site with invalid metadata",
 			site: &fcfsapi.CreateSiteRequest{
 				Name: "INVALID METADATA SITE",
 				Latitude: defaultSite.Latitude,
 				Longitude: defaultSite.Longitude,
 				CapacityKw: defaultSite.CapacityKw,
 				Metadata: "{}", // Empty metadata
+				EnergySource: defaultSite.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -320,6 +377,7 @@ func TestCreateSolarSite(t *testing.T) {
 				Longitude: defaultSite.Longitude,
 				CapacityKw: defaultSite.CapacityKw,
 				Metadata: defaultSite.Metadata,
+				EnergySource: defaultSite.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -327,13 +385,13 @@ func TestCreateSolarSite(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := c.CreateSolarSite(t.Context(), tt.site)
+			resp, err := c.CreateSite(t.Context(), tt.site)
 			if tt.shouldError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 				// Try to read it back
-				resp2, err := c.GetSolarLocation(
+				resp2, err := c.GetLocation(
 					t.Context(),
 					&fcfsapi.GetLocationRequest{LocationId: resp.LocationId},
 				)
@@ -347,7 +405,7 @@ func TestCreateSolarSite(t *testing.T) {
 		})  
 	}
 	t.Run("Shouldn't get non-existent site", func(t *testing.T) {
-		_, err := c.GetSolarLocation(
+		_, err := c.GetLocation(
 			t.Context(),
 			&fcfsapi.GetLocationRequest{LocationId: 999999},
 		)
@@ -363,6 +421,7 @@ func TestCreateSolarGSP(t *testing.T) {
 		Metadata:   `{"group": "test-gsps"}`,
 		Geometry:   "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5))",
 		CapacityMw: 2002,
+		EnergySource: fcfsapi.EnergySource_ENERGY_SOURCE_SOLAR,
 	}
 
 	tests := []struct {
@@ -382,6 +441,7 @@ func TestCreateSolarGSP(t *testing.T) {
 				Metadata:   defaultGsp.Metadata,
 				Geometry:   defaultGsp.Geometry,
 				CapacityMw: 1000000, // 1000 GW
+				EnergySource: defaultGsp.EnergySource,
 			},
 			shouldError: false,
 		},
@@ -392,6 +452,7 @@ func TestCreateSolarGSP(t *testing.T) {
 				Metadata:   defaultGsp.Metadata,
 				Geometry:   defaultGsp.Geometry,
 				CapacityMw: -1000, // Invalid capacity
+				EnergySource: defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -402,6 +463,7 @@ func TestCreateSolarGSP(t *testing.T) {
 				Metadata:   defaultGsp.Metadata,
 				Geometry:   "INVALID GEOMETRY",
 				CapacityMw: defaultGsp.CapacityMw,
+				EnergySource: defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -412,6 +474,7 @@ func TestCreateSolarGSP(t *testing.T) {
 				Metadata:   defaultGsp.Metadata,
 				Geometry:   "POLYGON((0.0 51.5 0.0, 1.0 51.5 0.0, 1.0 52.0 0.0, 0.0 52.0 0.0, 0.0 51.5 0.0))",
 				CapacityMw: defaultGsp.CapacityMw,
+				EnergySource: defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -422,6 +485,7 @@ func TestCreateSolarGSP(t *testing.T) {
 				Metadata:   defaultGsp.Metadata,
 				Geometry:   "",
 				CapacityMw: defaultGsp.CapacityMw,
+				EnergySource: defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -432,6 +496,7 @@ func TestCreateSolarGSP(t *testing.T) {
 				Metadata:   defaultGsp.Metadata,
 				Geometry:   defaultGsp.Geometry,
 				CapacityMw: defaultGsp.CapacityMw,
+				EnergySource: defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -439,13 +504,15 @@ func TestCreateSolarGSP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := c.CreateSolarGsp(t.Context(), tt.gsp)
+			resp, err := c.CreateGsp(t.Context(), tt.gsp)
 			if tt.shouldError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 				// Try to read it back
-				resp2, err := c.GetSolarLocation(t.Context(), &fcfsapi.GetLocationRequest{LocationId: resp.LocationId})
+				resp2, err := c.GetLocation(
+					t.Context(), &fcfsapi.GetLocationRequest{LocationId: resp.LocationId},
+				)
 				require.NoError(t, err)
 				require.Equal(t, tt.gsp.Name, resp2.Name)
 				require.Equal(t, tt.gsp.Metadata, resp2.Metadata)
@@ -455,7 +522,7 @@ func TestCreateSolarGSP(t *testing.T) {
 	}
 	
 	t.Run("Shouldn't get non-existent GSP", func(t *testing.T) {
-		_, err := c.GetSolarLocation(t.Context(), &fcfsapi.GetLocationRequest{LocationId: 999999})
+		_, err := c.GetLocation(t.Context(), &fcfsapi.GetLocationRequest{LocationId: 999999})
 		require.Error(t, err)
 	})
 }
@@ -466,12 +533,13 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 	// Create some locations
 	siteIds := make([]int32, 3)
 	for i := range siteIds {
-		resp, err := c.CreateSolarSite(t.Context(), &fcfsapi.CreateSiteRequest{
+		resp, err := c.CreateSite(t.Context(), &fcfsapi.CreateSiteRequest{
 			Name:       fmt.Sprintf("TESTSITE%02d", i),
 			Latitude:   51.5 + float32(i)*0.01,
 			Longitude:  -0.1 + float32(i)*0.01,
 			CapacityKw: int64(1000 + i*100),
 			Metadata:   "",
+			EnergySource: fcfsapi.EnergySource_ENERGY_SOURCE_SOLAR,
 		})
 		require.NoError(t, err)
 		siteIds[i] = resp.LocationId
@@ -490,63 +558,23 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 func TestGetPredictedTimeseries(t *testing.T) {
 	c := setupClient(t, createPostgresContainer(t))
 
-	latestForecastTime := time.Now().Truncate(time.Minute)
-
-	capacityKw := int64(1200)
-
-	// Create a location, source, and model to use for the forecasts
-	locResp, err := c.CreateSolarSite(t.Context(), &fcfsapi.CreateSiteRequest{
-		Name:       "TEST LOCATION",
-		Latitude:   51.5,
-		Longitude:  -0.1,
-		CapacityKw: capacityKw,
-		Metadata:   "",
+	// Create four forecasts, each half an hour apart, up to the latestForecastTime
+	// Give each forecast one hour's worth of predicted generation values, occurring every 5 minutes
+	_, locationIDs, err := seedDB(t.Context(), c, 1, &seedDBParams{
+		NumLocations:            1,
+		NumModels:               1,
+		NumForecastsPerLocation: 4,
+		PgvResolutionMins:       5,
+		ForecastResolutionMins:  30,
+		ForecastLengthHours:     1,
+		SeedObservedValues:      false,
 	})
 	require.NoError(t, err)
-	modelResp, err := c.CreateModel(t.Context(), &fcfsapi.CreateModelRequest{
-		Name:        "testmodel",
-		Version:     "1.0.0",
-		MakeDefault: true,
-	})
-	require.NoError(t, err)
-
-	for i := 3; i >= 0; i-- {
-		// Create four forecasts, each half an hour apart, up to the latestForecastTime
-		init_time := latestForecastTime.Add(-1 * time.Duration(i) * 30 * time.Minute)
-		// Give each forecast one hour's worth of predicted generation values, occurring every 10 minutes
-		predictedGenerationValues := make([]*fcfsapi.PredictedGenerationValue, 60 / 5)
-
-		for j := range predictedGenerationValues {
-			predictedGenerationValues[j] = &fcfsapi.PredictedGenerationValue{
-				HorizonMins: int32(j * 5),
-				P50:         (int32(i * 100) + int32(j * 5)) * 10,
-				P10:         int32(i),
-				P90:         int32(i),
-				Metadata:    "",
-			}
-		}
-
-		req := &fcfsapi.CreateForecastRequest{
-			Forecast: &fcfsapi.Forecast{
-				ModelId: modelResp.ModelId,
-				InitTimeUtc: timestamppb.New(init_time),
-				LocationId: locResp.LocationId,
-			},
-			PredictedGenerationValues: predictedGenerationValues,
-		}
-		resp, err := c.CreateSolarForecast(t.Context(), req)
-		require.NoError(t, err)
-		require.NotNil(t, resp)
-	}
-
-	// We now have four forecasts.
-	// The values of the first forecast are 3000, 3050, 3100, 3150, 3200... 3550
-	// The second, 2000, 2050, 2100, 2150, 2200... 2550 and so on
 
 	// For each horizon, get the predicted timeseries
 	tests := []struct{
 		horizonMins int32
-		expectedValues []int32
+		expectedValues []int64
 	}{
 		{
 			// For horizon 0, we should get all the values from the latest forecast,
@@ -554,50 +582,52 @@ func TestGetPredictedTimeseries(t *testing.T) {
 			// for each target time.
 			// Since the predicted values are every 5 minutes, and the forecasts are every 30,
 			// we should get 6 values from each forecast, until the latest where we get all 12.
+			// 100 // 12 = 8, so
 			// This means the values we are fetching should be
-			// 3000, 3050, 3100, 3150, 3200, 3250 (horizons 0 to 25 minutes from forecast 3)
-			// 2000, 2050, 2100, 2150, 2200, 2250 (horizons 0 to 25 minutes from forecast 2)
-			// (forecast 3's values for the same target time here have a greater horizon so are not wanted)
-			// 1000, 1050, 1100, 1150, 1200, 1250 (horizons 0 to 25 minutes from forecast 1)
-			// 0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550 (horizons 0 to 55 minutes from forecast 0)
-			// For simplicity, the values are written in the tests as the P50 values,
-			// but remember they will be in kilowatts according to capacity in the response.
+			// 0, 8, 16, 24, 32, 40 (horizons 0 to 25 minutes from forecast 3)
+			// Then the same from forecast 2, as it's horizon is smaller - likewise then forecast 1
+			// 0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88 (horizons 0 to 55 minutes from forecast 0)
+			// These values are all percentages of the capacity, which is 1000kW, so they should be
+			// all multiplied by 10 to get the actual values in kW.
 			horizonMins: 0,
-			expectedValues: []int32{
-				300, 305, 310, 315, 320, 325,
-				200, 205, 210, 215, 220, 225,
-				100, 105, 110, 115, 120, 125,
-				0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55,
+			expectedValues: []int64{
+				0, 80, 160, 240, 320, 400,
+				0, 80, 160, 240, 320, 400,
+				0, 80, 160, 240, 320, 400,
+				0, 80, 160, 240, 320, 400, 480, 560, 640, 720, 800, 880,
 			},
 		},
 		{
+			// For horizon of 14 minutes, anything with a lesser horizon should not be included.
+			// So the value for 0, 5, and 10 minutes should not be included.
 			horizonMins: 14,
-			expectedValues: []int32{
-				315, 320, 325, 330, 335, 340,
-				215, 220, 225, 230, 235, 240,
-				115, 120, 125, 130, 135, 140,
-				15, 20, 25, 30, 35, 40, 45, 50, 55,
+			expectedValues: []int64{
+				240, 320, 400, 480, 560, 640,
+				240, 320, 400, 480, 560, 640,
+				240, 320, 400, 480, 560, 640,
+				240, 320, 400, 480, 560, 640, 720, 800, 880,
 			},
 		},
 		{
 			horizonMins: 30,
-			expectedValues: []int32{
-				330, 335, 340, 345, 350, 355,
-				230, 235, 240, 245, 250, 255,
-				130, 135, 140, 145, 150, 155,
-				30, 35, 40, 45, 50, 55,
+			expectedValues: []int64{
+				480, 560, 640, 720, 800, 880,
+				480, 560, 640, 720, 800, 880,
+				480, 560, 640, 720, 800, 880,
+				480, 560, 640, 720, 800, 880,
 			},
 		},
 		{
 			horizonMins: 60,
-			expectedValues: []int32{},
+			expectedValues: []int64{},
 		},
 	}
 
 	for _, tt := range tests {
+
 		t.Run(fmt.Sprintf("Horizon %d mins", tt.horizonMins), func(t *testing.T) {
 			stream, err := c.GetPredictedTimeseries(t.Context(), &fcfsapi.GetPredictedTimeseriesRequest{
-				LocationIds: []int32{locResp.LocationId},
+				LocationIds: locationIDs,
 				HorizonMins: int32(tt.horizonMins),
 			})
 			require.NoError(t, err)
@@ -608,28 +638,75 @@ func TestGetPredictedTimeseries(t *testing.T) {
 					break
 				}
 				require.NotNil(t, resp)
-				require.Equal(t, locResp.LocationId, resp.LocationId)
-
-				expectedValues := make([]int32, len(tt.expectedValues))
-				for i, v := range tt.expectedValues {
-					expectedValues[i] = v * 10 * int32(capacityKw) / 30000
-				}
 
 				targetTimes := make([]int64, len(resp.Yields))
-				actualValues := make([]int32, len(resp.Yields))
+				actualValues := make([]int64, len(resp.Yields))
 				for i, v := range resp.Yields {
 					targetTimes[i] = v.TimestampUnix
-					// Don't forget the values were multiplied by 10 to be significant,
-					// and we need to get them as a function of the capacity in Kw
-					actualValues[i] = int32(v.YieldKw)
+					actualValues[i] = v.YieldKw
 				}
 				require.IsIncreasing(t, targetTimes)
-				require.Equal(t, expectedValues, actualValues)
+				require.Equal(t, tt.expectedValues, actualValues)
 			}
 		})
+
 	}
 }
 
+func TestGetPredictedTimeseriesDeltas(t *testing.T) {
+	c := setupClient(t, createPostgresContainer(t))
+
+	_, locationIds, err := seedDB(t.Context(), c, 0, &seedDBParams{
+		NumLocations:            1,
+		NumModels:               1,
+		NumForecastsPerLocation: 4,
+		PgvResolutionMins:       5,
+		ForecastResolutionMins:  30,
+		ForecastLengthHours:     1,
+		SeedObservedValues:      true,
+	})
+	require.NoError(t, err)
+
+	tests := []struct {
+		horizonMins int32
+		expectedValues []int64
+	}{
+		{
+			// Observed values are half of the capacity, so subtract 500 from the expected values from
+			// the non-delta test.
+			horizonMins: 0,
+			expectedValues: []int64{
+				0-500, 80-500, 160-500, 240-500, 320-500, 400-500,
+				0-500, 80-500, 160-500, 240-500, 320-500, 400-500,
+				0-500, 80-500, 160-500, 240-500, 320-500, 400-500,
+				0-500, 80-500, 160-500, 240-500, 320-500, 400-500,
+				480-500, 560-500, 640-500, 720-500, 800-500, 880-500,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Horizon %d mins (deltas)", tt.horizonMins), func(t *testing.T) {
+			deltaResp, err := c.GetPredictedTimeseriesDeltas(t.Context(), &fcfsapi.GetPredictedTimeseriesDeltasRequest{
+				LocationId:   locationIds[0],
+				HorizonMins:  int32(tt.horizonMins),
+				EnergySource: fcfsapi.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: "test-observer",
+			})
+			require.NoError(t, err)
+
+			targetTimes := make([]int64, len(deltaResp.Deltas))
+			actualValues := make([]int64, len(deltaResp.Deltas))
+			for i, v := range deltaResp.Deltas {
+				targetTimes[i] = v.TimestampUnix
+				actualValues[i] = v.DeltaKw
+			}
+			require.IsIncreasing(t, targetTimes)
+			require.Equal(t, tt.expectedValues, actualValues)
+		})
+	}
+
+}
 
 // --- BENCHMARKS ---------------------------------------------------------------------------------
 
@@ -641,7 +718,7 @@ func BenchmarkGetPredictedTimeseries(b *testing.B) {
 		{
 			NumLocations:                  1,
 			NumModels:                	   10,
-			NumDaysOfForecastsPerLocation: 1,
+			NumForecastsPerLocation:       24,
 			PgvResolutionMins:             30,
 			ForecastResolutionMins:        60,
 			ForecastLengthHours:           8,
@@ -649,7 +726,7 @@ func BenchmarkGetPredictedTimeseries(b *testing.B) {
 		{
 			NumLocations:                  100,
 			NumModels:                     10,
-			NumDaysOfForecastsPerLocation: 1,
+			NumForecastsPerLocation:       48,
 			PgvResolutionMins:             30,
 			ForecastResolutionMins:        30,
 			ForecastLengthHours:           8,
@@ -657,16 +734,16 @@ func BenchmarkGetPredictedTimeseries(b *testing.B) {
 		{
 			NumLocations:                  100,
 			NumModels:                     10,
-			NumDaysOfForecastsPerLocation: 7,
-			PgvResolutionMins:             30,
-			ForecastResolutionMins:        5,
+			NumForecastsPerLocation:       7 * 48,
+			PgvResolutionMins:             5,
+			ForecastResolutionMins:        30,
 			ForecastLengthHours:           24,
 		},
 	}
 
 	for i, tt := range tests {
 		b.Run(fmt.Sprintf("NumRows=%d", tt.NumPgvRows()), func(b *testing.B) {
-			_, locationIds, err := seedDB(c, &tt, b.Context(), int64(i))
+			_, locationIds, err := seedDB(b.Context(), c, int64(i), &tt)
 			require.NoError(b, err)
 
 			for b.Loop() {

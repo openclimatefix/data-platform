@@ -125,11 +125,11 @@ CREATE INDEX ON loc.location_sources USING GIST (location_id, source_type_id, sy
 CREATE INDEX ON loc.location_sources USING GIST (sys_period);
 
 
-/*- Triggers --------------------------------------------------------------------------------*/
+/*- Functions --------------------------------------------------------------------------------*/
 
 -- +goose StatementBegin
 -- Function to ensure a properly kept historic record
-CREATE OR REPLACE FUNCTION handle_location_source_change()
+CREATE OR REPLACE FUNCTION loc.handle_location_source_change()
 RETURNS TRIGGER AS $$
 DECLARE current_ts TIMESTAMP := transaction_timestamp();
 BEGIN
@@ -194,8 +194,47 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_location_source_change
 BEFORE UPDATE OR DELETE OR INSERT ON loc.location_sources
-FOR EACH ROW EXECUTE FUNCTION handle_location_source_change();
+FOR EACH ROW EXECUTE FUNCTION loc.handle_location_source_change();
+-- +goose StatementEnd
 
+-- +goose StatementBegin
+-- Get a kilowatt value as a smallint with an power of 10 exponent multiplier
+CREATE OR REPLACE FUNCTION loc.encode_kw(value_kilowatts BIGINT)
+RETURNS TABLE(value SMALLINT, exponent SMALLINT) AS $$
+DECLARE
+    current_value BIGINT;
+    exponent SMALLINT;
+    max_smallint CONSTANT BIGINT := 32767;
+    max_exponent CONSTANT SMALLINT := 18;  -- Limit to ExaWatts (current generation is ~20PW globally!)
+BEGIN
+    IF value_kilowatts < 0 THEN
+        RAISE EXCEPTION 'Negative values are not allowed: %', value_kilowatts;
+    ELSIF value_kilowatts = 0 THEN
+        RETURN QUERY SELECT 0, 0;
+    END IF;
+
+    current_value := value_kilowatts * 1000;
+    exponent := 0;
+
+    -- Keep increasing the exponent by factors of three until the value is under the smallint limit
+    WHILE current_value > max_smallint LOOP
+        IF exponent >= max_exponent THEN
+            RAISE EXCEPTION 'Input capacity %kW results in a value greater than % ExaWatts, which is not supported.', capacity_kw, max_smallint;
+        END IF;
+        -- Divide by 1000 to get the next SI unit prefix, rounding up via the addition of 500
+        current_value := (current_value + 500) / 1000;
+        exponent := exponent + 3;
+
+        IF current_value = 0 THEN
+             RAISE EXCEPTION 'Scaled value rounded to zero from large input %kW at potential exponent %.', capacity_kw, exponent;
+        END IF;
+    END LOOP;
+
+    -- Now safe to cast the current_value to SMALLINT
+    RETURN QUERY SELECT current_value::SMALLINT, exponent;
+
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
 -- +goose StatementEnd
 
 -- +goose Down

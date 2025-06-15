@@ -1,0 +1,106 @@
+// Messages for the forecast procedures or the QuartzAPI
+
+syntax = "proto3";
+
+package fcfsapi;
+
+import "fcfsapi/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
+
+message CreateModelRequest {
+  string name = 1;
+  string version = 2;
+  bool make_default = 3;
+}
+
+message CreateModelResponse {
+  int32 model_id = 1;
+}
+
+message Forecast {
+  int32 model_id = 1;
+  int32 location_id = 2;
+  fcfsapi.EnergySource energy_source = 3;
+  google.protobuf.Timestamp init_time_utc = 4;
+}
+
+message CreateForecastRequest {
+  message PredictedGenerationValue {
+    int32 horizon_mins = 1;
+    float p50_pct = 2;
+    float p10_pct = 3;
+    float p90_pct = 4;
+    string metadata = 5;
+  }
+
+  Forecast forecast = 1;
+  repeated CreateForecastRequest.PredictedGenerationValue predicted_generation_values = 2;
+}
+
+message CreateForecastResponse {
+  int64 forecast_id = 1;
+}
+
+message CreateSiteRequest {
+  string name = 1;
+  fcfsapi.EnergySource energy_source = 2;
+  float latitude = 3;
+  float longitude = 4;
+  int64 capacity_kw = 5;
+  string metadata = 6;
+}
+
+message CreateGspRequest {
+  string name = 1;
+  fcfsapi.EnergySource energy_source = 2;
+  string geometry = 3;
+  int64 capacity_mw = 4;
+  string metadata = 5;
+}
+
+message CreateLocationResponse {
+  int32 location_id = 1;
+}
+
+message GetLocationRequest {
+  int32 location_id = 1;
+  fcfsapi.EnergySource energy_source = 2;
+}
+
+message GetLocationResponse {
+  int32 location_id = 1;
+  string name = 2;
+  float latitude = 3;
+  float longitude = 4;
+  int64 capacity_kw = 5;
+  string metadata = 6;
+}
+
+message GetLocationsAsGeoJSONRequest {
+  repeated int32 location_ids = 1;
+  bool unsimplified = 2;
+}
+
+message GetLocationsAsGeoJSONResponse {
+  string geojson = 1;
+}
+
+message CreateObservationsRequest {
+  int32 location_id = 1;
+  fcfsapi.EnergySource energy_source = 2;
+  string observer_name = 3;
+  repeated fcfsapi.Yield yields = 4;
+}
+
+message CreateObservationsResponse {}
+
+message CreateObserverRequest {
+  string name = 1;
+}
+
+message CreateObserverResponse {
+  int32 observer_id = 1;
+}
+

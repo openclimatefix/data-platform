@@ -11,13 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CopyCreatePredictedGenerationValuesParams struct {
+	HorizonMins   int16
+	P10           *int16
+	P50           int16
+	P90           *int16
+	ForecastID    int32
+	TargetTimeUtc pgtype.Timestamp
+	Metadata      []byte
+}
+
 const createForecast = `-- name: CreateForecast :one
 
 INSERT INTO pred.forecasts(
     source_type_id, location_id, model_id, init_time_utc
 ) VALUES (
     (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $1, $3, $4
-) RETURNING forecast_id
+) RETURNING source_type_id, forecast_id, location_id, model_id, init_time_utc
 `
 
 type CreateForecastParams struct {
@@ -28,16 +38,22 @@ type CreateForecastParams struct {
 }
 
 // --- Forecasts ---
-func (q *Queries) CreateForecast(ctx context.Context, arg CreateForecastParams) (int32, error) {
+func (q *Queries) CreateForecast(ctx context.Context, arg CreateForecastParams) (PredForecast, error) {
 	row := q.db.QueryRow(ctx, createForecast,
 		arg.LocationID,
 		arg.SourceTypeName,
 		arg.ModelID,
 		arg.InitTimeUtc,
 	)
-	var forecast_id int32
-	err := row.Scan(&forecast_id)
-	return forecast_id, err
+	var i PredForecast
+	err := row.Scan(
+		&i.SourceTypeID,
+		&i.ForecastID,
+		&i.LocationID,
+		&i.ModelID,
+		&i.InitTimeUtc,
+	)
+	return i, err
 }
 
 const createModel = `-- name: CreateModel :one
@@ -58,16 +74,6 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (int32
 	var model_id int32
 	err := row.Scan(&model_id)
 	return model_id, err
-}
-
-type CreatePredictedGenerationValuesParams struct {
-	HorizonMins   int16
-	P10           *int16
-	P50           int16
-	P90           *int16
-	ForecastID    int32
-	TargetTimeUtc pgtype.Timestamp
-	Metadata      []byte
 }
 
 const getDefaultModel = `-- name: GetDefaultModel :one
@@ -320,9 +326,9 @@ func (q *Queries) GetModelById(ctx context.Context, modelID int32) (GetModelById
 const getPredictedGenerationValuesForForecast = `-- name: GetPredictedGenerationValuesForForecast :many
 SELECT
     horizon_mins,
-    p10,
-    p50,
-    p90,
+    decode_smallint(p10) AS p10_pct,
+    decode_smallint(p50) AS p50_pct,
+    decode_smallint(p90) AS p90_pct,
     target_time_utc,
     metadata
 FROM pred.predicted_generation_values
@@ -331,9 +337,9 @@ WHERE forecast_id = $1
 
 type GetPredictedGenerationValuesForForecastRow struct {
 	HorizonMins   int16
-	P10           *int16
-	P50           int16
-	P90           *int16
+	P10Pct        float32
+	P50Pct        float32
+	P90Pct        float32
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
 }
@@ -349,9 +355,9 @@ func (q *Queries) GetPredictedGenerationValuesForForecast(ctx context.Context, f
 		var i GetPredictedGenerationValuesForForecastRow
 		if err := rows.Scan(
 			&i.HorizonMins,
-			&i.P10,
-			&i.P50,
-			&i.P90,
+			&i.P10Pct,
+			&i.P50Pct,
+			&i.P90Pct,
 			&i.TargetTimeUtc,
 			&i.Metadata,
 		); err != nil {
@@ -403,9 +409,9 @@ rankedPredictions AS (
 SELECT
     -- For each target time, choose the value with the lowest available horizon
     rp.horizon_mins,
-    rp.p10,
-    rp.p50,
-    rp.p90,
+    decode_smallint(p10) AS p10_pct,
+    decode_smallint(p50) AS p50_pct,
+    decode_smallint(p90) AS p90_pct,
     rp.target_time_utc,
     rp.metadata
 FROM rankedPredictions rp
@@ -422,9 +428,9 @@ type GetWindowedPredictedGenerationValuesAtHorizonParams struct {
 
 type GetWindowedPredictedGenerationValuesAtHorizonRow struct {
 	HorizonMins   int16
-	P10           *int16
-	P50           int16
-	P90           *int16
+	P10Pct        float32
+	P50Pct        float32
+	P90Pct        float32
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
 }
@@ -445,9 +451,9 @@ func (q *Queries) GetWindowedPredictedGenerationValuesAtHorizon(ctx context.Cont
 		var i GetWindowedPredictedGenerationValuesAtHorizonRow
 		if err := rows.Scan(
 			&i.HorizonMins,
-			&i.P10,
-			&i.P50,
-			&i.P90,
+			&i.P10Pct,
+			&i.P50Pct,
+			&i.P90Pct,
 			&i.TargetTimeUtc,
 			&i.Metadata,
 		); err != nil {

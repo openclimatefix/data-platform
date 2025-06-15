@@ -24,67 +24,79 @@ var File_fcfsapi_service_proto protoreflect.FileDescriptor
 
 const file_fcfsapi_service_proto_rawDesc = "" +
 	"\n" +
-	"\x15fcfsapi/service.proto\x12\afcfsapi\x1a\x16fcfsapi/location.proto\x1a\x16fcfsapi/forecast.proto\x1a\x16fcfsapi/quartzui.proto2\xb5\b\n" +
+	"\x15fcfsapi/service.proto\x12\afcfsapi\x1a\x12fcfsapi/crud.proto\x1a\x16fcfsapi/quartzui.proto2\xdb\t\n" +
 	"\tQuartzAPI\x12m\n" +
-	"\x16GetPredictedTimeseries\x12&.fcfsapi.GetPredictedTimeseriesRequest\x1a'.fcfsapi.GetPredictedTimeseriesResponse\"\x000\x01\x12y\n" +
-	"\x1cGetPredictedTimeseriesDeltas\x12&.fcfsapi.GetPredictedTimeseriesRequest\x1a-.fcfsapi.GetPredictedTimeseriesDeltasResponse\"\x000\x01\x12q\n" +
+	"\x16GetPredictedTimeseries\x12&.fcfsapi.GetPredictedTimeseriesRequest\x1a'.fcfsapi.GetPredictedTimeseriesResponse\"\x000\x01\x12}\n" +
+	"\x1cGetPredictedTimeseriesDeltas\x12,.fcfsapi.GetPredictedTimeseriesDeltasRequest\x1a-.fcfsapi.GetPredictedTimeseriesDeltasResponse\"\x00\x12q\n" +
 	"\x18GetPredictedCrossSection\x12(.fcfsapi.GetPredictedCrossSectionRequest\x1a).fcfsapi.GetPredictedCrossSectionResponse\"\x00\x12j\n" +
 	"\x15GetObservedTimeseries\x12%.fcfsapi.GetObservedTimeseriesRequest\x1a&.fcfsapi.GetObservedTimeseriesResponse\"\x000\x01\x12\\\n" +
 	"\x11GetLatestForecast\x12!.fcfsapi.GetLatestForecastRequest\x1a\".fcfsapi.GetLatestForecastResponse\"\x00\x12h\n" +
-	"\x15GetLocationsAsGeoJSON\x12%.fcfsapi.GetLocationsAsGeoJSONRequest\x1a&.fcfsapi.GetLocationsAsGeoJSONResponse\"\x00\x12P\n" +
-	"\x0fCreateSolarSite\x12\x1a.fcfsapi.CreateSiteRequest\x1a\x1f.fcfsapi.CreateLocationResponse\"\x00\x12N\n" +
-	"\x0eCreateSolarGsp\x12\x19.fcfsapi.CreateGspRequest\x1a\x1f.fcfsapi.CreateLocationResponse\"\x00\x12O\n" +
-	"\x10GetSolarLocation\x12\x1b.fcfsapi.GetLocationRequest\x1a\x1c.fcfsapi.GetLocationResponse\"\x00\x12J\n" +
-	"\vCreateModel\x12\x1b.fcfsapi.CreateModelRequest\x1a\x1c.fcfsapi.CreateModelResponse\"\x00\x12X\n" +
-	"\x13CreateSolarForecast\x12\x1e.fcfsapi.CreateForecastRequest\x1a\x1f.fcfsapi.CreateForecastResponse\"\x00B@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
+	"\x15GetLocationsAsGeoJSON\x12%.fcfsapi.GetLocationsAsGeoJSONRequest\x1a&.fcfsapi.GetLocationsAsGeoJSONResponse\"\x00\x12K\n" +
+	"\n" +
+	"CreateSite\x12\x1a.fcfsapi.CreateSiteRequest\x1a\x1f.fcfsapi.CreateLocationResponse\"\x00\x12I\n" +
+	"\tCreateGsp\x12\x19.fcfsapi.CreateGspRequest\x1a\x1f.fcfsapi.CreateLocationResponse\"\x00\x12J\n" +
+	"\vGetLocation\x12\x1b.fcfsapi.GetLocationRequest\x1a\x1c.fcfsapi.GetLocationResponse\"\x00\x12J\n" +
+	"\vCreateModel\x12\x1b.fcfsapi.CreateModelRequest\x1a\x1c.fcfsapi.CreateModelResponse\"\x00\x12S\n" +
+	"\x0eCreateForecast\x12\x1e.fcfsapi.CreateForecastRequest\x1a\x1f.fcfsapi.CreateForecastResponse\"\x00\x12S\n" +
+	"\x0eCreateObserver\x12\x1e.fcfsapi.CreateObserverRequest\x1a\x1f.fcfsapi.CreateObserverResponse\"\x00\x12_\n" +
+	"\x12CreateObservations\x12\".fcfsapi.CreateObservationsRequest\x1a#.fcfsapi.CreateObservationsResponse\"\x00B@Z>github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapib\x06proto3"
 
 var file_fcfsapi_service_proto_goTypes = []any{
 	(*GetPredictedTimeseriesRequest)(nil),        // 0: fcfsapi.GetPredictedTimeseriesRequest
-	(*GetPredictedCrossSectionRequest)(nil),      // 1: fcfsapi.GetPredictedCrossSectionRequest
-	(*GetObservedTimeseriesRequest)(nil),         // 2: fcfsapi.GetObservedTimeseriesRequest
-	(*GetLatestForecastRequest)(nil),             // 3: fcfsapi.GetLatestForecastRequest
-	(*GetLocationsAsGeoJSONRequest)(nil),         // 4: fcfsapi.GetLocationsAsGeoJSONRequest
-	(*CreateSiteRequest)(nil),                    // 5: fcfsapi.CreateSiteRequest
-	(*CreateGspRequest)(nil),                     // 6: fcfsapi.CreateGspRequest
-	(*GetLocationRequest)(nil),                   // 7: fcfsapi.GetLocationRequest
-	(*CreateModelRequest)(nil),                   // 8: fcfsapi.CreateModelRequest
-	(*CreateForecastRequest)(nil),                // 9: fcfsapi.CreateForecastRequest
-	(*GetPredictedTimeseriesResponse)(nil),       // 10: fcfsapi.GetPredictedTimeseriesResponse
-	(*GetPredictedTimeseriesDeltasResponse)(nil), // 11: fcfsapi.GetPredictedTimeseriesDeltasResponse
-	(*GetPredictedCrossSectionResponse)(nil),     // 12: fcfsapi.GetPredictedCrossSectionResponse
-	(*GetObservedTimeseriesResponse)(nil),        // 13: fcfsapi.GetObservedTimeseriesResponse
-	(*GetLatestForecastResponse)(nil),            // 14: fcfsapi.GetLatestForecastResponse
-	(*GetLocationsAsGeoJSONResponse)(nil),        // 15: fcfsapi.GetLocationsAsGeoJSONResponse
-	(*CreateLocationResponse)(nil),               // 16: fcfsapi.CreateLocationResponse
-	(*GetLocationResponse)(nil),                  // 17: fcfsapi.GetLocationResponse
-	(*CreateModelResponse)(nil),                  // 18: fcfsapi.CreateModelResponse
-	(*CreateForecastResponse)(nil),               // 19: fcfsapi.CreateForecastResponse
+	(*GetPredictedTimeseriesDeltasRequest)(nil),  // 1: fcfsapi.GetPredictedTimeseriesDeltasRequest
+	(*GetPredictedCrossSectionRequest)(nil),      // 2: fcfsapi.GetPredictedCrossSectionRequest
+	(*GetObservedTimeseriesRequest)(nil),         // 3: fcfsapi.GetObservedTimeseriesRequest
+	(*GetLatestForecastRequest)(nil),             // 4: fcfsapi.GetLatestForecastRequest
+	(*GetLocationsAsGeoJSONRequest)(nil),         // 5: fcfsapi.GetLocationsAsGeoJSONRequest
+	(*CreateSiteRequest)(nil),                    // 6: fcfsapi.CreateSiteRequest
+	(*CreateGspRequest)(nil),                     // 7: fcfsapi.CreateGspRequest
+	(*GetLocationRequest)(nil),                   // 8: fcfsapi.GetLocationRequest
+	(*CreateModelRequest)(nil),                   // 9: fcfsapi.CreateModelRequest
+	(*CreateForecastRequest)(nil),                // 10: fcfsapi.CreateForecastRequest
+	(*CreateObserverRequest)(nil),                // 11: fcfsapi.CreateObserverRequest
+	(*CreateObservationsRequest)(nil),            // 12: fcfsapi.CreateObservationsRequest
+	(*GetPredictedTimeseriesResponse)(nil),       // 13: fcfsapi.GetPredictedTimeseriesResponse
+	(*GetPredictedTimeseriesDeltasResponse)(nil), // 14: fcfsapi.GetPredictedTimeseriesDeltasResponse
+	(*GetPredictedCrossSectionResponse)(nil),     // 15: fcfsapi.GetPredictedCrossSectionResponse
+	(*GetObservedTimeseriesResponse)(nil),        // 16: fcfsapi.GetObservedTimeseriesResponse
+	(*GetLatestForecastResponse)(nil),            // 17: fcfsapi.GetLatestForecastResponse
+	(*GetLocationsAsGeoJSONResponse)(nil),        // 18: fcfsapi.GetLocationsAsGeoJSONResponse
+	(*CreateLocationResponse)(nil),               // 19: fcfsapi.CreateLocationResponse
+	(*GetLocationResponse)(nil),                  // 20: fcfsapi.GetLocationResponse
+	(*CreateModelResponse)(nil),                  // 21: fcfsapi.CreateModelResponse
+	(*CreateForecastResponse)(nil),               // 22: fcfsapi.CreateForecastResponse
+	(*CreateObserverResponse)(nil),               // 23: fcfsapi.CreateObserverResponse
+	(*CreateObservationsResponse)(nil),           // 24: fcfsapi.CreateObservationsResponse
 }
 var file_fcfsapi_service_proto_depIdxs = []int32{
 	0,  // 0: fcfsapi.QuartzAPI.GetPredictedTimeseries:input_type -> fcfsapi.GetPredictedTimeseriesRequest
-	0,  // 1: fcfsapi.QuartzAPI.GetPredictedTimeseriesDeltas:input_type -> fcfsapi.GetPredictedTimeseriesRequest
-	1,  // 2: fcfsapi.QuartzAPI.GetPredictedCrossSection:input_type -> fcfsapi.GetPredictedCrossSectionRequest
-	2,  // 3: fcfsapi.QuartzAPI.GetObservedTimeseries:input_type -> fcfsapi.GetObservedTimeseriesRequest
-	3,  // 4: fcfsapi.QuartzAPI.GetLatestForecast:input_type -> fcfsapi.GetLatestForecastRequest
-	4,  // 5: fcfsapi.QuartzAPI.GetLocationsAsGeoJSON:input_type -> fcfsapi.GetLocationsAsGeoJSONRequest
-	5,  // 6: fcfsapi.QuartzAPI.CreateSolarSite:input_type -> fcfsapi.CreateSiteRequest
-	6,  // 7: fcfsapi.QuartzAPI.CreateSolarGsp:input_type -> fcfsapi.CreateGspRequest
-	7,  // 8: fcfsapi.QuartzAPI.GetSolarLocation:input_type -> fcfsapi.GetLocationRequest
-	8,  // 9: fcfsapi.QuartzAPI.CreateModel:input_type -> fcfsapi.CreateModelRequest
-	9,  // 10: fcfsapi.QuartzAPI.CreateSolarForecast:input_type -> fcfsapi.CreateForecastRequest
-	10, // 11: fcfsapi.QuartzAPI.GetPredictedTimeseries:output_type -> fcfsapi.GetPredictedTimeseriesResponse
-	11, // 12: fcfsapi.QuartzAPI.GetPredictedTimeseriesDeltas:output_type -> fcfsapi.GetPredictedTimeseriesDeltasResponse
-	12, // 13: fcfsapi.QuartzAPI.GetPredictedCrossSection:output_type -> fcfsapi.GetPredictedCrossSectionResponse
-	13, // 14: fcfsapi.QuartzAPI.GetObservedTimeseries:output_type -> fcfsapi.GetObservedTimeseriesResponse
-	14, // 15: fcfsapi.QuartzAPI.GetLatestForecast:output_type -> fcfsapi.GetLatestForecastResponse
-	15, // 16: fcfsapi.QuartzAPI.GetLocationsAsGeoJSON:output_type -> fcfsapi.GetLocationsAsGeoJSONResponse
-	16, // 17: fcfsapi.QuartzAPI.CreateSolarSite:output_type -> fcfsapi.CreateLocationResponse
-	16, // 18: fcfsapi.QuartzAPI.CreateSolarGsp:output_type -> fcfsapi.CreateLocationResponse
-	17, // 19: fcfsapi.QuartzAPI.GetSolarLocation:output_type -> fcfsapi.GetLocationResponse
-	18, // 20: fcfsapi.QuartzAPI.CreateModel:output_type -> fcfsapi.CreateModelResponse
-	19, // 21: fcfsapi.QuartzAPI.CreateSolarForecast:output_type -> fcfsapi.CreateForecastResponse
-	11, // [11:22] is the sub-list for method output_type
-	0,  // [0:11] is the sub-list for method input_type
+	1,  // 1: fcfsapi.QuartzAPI.GetPredictedTimeseriesDeltas:input_type -> fcfsapi.GetPredictedTimeseriesDeltasRequest
+	2,  // 2: fcfsapi.QuartzAPI.GetPredictedCrossSection:input_type -> fcfsapi.GetPredictedCrossSectionRequest
+	3,  // 3: fcfsapi.QuartzAPI.GetObservedTimeseries:input_type -> fcfsapi.GetObservedTimeseriesRequest
+	4,  // 4: fcfsapi.QuartzAPI.GetLatestForecast:input_type -> fcfsapi.GetLatestForecastRequest
+	5,  // 5: fcfsapi.QuartzAPI.GetLocationsAsGeoJSON:input_type -> fcfsapi.GetLocationsAsGeoJSONRequest
+	6,  // 6: fcfsapi.QuartzAPI.CreateSite:input_type -> fcfsapi.CreateSiteRequest
+	7,  // 7: fcfsapi.QuartzAPI.CreateGsp:input_type -> fcfsapi.CreateGspRequest
+	8,  // 8: fcfsapi.QuartzAPI.GetLocation:input_type -> fcfsapi.GetLocationRequest
+	9,  // 9: fcfsapi.QuartzAPI.CreateModel:input_type -> fcfsapi.CreateModelRequest
+	10, // 10: fcfsapi.QuartzAPI.CreateForecast:input_type -> fcfsapi.CreateForecastRequest
+	11, // 11: fcfsapi.QuartzAPI.CreateObserver:input_type -> fcfsapi.CreateObserverRequest
+	12, // 12: fcfsapi.QuartzAPI.CreateObservations:input_type -> fcfsapi.CreateObservationsRequest
+	13, // 13: fcfsapi.QuartzAPI.GetPredictedTimeseries:output_type -> fcfsapi.GetPredictedTimeseriesResponse
+	14, // 14: fcfsapi.QuartzAPI.GetPredictedTimeseriesDeltas:output_type -> fcfsapi.GetPredictedTimeseriesDeltasResponse
+	15, // 15: fcfsapi.QuartzAPI.GetPredictedCrossSection:output_type -> fcfsapi.GetPredictedCrossSectionResponse
+	16, // 16: fcfsapi.QuartzAPI.GetObservedTimeseries:output_type -> fcfsapi.GetObservedTimeseriesResponse
+	17, // 17: fcfsapi.QuartzAPI.GetLatestForecast:output_type -> fcfsapi.GetLatestForecastResponse
+	18, // 18: fcfsapi.QuartzAPI.GetLocationsAsGeoJSON:output_type -> fcfsapi.GetLocationsAsGeoJSONResponse
+	19, // 19: fcfsapi.QuartzAPI.CreateSite:output_type -> fcfsapi.CreateLocationResponse
+	19, // 20: fcfsapi.QuartzAPI.CreateGsp:output_type -> fcfsapi.CreateLocationResponse
+	20, // 21: fcfsapi.QuartzAPI.GetLocation:output_type -> fcfsapi.GetLocationResponse
+	21, // 22: fcfsapi.QuartzAPI.CreateModel:output_type -> fcfsapi.CreateModelResponse
+	22, // 23: fcfsapi.QuartzAPI.CreateForecast:output_type -> fcfsapi.CreateForecastResponse
+	23, // 24: fcfsapi.QuartzAPI.CreateObserver:output_type -> fcfsapi.CreateObserverResponse
+	24, // 25: fcfsapi.QuartzAPI.CreateObservations:output_type -> fcfsapi.CreateObservationsResponse
+	13, // [13:26] is the sub-list for method output_type
+	0,  // [0:13] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -95,8 +107,7 @@ func file_fcfsapi_service_proto_init() {
 	if File_fcfsapi_service_proto != nil {
 		return
 	}
-	file_fcfsapi_location_proto_init()
-	file_fcfsapi_forecast_proto_init()
+	file_fcfsapi_crud_proto_init()
 	file_fcfsapi_quartzui_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{

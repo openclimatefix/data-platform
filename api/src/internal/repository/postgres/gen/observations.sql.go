@@ -11,11 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CopyCreateObservationsParams struct {
+	LocationID         int32
+	SourceTypeID       int16
+	ObserverID         int32
+	ObservationTimeUtc pgtype.Timestamp
+	Value              int16
+}
+
 const createObservation = `-- name: CreateObservation :exec
 INSERT INTO obs.observed_generation_values (
     location_id, source_type_id, observer_id, observation_time_utc, value
 ) VALUES (
-    $1, (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $3, $4, $5
+    $1, (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $3, $4,
+    encode_pct($5::real)
 )
 `
 
@@ -24,7 +33,7 @@ type CreateObservationParams struct {
 	SourceTypeName     string
 	ObserverID         int32
 	ObservationTimeUtc pgtype.Timestamp
-	Value              int16
+	YieldPct           float32
 }
 
 func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationParams) error {
@@ -33,17 +42,9 @@ func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationPa
 		arg.SourceTypeName,
 		arg.ObserverID,
 		arg.ObservationTimeUtc,
-		arg.Value,
+		arg.YieldPct,
 	)
 	return err
-}
-
-type CreateObservationsParams struct {
-	LocationID         int32
-	SourceTypeID       int16
-	ObserverID         int32
-	ObservationTimeUtc pgtype.Timestamp
-	Value              int16
 }
 
 const createObserver = `-- name: CreateObserver :one
@@ -59,19 +60,20 @@ func (q *Queries) CreateObserver(ctx context.Context, observerName string) (int3
 
 const getObservations = `-- name: GetObservations :many
 SELECT
-    location_id, source_type_id, observation_time_utc, value
+    location_id, source_type_id, observation_time_utc,
+    decode_smallint(value)::real AS yield_pct
 FROM obs.observed_generation_values
 WHERE
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-    AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = LOWER($3))
+    AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = $3)
     AND observation_time_utc = ANY($4::timestamp[])
 `
 
 type GetObservationsParams struct {
 	LocationID         int32
 	SourceTypeName     string
-	Lower              string
+	ObserverName       string
 	ObservationTimeUtc []pgtype.Timestamp
 }
 
@@ -79,14 +81,14 @@ type GetObservationsRow struct {
 	LocationID         int32
 	SourceTypeID       int16
 	ObservationTimeUtc pgtype.Timestamp
-	Value              int16
+	YieldPct           float32
 }
 
 func (q *Queries) GetObservations(ctx context.Context, arg GetObservationsParams) ([]GetObservationsRow, error) {
 	rows, err := q.db.Query(ctx, getObservations,
 		arg.LocationID,
 		arg.SourceTypeName,
-		arg.Lower,
+		arg.ObserverName,
 		arg.ObservationTimeUtc,
 	)
 	if err != nil {
@@ -100,7 +102,7 @@ func (q *Queries) GetObservations(ctx context.Context, arg GetObservationsParams
 			&i.LocationID,
 			&i.SourceTypeID,
 			&i.ObservationTimeUtc,
-			&i.Value,
+			&i.YieldPct,
 		); err != nil {
 			return nil, err
 		}
@@ -112,37 +114,40 @@ func (q *Queries) GetObservations(ctx context.Context, arg GetObservationsParams
 	return items, nil
 }
 
-const listObservations = `-- name: ListObservations :many
+const getObservationsBetween = `-- name: GetObservationsBetween :many
 SELECT
-    location_id, source_type_id, observation_time_utc, value
+    location_id,
+    source_type_id,
+    observation_time_utc,
+    decode_smallint(value)::real AS yield_pct
 FROM obs.observed_generation_values
 WHERE
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-    AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = LOWER($3))
+    AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = $3)
     AND observation_time_utc BETWEEN $4::timestamp AND $5::timestamp
 `
 
-type ListObservationsParams struct {
+type GetObservationsBetweenParams struct {
 	LocationID     int32
 	SourceTypeName string
-	Lower          string
+	ObserverName   string
 	StartTimeUtc   pgtype.Timestamp
 	EndTimeUtc     pgtype.Timestamp
 }
 
-type ListObservationsRow struct {
+type GetObservationsBetweenRow struct {
 	LocationID         int32
 	SourceTypeID       int16
 	ObservationTimeUtc pgtype.Timestamp
-	Value              int16
+	YieldPct           float32
 }
 
-func (q *Queries) ListObservations(ctx context.Context, arg ListObservationsParams) ([]ListObservationsRow, error) {
-	rows, err := q.db.Query(ctx, listObservations,
+func (q *Queries) GetObservationsBetween(ctx context.Context, arg GetObservationsBetweenParams) ([]GetObservationsBetweenRow, error) {
+	rows, err := q.db.Query(ctx, getObservationsBetween,
 		arg.LocationID,
 		arg.SourceTypeName,
-		arg.Lower,
+		arg.ObserverName,
 		arg.StartTimeUtc,
 		arg.EndTimeUtc,
 	)
@@ -150,14 +155,14 @@ func (q *Queries) ListObservations(ctx context.Context, arg ListObservationsPara
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListObservationsRow{}
+	items := []GetObservationsBetweenRow{}
 	for rows.Next() {
-		var i ListObservationsRow
+		var i GetObservationsBetweenRow
 		if err := rows.Scan(
 			&i.LocationID,
 			&i.SourceTypeID,
 			&i.ObservationTimeUtc,
-			&i.Value,
+			&i.YieldPct,
 		); err != nil {
 			return nil, err
 		}
@@ -167,6 +172,20 @@ func (q *Queries) ListObservations(ctx context.Context, arg ListObservationsPara
 		return nil, err
 	}
 	return items, nil
+}
+
+const getObserverByName = `-- name: GetObserverByName :one
+SELECT
+    observer_id, observer_name
+FROM obs.observers
+WHERE observer_name = $1
+`
+
+func (q *Queries) GetObserverByName(ctx context.Context, observerName string) (ObsObserver, error) {
+	row := q.db.QueryRow(ctx, getObserverByName, observerName)
+	var i ObsObserver
+	err := row.Scan(&i.ObserverID, &i.ObserverName)
+	return i, err
 }
 
 const listObservers = `-- name: ListObservers :many

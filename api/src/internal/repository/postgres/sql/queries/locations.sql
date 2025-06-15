@@ -1,5 +1,16 @@
 /*- Queries for the locations table ------------------------------ */
 
+-- name: ListSourceTypes :many
+SELECT 
+    source_type_id, source_type_name
+FROM loc.source_types;
+
+-- name: GetSourceTypeByName :one
+SELECT 
+    source_type_id, source_type_name
+FROM loc.source_types
+WHERE source_type_name = $1;
+
 -- name: CreateLocation :one
 INSERT INTO loc.locations AS l (
     location_name, geom, location_type_id 
@@ -7,7 +18,7 @@ INSERT INTO loc.locations AS l (
     UPPER(sqlc.arg(location_name)::text),
     ST_GeomFromText(sqlc.arg(geom)::text, 4326), --Ensure in WSG84
     (SELECT location_type_id FROM loc.location_types AS lt WHERE lt.location_type_name = $1)
-) RETURNING l.location_id;
+) RETURNING l.location_id, l.location_name;
 
 -- name: ListLocationIdsByType :many
 SELECT
@@ -67,7 +78,9 @@ FROM (
 
 -- name: GetLocationSource :one
 SELECT 
-    record_id, capacity, capacity_unit_prefix_factor, metadata
+    record_id,
+    (capacity::bigint * POWER(10::bigint, capacity_unit_prefix_factor - 3))::bigint AS capacity_kw,
+    metadata
 FROM loc.location_sources
 WHERE 
     location_id = $1
@@ -78,15 +91,22 @@ WHERE
 INSERT INTO loc.location_sources (
     location_id, source_type_id, capacity,
     capacity_unit_prefix_factor, metadata
-) VALUES (
-    $1, (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2),
-    $3, $4, sqlc.narg(metadata)::jsonb
-) RETURNING record_id;
+) SELECT 
+    sqlc.arg(location_id),
+    (SELECT source_type_id FROM loc.source_types WHERE source_type_name = sqlc.arg(source_type_name)),
+    e.value,
+    e.exponent,
+    sqlc.narg(metadata)::jsonb
+FROM
+    loc.encode_kw(sqlc.arg(capacity_kw)::bigint) AS e
+RETURNING record_id, capacity, capacity_unit_prefix_factor;
 
 -- name: UpdateLocationSourceCapacity :exec
 UPDATE loc.location_sources SET
-    capacity = $3,
-    capacity_unit_prefix_factor = $4
+    capacity = e.value,
+    capacity_unit_prefix_factor = e.exponent
+FROM
+    loc.encode_kw(sqlc.arg(capacity_kw)::bigint) AS e
 WHERE 
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
@@ -95,16 +115,6 @@ WHERE
 -- name: UpdateLocationSourceMetadata :exec
 UPDATE loc.location_sources SET
     metadata = $3
-WHERE 
-    location_id = $1
-    AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-    AND UPPER(sys_period) IS NULL;
-    
--- name: UpdateLocationSource :exec
-UPDATE loc.location_sources SET
-    capacity = $3,
-    capacity_unit_prefix_factor = $4,
-    metadata = $5
 WHERE 
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
@@ -119,7 +129,9 @@ WHERE
 
 -- name: ListLocationSourceHistory :many
 SELECT
-    record_id, capacity, capacity_unit_prefix_factor, metadata, sys_period
+    record_id,
+    (capacity::bigint * POWER(10::bigint, capacity_unit_prefix_factor - 3))::bigint AS capacity_kw,
+    metadata, sys_period
 FROM loc.location_sources
 WHERE 
     location_id = $1
@@ -128,7 +140,7 @@ WHERE
 
 -- name: ListLocationSourceCapacityHistory :many
 SELECT
-    (capacity * POWER(10, capacity_unit_prefix_factor))::real AS capacity_watts,
+    (capacity::bigint * POWER(10::bigint, capacity_unit_prefix_factor - 3))::bigint AS capacity_kw,
     LOWER(sys_period) AS valid_from
 FROM loc.location_sources
 WHERE

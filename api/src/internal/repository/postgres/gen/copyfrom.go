@@ -9,13 +9,13 @@ import (
 	"context"
 )
 
-// iteratorForCreateObservations implements pgx.CopyFromSource.
-type iteratorForCreateObservations struct {
-	rows                 []CreateObservationsParams
+// iteratorForCopyCreateObservations implements pgx.CopyFromSource.
+type iteratorForCopyCreateObservations struct {
+	rows                 []CopyCreateObservationsParams
 	skippedFirstNextCall bool
 }
 
-func (r *iteratorForCreateObservations) Next() bool {
+func (r *iteratorForCopyCreateObservations) Next() bool {
 	if len(r.rows) == 0 {
 		return false
 	}
@@ -27,7 +27,7 @@ func (r *iteratorForCreateObservations) Next() bool {
 	return len(r.rows) > 0
 }
 
-func (r iteratorForCreateObservations) Values() ([]interface{}, error) {
+func (r iteratorForCopyCreateObservations) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].LocationID,
 		r.rows[0].SourceTypeID,
@@ -37,21 +37,21 @@ func (r iteratorForCreateObservations) Values() ([]interface{}, error) {
 	}, nil
 }
 
-func (r iteratorForCreateObservations) Err() error {
+func (r iteratorForCopyCreateObservations) Err() error {
 	return nil
 }
 
-func (q *Queries) CreateObservations(ctx context.Context, arg []CreateObservationsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"obs", "observed_generation_values"}, []string{"location_id", "source_type_id", "observer_id", "observation_time_utc", "value"}, &iteratorForCreateObservations{rows: arg})
+func (q *Queries) CopyCreateObservations(ctx context.Context, arg []CopyCreateObservationsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"obs", "observed_generation_values"}, []string{"location_id", "source_type_id", "observer_id", "observation_time_utc", "value"}, &iteratorForCopyCreateObservations{rows: arg})
 }
 
-// iteratorForCreatePredictedGenerationValues implements pgx.CopyFromSource.
-type iteratorForCreatePredictedGenerationValues struct {
-	rows                 []CreatePredictedGenerationValuesParams
+// iteratorForCopyCreatePredictedGenerationValues implements pgx.CopyFromSource.
+type iteratorForCopyCreatePredictedGenerationValues struct {
+	rows                 []CopyCreatePredictedGenerationValuesParams
 	skippedFirstNextCall bool
 }
 
-func (r *iteratorForCreatePredictedGenerationValues) Next() bool {
+func (r *iteratorForCopyCreatePredictedGenerationValues) Next() bool {
 	if len(r.rows) == 0 {
 		return false
 	}
@@ -63,7 +63,7 @@ func (r *iteratorForCreatePredictedGenerationValues) Next() bool {
 	return len(r.rows) > 0
 }
 
-func (r iteratorForCreatePredictedGenerationValues) Values() ([]interface{}, error) {
+func (r iteratorForCopyCreatePredictedGenerationValues) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].HorizonMins,
 		r.rows[0].P10,
@@ -75,10 +75,10 @@ func (r iteratorForCreatePredictedGenerationValues) Values() ([]interface{}, err
 	}, nil
 }
 
-func (r iteratorForCreatePredictedGenerationValues) Err() error {
+func (r iteratorForCopyCreatePredictedGenerationValues) Err() error {
 	return nil
 }
 
-func (q *Queries) CreatePredictedGenerationValues(ctx context.Context, arg []CreatePredictedGenerationValuesParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"pred", "predicted_generation_values"}, []string{"horizon_mins", "p10", "p50", "p90", "forecast_id", "target_time_utc", "metadata"}, &iteratorForCreatePredictedGenerationValues{rows: arg})
+func (q *Queries) CopyCreatePredictedGenerationValues(ctx context.Context, arg []CopyCreatePredictedGenerationValuesParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"pred", "predicted_generation_values"}, []string{"horizon_mins", "p10", "p50", "p90", "forecast_id", "target_time_utc", "metadata"}, &iteratorForCopyCreatePredictedGenerationValues{rows: arg})
 }
