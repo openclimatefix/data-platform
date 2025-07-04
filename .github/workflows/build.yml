@@ -17,11 +17,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - folder: frontend
+          - folder: examples/typescript-frontend
             image: ghcr.io/devsjc/fcfs-frontend
-          - folder: api
+          - folder: .
             image: ghcr.io/devsjc/fcfs-api
-          - folder: api/src/internal/repository/postgres/infra
+          - folder: internal/database/postgres/infra
             image: ghcr.io/devsjc/fcfs-pgdb
 
     steps:

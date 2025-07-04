@@ -17,19 +17,19 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          go-version-file: api/go.mod
+          go-version-file: go.mod
           cache: true
-          cache-dependency-path: api/go.sum
+          cache-dependency-path: go.sum
 
       - name: Install dependencies
-        run: cd api && go mod download
+        run: go mod download
 
       - name: Run unit tests
-        run: cd api && go run gotest.tools/gotestsum@latest --junitfile unit-tests.xml --format testname
+        run: go run gotest.tools/gotestsum@latest --junitfile unit-tests.xml --format testname
 
       - name: Test Summary
         uses: test-summary/action@v2
         with:
-          paths: "api/unit-tests.xml"
+          paths: "unit-tests.xml"
         if: always()
 

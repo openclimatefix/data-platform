@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Generated external proto bindings
+./protogen/
+
 # Test binary, built with `go test -c`
 *.test
 

@@ -1,0 +1,236 @@
+// Common messages for the Quartz API
+
+syntax = "proto3";
+
+package ocf.dp;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp;dp";
+
+// --- Common message types ----------------------------------------------------------------------
+
+enum EnergySource {
+  ENERGY_SOURCE_UNSPECIFIED = 0;
+  ENERGY_SOURCE_SOLAR = 1;
+  ENERGY_SOURCE_WIND = 2;
+}
+
+message Yield {
+  int64 yield_kw = 1;
+  int64 timestamp_unix = 2;
+}
+
+message YieldPrediction {
+
+  message Uncertainty {
+    int64 lower_kw = 1; 
+    int64 upper_kw = 2; 
+  }
+  
+  int64 yield_kw = 1;
+  int64 timestamp_unix = 2;
+  Uncertainty uncertainty = 3;
+}
+
+message YieldDelta {
+  sint64 delta_kw = 1;
+  int64 timestamp_unix = 2;
+}
+
+// --- Requests and Responses --------------------------------------------------------
+
+message GetPredictedTimeseriesRequest {
+  repeated int32 location_ids = 1;
+  EnergySource energy_source = 2;
+
+  /** The desired minimum difference between the forecast initialisation time,
+   * and each target time in minutes.
+   * A value of 0 gives the most recently predicted values for each target time (default).
+   */
+  int32 horizon_mins = 3;
+}
+
+message GetPredictedTimeseriesResponse {
+  int32 location_id = 1;
+  repeated YieldPrediction yields = 2;
+}
+
+
+message GetPredictedTimeseriesDeltasRequest {
+  int32 location_id = 1;
+  EnergySource energy_source = 2;
+
+  /** The desired difference between the initialisation time and the target time in minutes.
+   * 0 gives the most recently predicted deltas, and is the default if not specified.
+   */
+  int32 horizon_mins = 3;
+  /** The name of the desired model to fetch predicted yields from.
+   * If not specified, the default model will be used.
+   */
+  string model_name = 4;
+  /** The version of the model to fetch predicted yields from.
+   * If not specified, the latest version of the named model will be used.
+   */
+  string model_version = 5;
+  /** The name of the provider of observed yields to fetch from.
+   * If not specified, the default observer will be used.
+   */
+  string observer_name = 6;
+}
+
+message GetPredictedTimeseriesDeltasResponse {
+  int32 location_id = 1;
+  repeated YieldDelta deltas = 2;
+}
+
+
+message GetObservedTimeseriesRequest {
+  int32 location_id = 1;
+  string observer_name = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+}
+
+message GetObservedTimeseriesResponse {
+  int32 location_id = 1;
+  repeated Yield yields = 2;
+}
+
+
+message GetPredictedCrossSectionRequest {
+  repeated int32 location_ids = 1;
+  EnergySource energy_source = 2;
+  int64 timestamp_unix = 3;
+}
+
+message GetPredictedCrossSectionResponse {
+ 
+  message YieldPredictionAtLocation {
+    int32 location_id = 1;
+    int64 yield_kw = 2;
+  }
+
+  int64 timestamp_unix = 1;
+  repeated YieldPredictionAtLocation yields = 2;
+}
+
+
+message GetLatestForecastRequest {
+  int32 location_id = 1;
+  EnergySource energy_source = 2;
+}
+
+message GetLatestForecastResponse {
+  int32 location_id = 1;
+  int64 forecast_id = 2;
+  repeated YieldPrediction yields = 3;
+}
+
+
+message CreateModelRequest {
+  string name = 1;
+  string version = 2;
+  bool make_default = 3;
+}
+
+message CreateModelResponse {
+  int32 model_id = 1;
+}
+
+
+message CreateForecastRequest {
+  message PredictedGenerationValue {
+    int32 horizon_mins = 1;
+    float p50_pct = 2;
+    float p10_pct = 3;
+    float p90_pct = 4;
+    string metadata = 5;
+  }
+
+  message Forecast {
+    int32 model_id = 1;
+    int32 location_id = 2;
+    EnergySource energy_source = 3;
+    google.protobuf.Timestamp init_time_utc = 4;
+  }
+
+  CreateForecastRequest.Forecast forecast = 1;
+  repeated CreateForecastRequest.PredictedGenerationValue predicted_generation_values = 2;
+}
+
+message CreateForecastResponse {
+  int64 forecast_id = 1;
+}
+
+
+message CreateSiteRequest {
+  string name = 1;
+  EnergySource energy_source = 2;
+  float latitude = 3;
+  float longitude = 4;
+  int64 capacity_kw = 5;
+  string metadata = 6;
+}
+
+message CreateSiteResponse {
+  int32 location_id = 1;
+}
+
+
+message CreateGspRequest {
+  string name = 1;
+  EnergySource energy_source = 2;
+  string geometry = 3;
+  int64 capacity_mw = 4;
+  string metadata = 5;
+}
+
+message CreateGspResponse {
+  int32 location_id = 1;
+}
+
+
+message GetLocationRequest {
+  int32 location_id = 1;
+  EnergySource energy_source = 2;
+}
+
+message GetLocationResponse {
+  int32 location_id = 1;
+  string name = 2;
+  float latitude = 3;
+  float longitude = 4;
+  int64 capacity_kw = 5;
+  string metadata = 6;
+}
+
+
+message GetLocationsAsGeoJSONRequest {
+  repeated int32 location_ids = 1;
+  bool unsimplified = 2;
+}
+
+message GetLocationsAsGeoJSONResponse {
+  string geojson = 1;
+}
+
+
+message CreateObservationsRequest {
+  int32 location_id = 1;
+  EnergySource energy_source = 2;
+  string observer_name = 3;
+  repeated Yield yields = 4;
+}
+
+message CreateObservationsResponse {}
+
+
+message CreateObserverRequest {
+  string name = 1;
+}
+
+message CreateObserverResponse {
+  int32 observer_id = 1;
+}
+

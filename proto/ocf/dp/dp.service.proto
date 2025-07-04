@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package ocf.dp;
+
+import "ocf/dp/dp.messages.proto";
+
+option go_package = "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp;dp";
+
+service DataPlatformService {
+
+  // --- QuartzUI ----------------------------------------------------------------
+
+  rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesResponse) {}
+  rpc GetPredictedTimeseriesDeltas(GetPredictedTimeseriesDeltasRequest) returns (GetPredictedTimeseriesDeltasResponse) {}
+  rpc GetPredictedCrossSection(GetPredictedCrossSectionRequest) returns (GetPredictedCrossSectionResponse) {}
+  rpc GetObservedTimeseries(GetObservedTimeseriesRequest) returns (GetObservedTimeseriesResponse) {}
+  rpc GetLatestForecast(GetLatestForecastRequest) returns (GetLatestForecastResponse) {}
+  rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
+
+  // --- Crud ---------------------------------------------------------------------
+
+  rpc CreateSite(CreateSiteRequest) returns (CreateSiteResponse) {}
+  rpc CreateGsp(CreateGspRequest) returns (CreateGspResponse) {}
+
+  rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
+
+  rpc CreateModel(CreateModelRequest) returns (CreateModelResponse) {}
+  rpc CreateForecast(CreateForecastRequest) returns (CreateForecastResponse) {}
+
+  rpc CreateObserver(CreateObserverRequest) returns (CreateObserverResponse) {}
+  rpc CreateObservations(CreateObservationsRequest) returns (CreateObservationsResponse) {}
+}
+
+
