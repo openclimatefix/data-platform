@@ -49,6 +49,7 @@ type ObsObservedGenerationValue struct {
 type ObsObserver struct {
 	ObserverID   int32
 	ObserverName string
+	SourceTypeID int16
 }
 
 type PredForecast struct {

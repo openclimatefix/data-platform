@@ -17,29 +17,29 @@ var (
 	ErrBatchAlreadyClosed = errors.New("batch already closed")
 )
 
-const batchCreateForecasts = `-- name: BatchCreateForecasts :batchone
+const createForecastsUsingBatch = `-- name: CreateForecastsUsingBatch :batchone
 INSERT INTO pred.forecasts(
     source_type_id, location_id, model_id, init_time_utc
 ) VALUES (
-    (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2),
-    $1, $3, $4
+    (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $1, $3, $4
 ) RETURNING source_type_id, forecast_id, location_id, model_id, init_time_utc
 `
 
-type BatchCreateForecastsBatchResults struct {
+type CreateForecastsUsingBatchBatchResults struct {
 	br     pgx.BatchResults
 	tot    int
 	closed bool
 }
 
-type BatchCreateForecastsParams struct {
+type CreateForecastsUsingBatchParams struct {
 	LocationID     int32
 	SourceTypeName string
 	ModelID        int32
 	InitTimeUtc    pgtype.Timestamp
 }
 
-func (q *Queries) BatchCreateForecasts(ctx context.Context, arg []BatchCreateForecastsParams) *BatchCreateForecastsBatchResults {
+// CreateForecastsUsingBatch inserts a new forecasts as a batch process.
+func (q *Queries) CreateForecastsUsingBatch(ctx context.Context, arg []CreateForecastsUsingBatchParams) *CreateForecastsUsingBatchBatchResults {
 	batch := &pgx.Batch{}
 	for _, a := range arg {
 		vals := []interface{}{
@@ -48,13 +48,13 @@ func (q *Queries) BatchCreateForecasts(ctx context.Context, arg []BatchCreateFor
 			a.ModelID,
 			a.InitTimeUtc,
 		}
-		batch.Queue(batchCreateForecasts, vals...)
+		batch.Queue(createForecastsUsingBatch, vals...)
 	}
 	br := q.db.SendBatch(ctx, batch)
-	return &BatchCreateForecastsBatchResults{br, len(arg), false}
+	return &CreateForecastsUsingBatchBatchResults{br, len(arg), false}
 }
 
-func (b *BatchCreateForecastsBatchResults) QueryRow(f func(int, PredForecast, error)) {
+func (b *CreateForecastsUsingBatchBatchResults) QueryRow(f func(int, PredForecast, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
 		var i PredForecast
@@ -78,12 +78,12 @@ func (b *BatchCreateForecastsBatchResults) QueryRow(f func(int, PredForecast, er
 	}
 }
 
-func (b *BatchCreateForecastsBatchResults) Close() error {
+func (b *CreateForecastsUsingBatchBatchResults) Close() error {
 	b.closed = true
 	return b.br.Close()
 }
 
-const batchCreateObservations = `-- name: BatchCreateObservations :batchexec
+const createObservationsAsPercentUsingBatch = `-- name: CreateObservationsAsPercentUsingBatch :batchexec
 INSERT INTO obs.observed_generation_values (
     location_id, source_type_id, observer_id, observation_time_utc, value
 ) VALUES (
@@ -92,13 +92,13 @@ INSERT INTO obs.observed_generation_values (
 )
 `
 
-type BatchCreateObservationsBatchResults struct {
+type CreateObservationsAsPercentUsingBatchBatchResults struct {
 	br     pgx.BatchResults
 	tot    int
 	closed bool
 }
 
-type BatchCreateObservationsParams struct {
+type CreateObservationsAsPercentUsingBatchParams struct {
 	LocationID         int32
 	SourceTypeName     string
 	ObserverID         int32
@@ -106,7 +106,10 @@ type BatchCreateObservationsParams struct {
 	YieldPct           float32
 }
 
-func (q *Queries) BatchCreateObservations(ctx context.Context, arg []BatchCreateObservationsParams) *BatchCreateObservationsBatchResults {
+// CreateObservationsAsPercentUsingBatch inserts observed yields as a batch process.
+// Input yields are expected as a percentage of capacity. This is more readable but
+// slower than using the COPY protocol.
+func (q *Queries) CreateObservationsAsPercentUsingBatch(ctx context.Context, arg []CreateObservationsAsPercentUsingBatchParams) *CreateObservationsAsPercentUsingBatchBatchResults {
 	batch := &pgx.Batch{}
 	for _, a := range arg {
 		vals := []interface{}{
@@ -116,13 +119,13 @@ func (q *Queries) BatchCreateObservations(ctx context.Context, arg []BatchCreate
 			a.ObservationTimeUtc,
 			a.YieldPct,
 		}
-		batch.Queue(batchCreateObservations, vals...)
+		batch.Queue(createObservationsAsPercentUsingBatch, vals...)
 	}
 	br := q.db.SendBatch(ctx, batch)
-	return &BatchCreateObservationsBatchResults{br, len(arg), false}
+	return &CreateObservationsAsPercentUsingBatchBatchResults{br, len(arg), false}
 }
 
-func (b *BatchCreateObservationsBatchResults) Exec(f func(int, error)) {
+func (b *CreateObservationsAsPercentUsingBatchBatchResults) Exec(f func(int, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
 		if b.closed {
@@ -138,12 +141,12 @@ func (b *BatchCreateObservationsBatchResults) Exec(f func(int, error)) {
 	}
 }
 
-func (b *BatchCreateObservationsBatchResults) Close() error {
+func (b *CreateObservationsAsPercentUsingBatchBatchResults) Close() error {
 	b.closed = true
 	return b.br.Close()
 }
 
-const batchCreatePredictedGenerationValues = `-- name: BatchCreatePredictedGenerationValues :batchexec
+const createPredictionsAsPercentUsingBatch = `-- name: CreatePredictionsAsPercentUsingBatch :batchexec
 INSERT INTO pred.predicted_generation_values (
     horizon_mins, p10, p50, p90, forecast_id, target_time_utc, metadata
 ) VALUES (
@@ -157,13 +160,13 @@ INSERT INTO pred.predicted_generation_values (
 )
 `
 
-type BatchCreatePredictedGenerationValuesBatchResults struct {
+type CreatePredictionsAsPercentUsingBatchBatchResults struct {
 	br     pgx.BatchResults
 	tot    int
 	closed bool
 }
 
-type BatchCreatePredictedGenerationValuesParams struct {
+type CreatePredictionsAsPercentUsingBatchParams struct {
 	HorizonMins   int32
 	P10Pct        *float32
 	P50Pct        float32
@@ -173,7 +176,10 @@ type BatchCreatePredictedGenerationValuesParams struct {
 	Metadata      []byte
 }
 
-func (q *Queries) BatchCreatePredictedGenerationValues(ctx context.Context, arg []BatchCreatePredictedGenerationValuesParams) *BatchCreatePredictedGenerationValuesBatchResults {
+// CreatePredictedYieldsAsPercentUsingBatch inserts predicted generation values as a batch process.
+// Input p-values are expected as a percentage of capacity. This is more readable but
+// slower than using the COPY protocol.
+func (q *Queries) CreatePredictionsAsPercentUsingBatch(ctx context.Context, arg []CreatePredictionsAsPercentUsingBatchParams) *CreatePredictionsAsPercentUsingBatchBatchResults {
 	batch := &pgx.Batch{}
 	for _, a := range arg {
 		vals := []interface{}{
@@ -185,13 +191,13 @@ func (q *Queries) BatchCreatePredictedGenerationValues(ctx context.Context, arg 
 			a.TargetTimeUtc,
 			a.Metadata,
 		}
-		batch.Queue(batchCreatePredictedGenerationValues, vals...)
+		batch.Queue(createPredictionsAsPercentUsingBatch, vals...)
 	}
 	br := q.db.SendBatch(ctx, batch)
-	return &BatchCreatePredictedGenerationValuesBatchResults{br, len(arg), false}
+	return &CreatePredictionsAsPercentUsingBatchBatchResults{br, len(arg), false}
 }
 
-func (b *BatchCreatePredictedGenerationValuesBatchResults) Exec(f func(int, error)) {
+func (b *CreatePredictionsAsPercentUsingBatchBatchResults) Exec(f func(int, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
 		if b.closed {
@@ -207,7 +213,7 @@ func (b *BatchCreatePredictedGenerationValuesBatchResults) Exec(f func(int, erro
 	}
 }
 
-func (b *BatchCreatePredictedGenerationValuesBatchResults) Close() error {
+func (b *CreatePredictionsAsPercentUsingBatchBatchResults) Close() error {
 	b.closed = true
 	return b.br.Close()
 }

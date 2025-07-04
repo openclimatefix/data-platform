@@ -47,24 +47,31 @@ INSERT INTO pred.forecasts(
     source_type_id, location_id, model_id, init_time_utc
 ) VALUES (
     (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $1, $3, $4
-) RETURNING *;
+) RETURNING forecast_id, init_time_utc, source_type_id, location_id, model_id;
 
--- name: BatchCreateForecasts :batchone
+-- name: CreateForecastsUsingBatch :batchone
+-- CreateForecastsUsingBatch inserts a new forecasts as a batch process.
 INSERT INTO pred.forecasts(
     source_type_id, location_id, model_id, init_time_utc
 ) VALUES (
-    (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2),
-    $1, $3, $4
+    (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $1, $3, $4
 ) RETURNING *;
 
--- name: CopyCreatePredictedGenerationValues :copyfrom
+-- name: CreatePredictionsAsInt16UsingCopy :copyfrom
+-- CreatePredictionsAsInt16UsingCopy inserts predicted generation values using
+-- postgres COPY protocol, making it the fastest way to perform large inserts of predictions.
+-- Input p-values are expected as 16-bit integers, with 0 representing 0%
+-- and 30000 representing 100% of capacity.
 INSERT INTO pred.predicted_generation_values (
     horizon_mins, p10, p50, p90, forecast_id, target_time_utc, metadata
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
 );
 
--- name: BatchCreatePredictedGenerationValues :batchexec
+-- name: CreatePredictionsAsPercentUsingBatch :batchexec
+-- CreatePredictedYieldsAsPercentUsingBatch inserts predicted generation values as a batch process.
+-- Input p-values are expected as a percentage of capacity. This is more readable but
+-- slower than using the COPY protocol.
 INSERT INTO pred.predicted_generation_values (
     horizon_mins, p10, p50, p90, forecast_id, target_time_utc, metadata
 ) VALUES (
@@ -77,7 +84,10 @@ INSERT INTO pred.predicted_generation_values (
     sqlc.narg(metadata)::jsonb
 );
 
--- name: GetLatestForecastForLocationAtHorizon :one
+-- name: GetLatestForecastAtHorizon :one
+-- GetLatestForecastAtHorizon retrieves the latest forecast for a given location,
+-- source type, and model. Only forecasts that are older than the specified horizon
+-- are considered.
 SELECT
     f.forecast_id,
     f.init_time_utc,
@@ -88,11 +98,11 @@ FROM pred.forecasts f
 WHERE f.location_id = $1
 AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
 AND f.model_id = $3
-AND f.init_time_utc <= CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
+AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::timestamp - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
 ORDER BY f.init_time_utc DESC
 LIMIT 1;
 
--- name: GetForecastByInitTime :one
+-- name: GetForecast :one
 SELECT
     f.forecast_id,
     f.init_time_utc,
@@ -105,7 +115,7 @@ AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source
 AND f.model_id = $3
 AND f.init_time_utc = $4;
 
--- name: GetForecastsByInitTimeTimeComponent :many
+-- name: GetForecastsTimeComponent :many
 WITH desired_init_times AS (
     SELECT 
         (d.day::date + make_time(sqlq.arg(hour)::integer, sqlc.arg(minute)::integer, 0))::timestamp AS init_time_utc 
@@ -128,7 +138,10 @@ WHERE f.location_id = $1
 AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
 AND f.model_id = $3;
 
--- name: GetPredictedGenerationValuesForForecast :many
+-- name: GetPredictionsAsPercentByForecastID :many
+-- GetPredictionsAsPercentByForecastID retrieves predicted generation values as percentages of
+-- capacity for a specific forecast ID. This is slower than returning the values directly,
+-- so use where readability or understandability is more important than performance.
 SELECT
     horizon_mins,
     decode_smallint(p10) AS p10_pct,
@@ -139,7 +152,26 @@ SELECT
 FROM pred.predicted_generation_values
 WHERE forecast_id = $1;
 
--- name: GetWindowedPredictedGenerationValuesAtHorizon :many
+-- name: GetPredictionsAsInt16ByForecastID :many
+-- GetPredictionsAsInt16ByForecastID retrieves predicted generation values as 16-bit integers,
+-- with 0 representing 0% and 30000 representing 100% of capacity.
+SELECT
+    horizon_mins,
+    p10 AS p10_int16,
+    p50 AS p50_int16,
+    p90 AS p90_int16,
+    target_time_utc,
+    metadata
+FROM pred.predicted_generation_values
+WHERE forecast_id = $1;
+
+-- name: GetPredictionsTimeseriesAsPercentAtHorizon :many
+-- GetPredictionsTimeseriesAsPercentAtHorizon retrieves predicted generation values as a timeseries.
+-- Multiple forecasts make up the timeseries, so overlapping predictions are filtered
+-- according to the lowest allowable horizon. The timeseries window is 36 hours ago to now.
+-- Yields are returned as percentages of capacity.
+-- Has been measured to be 10 times slower than returning the values directly, so use in non-critical paths
+-- where readability or understandability is more important than performance.
 WITH relevant_forecasts AS (
     -- Get all the forecasts that fall within the time window for the given location, source, and model
     SELECT
@@ -148,7 +180,7 @@ WITH relevant_forecasts AS (
     WHERE f.location_id = $1
     AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
     AND f.model_id = $3
-    AND f.init_time_utc >= CURRENT_TIMESTAMP - MAKE_INTERVAL(
+    AND f.init_time_utc >= sqlc.arg(pivot_timestamp)::timestamp - MAKE_INTERVAL(
         mins => sqlc.arg(horizon_mins)::integer, hours => 36
     )
 ),
@@ -163,8 +195,8 @@ filteredPredictions AS (
         pv.target_time_utc,
         pv.metadata
     FROM pred.predicted_generation_values pv
-    INNER JOIN relevant_forecasts rf ON pv.forecast_id = rf.forecast_id
-    WHERE pv.target_time_utc >= CURRENT_TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer, hours => 36)
+    INNER JOIN relevant_forecasts rf USING (forecast_id)
+    WHERE pv.target_time_utc >= sqlc.arg(pivot_timestamp)::timestamp - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer, hours => 36)
     AND pv.horizon_mins >= sqlc.arg(horizon_mins)::integer
 ),
 rankedPredictions AS (
@@ -185,4 +217,40 @@ SELECT
 FROM rankedPredictions rp
 WHERE rp.rn = 1
 ORDER BY rp.target_time_utc ASC;
+
+
+-- name: GetPredictionsAsPercentAtTimeAndHorizonForLocations :many
+-- GetPredictionsAsPercentAtTimeAndHorizonForLocations retrieves predicted generation values as percentages
+-- of capacity for a specific time and horizon. This is useful for comparing predictions across multiple locations.
+WITH relevant_forecasts AS (
+    SELECT
+        f.forecast_id,
+        f.location_id,
+        f.init_time_utc,
+        ROW_NUMBER() OVER (PARTITION BY f.location_id ORDER BY f.init_time_utc DESC) AS rn
+    FROM pred.forecasts f
+    WHERE f.location_id = ANY(sqlc.arg(location_ids)::integer[])
+    AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $1)
+    AND f.model_id = $2
+    AND f.init_time_utc <= sqlc.arg(time)::timestamp - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
+),
+latest_relevant_forecasts AS (
+    SELECT
+        rf.forecast_id,
+        rf.location_id,
+        rf.init_time_utc
+    FROM relevant_forecasts rf
+    WHERE rf.rn = 1
+)
+SELECT
+    rf.location_id,
+    pgv.horizon_mins,
+    decode_smallint(pgv.p10) AS p10_pct,
+    decode_smallint(pgv.p50) AS p50_pct,
+    decode_smallint(pgv.p90) AS p90_pct,
+    pgv.target_time_utc,
+    pgv.metadata
+FROM pred.predicted_generation_values pgv
+INNER JOIN latest_relevant_forecasts rf USING (forecast_id)
+WHERE pgv.horizon_mins = sqlc.arg(horizon_mins)::integer;
 

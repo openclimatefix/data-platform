@@ -2,7 +2,7 @@ name: Unit Test
 
 on:
   push:
-    branches: ["*"]
+    branches-ignore: ['main']
     paths-ignore:
       - 'README.md'
 
@@ -19,6 +19,7 @@ jobs:
         with:
           go-version-file: api/go.mod
           cache: true
+          cache-dependency-path: api/go.sum
 
       - name: Install dependencies
         run: cd api && go mod download
@@ -29,6 +30,6 @@ jobs:
       - name: Test Summary
         uses: test-summary/action@v2
         with:
-          paths: "unit-tests.xml"
+          paths: "api/unit-tests.xml"
         if: always()
 

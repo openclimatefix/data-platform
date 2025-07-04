@@ -9,13 +9,13 @@ import (
 	"context"
 )
 
-// iteratorForCopyCreateObservations implements pgx.CopyFromSource.
-type iteratorForCopyCreateObservations struct {
-	rows                 []CopyCreateObservationsParams
+// iteratorForCreateObservationsAsInt16UsingCopy implements pgx.CopyFromSource.
+type iteratorForCreateObservationsAsInt16UsingCopy struct {
+	rows                 []CreateObservationsAsInt16UsingCopyParams
 	skippedFirstNextCall bool
 }
 
-func (r *iteratorForCopyCreateObservations) Next() bool {
+func (r *iteratorForCreateObservationsAsInt16UsingCopy) Next() bool {
 	if len(r.rows) == 0 {
 		return false
 	}
@@ -27,7 +27,7 @@ func (r *iteratorForCopyCreateObservations) Next() bool {
 	return len(r.rows) > 0
 }
 
-func (r iteratorForCopyCreateObservations) Values() ([]interface{}, error) {
+func (r iteratorForCreateObservationsAsInt16UsingCopy) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].LocationID,
 		r.rows[0].SourceTypeID,
@@ -37,21 +37,25 @@ func (r iteratorForCopyCreateObservations) Values() ([]interface{}, error) {
 	}, nil
 }
 
-func (r iteratorForCopyCreateObservations) Err() error {
+func (r iteratorForCreateObservationsAsInt16UsingCopy) Err() error {
 	return nil
 }
 
-func (q *Queries) CopyCreateObservations(ctx context.Context, arg []CopyCreateObservationsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"obs", "observed_generation_values"}, []string{"location_id", "source_type_id", "observer_id", "observation_time_utc", "value"}, &iteratorForCopyCreateObservations{rows: arg})
+// CreateObservationsCopy inserts a batch of observations using postgres COPY protocol,
+// making it the fastest way to perform large inserts of observations.
+// Input yields are expected as 16-bit integers, with 0 representing 0%
+// and 30000 representing 100% of capacity.
+func (q *Queries) CreateObservationsAsInt16UsingCopy(ctx context.Context, arg []CreateObservationsAsInt16UsingCopyParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"obs", "observed_generation_values"}, []string{"location_id", "source_type_id", "observer_id", "observation_time_utc", "value"}, &iteratorForCreateObservationsAsInt16UsingCopy{rows: arg})
 }
 
-// iteratorForCopyCreatePredictedGenerationValues implements pgx.CopyFromSource.
-type iteratorForCopyCreatePredictedGenerationValues struct {
-	rows                 []CopyCreatePredictedGenerationValuesParams
+// iteratorForCreatePredictionsAsInt16UsingCopy implements pgx.CopyFromSource.
+type iteratorForCreatePredictionsAsInt16UsingCopy struct {
+	rows                 []CreatePredictionsAsInt16UsingCopyParams
 	skippedFirstNextCall bool
 }
 
-func (r *iteratorForCopyCreatePredictedGenerationValues) Next() bool {
+func (r *iteratorForCreatePredictionsAsInt16UsingCopy) Next() bool {
 	if len(r.rows) == 0 {
 		return false
 	}
@@ -63,7 +67,7 @@ func (r *iteratorForCopyCreatePredictedGenerationValues) Next() bool {
 	return len(r.rows) > 0
 }
 
-func (r iteratorForCopyCreatePredictedGenerationValues) Values() ([]interface{}, error) {
+func (r iteratorForCreatePredictionsAsInt16UsingCopy) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].HorizonMins,
 		r.rows[0].P10,
@@ -75,10 +79,14 @@ func (r iteratorForCopyCreatePredictedGenerationValues) Values() ([]interface{},
 	}, nil
 }
 
-func (r iteratorForCopyCreatePredictedGenerationValues) Err() error {
+func (r iteratorForCreatePredictionsAsInt16UsingCopy) Err() error {
 	return nil
 }
 
-func (q *Queries) CopyCreatePredictedGenerationValues(ctx context.Context, arg []CopyCreatePredictedGenerationValuesParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"pred", "predicted_generation_values"}, []string{"horizon_mins", "p10", "p50", "p90", "forecast_id", "target_time_utc", "metadata"}, &iteratorForCopyCreatePredictedGenerationValues{rows: arg})
+// CreatePredictionsAsInt16UsingCopy inserts predicted generation values using
+// postgres COPY protocol, making it the fastest way to perform large inserts of predictions.
+// Input p-values are expected as 16-bit integers, with 0 representing 0%
+// and 30000 representing 100% of capacity.
+func (q *Queries) CreatePredictionsAsInt16UsingCopy(ctx context.Context, arg []CreatePredictionsAsInt16UsingCopyParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"pred", "predicted_generation_values"}, []string{"horizon_mins", "p10", "p50", "p90", "forecast_id", "target_time_utc", "metadata"}, &iteratorForCreatePredictionsAsInt16UsingCopy{rows: arg})
 }

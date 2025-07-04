@@ -196,6 +196,49 @@ func (q *Queries) GetLocationSource(ctx context.Context, arg GetLocationSourcePa
 	return i, err
 }
 
+const getLocationSources = `-- name: GetLocationSources :many
+SELECT 
+    location_id,
+    (capacity::bigint * POWER(10::bigint, capacity_unit_prefix_factor - 3))::bigint AS capacity_kw,
+    metadata
+FROM loc.location_sources
+WHERE 
+    location_id = ANY($2::integer[])
+    AND source_type_id = (SELECT st.source_type_id FROM loc.source_types st WHERE st.source_type_name = $1)
+    AND UPPER(sys_period) IS NULL
+`
+
+type GetLocationSourcesParams struct {
+	SourceTypeName string
+	LocationIds    []int32
+}
+
+type GetLocationSourcesRow struct {
+	LocationID int32
+	CapacityKw int64
+	Metadata   []byte
+}
+
+func (q *Queries) GetLocationSources(ctx context.Context, arg GetLocationSourcesParams) ([]GetLocationSourcesRow, error) {
+	rows, err := q.db.Query(ctx, getLocationSources, arg.SourceTypeName, arg.LocationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetLocationSourcesRow{}
+	for rows.Next() {
+		var i GetLocationSourcesRow
+		if err := rows.Scan(&i.LocationID, &i.CapacityKw, &i.Metadata); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSourceTypeByName = `-- name: GetSourceTypeByName :one
 SELECT 
     source_type_id, source_type_name

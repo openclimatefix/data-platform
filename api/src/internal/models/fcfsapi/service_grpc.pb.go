@@ -41,7 +41,7 @@ type QuartzAPIClient interface {
 	GetPredictedTimeseries(ctx context.Context, in *GetPredictedTimeseriesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetPredictedTimeseriesResponse], error)
 	GetPredictedTimeseriesDeltas(ctx context.Context, in *GetPredictedTimeseriesDeltasRequest, opts ...grpc.CallOption) (*GetPredictedTimeseriesDeltasResponse, error)
 	GetPredictedCrossSection(ctx context.Context, in *GetPredictedCrossSectionRequest, opts ...grpc.CallOption) (*GetPredictedCrossSectionResponse, error)
-	GetObservedTimeseries(ctx context.Context, in *GetObservedTimeseriesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetObservedTimeseriesResponse], error)
+	GetObservedTimeseries(ctx context.Context, in *GetObservedTimeseriesRequest, opts ...grpc.CallOption) (*GetObservedTimeseriesResponse, error)
 	GetLatestForecast(ctx context.Context, in *GetLatestForecastRequest, opts ...grpc.CallOption) (*GetLatestForecastResponse, error)
 	GetLocationsAsGeoJSON(ctx context.Context, in *GetLocationsAsGeoJSONRequest, opts ...grpc.CallOption) (*GetLocationsAsGeoJSONResponse, error)
 	CreateSite(ctx context.Context, in *CreateSiteRequest, opts ...grpc.CallOption) (*CreateLocationResponse, error)
@@ -100,24 +100,15 @@ func (c *quartzAPIClient) GetPredictedCrossSection(ctx context.Context, in *GetP
 	return out, nil
 }
 
-func (c *quartzAPIClient) GetObservedTimeseries(ctx context.Context, in *GetObservedTimeseriesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetObservedTimeseriesResponse], error) {
+func (c *quartzAPIClient) GetObservedTimeseries(ctx context.Context, in *GetObservedTimeseriesRequest, opts ...grpc.CallOption) (*GetObservedTimeseriesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &QuartzAPI_ServiceDesc.Streams[1], QuartzAPI_GetObservedTimeseries_FullMethodName, cOpts...)
+	out := new(GetObservedTimeseriesResponse)
+	err := c.cc.Invoke(ctx, QuartzAPI_GetObservedTimeseries_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[GetObservedTimeseriesRequest, GetObservedTimeseriesResponse]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return out, nil
 }
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type QuartzAPI_GetObservedTimeseriesClient = grpc.ServerStreamingClient[GetObservedTimeseriesResponse]
 
 func (c *quartzAPIClient) GetLatestForecast(ctx context.Context, in *GetLatestForecastRequest, opts ...grpc.CallOption) (*GetLatestForecastResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -216,7 +207,7 @@ type QuartzAPIServer interface {
 	GetPredictedTimeseries(*GetPredictedTimeseriesRequest, grpc.ServerStreamingServer[GetPredictedTimeseriesResponse]) error
 	GetPredictedTimeseriesDeltas(context.Context, *GetPredictedTimeseriesDeltasRequest) (*GetPredictedTimeseriesDeltasResponse, error)
 	GetPredictedCrossSection(context.Context, *GetPredictedCrossSectionRequest) (*GetPredictedCrossSectionResponse, error)
-	GetObservedTimeseries(*GetObservedTimeseriesRequest, grpc.ServerStreamingServer[GetObservedTimeseriesResponse]) error
+	GetObservedTimeseries(context.Context, *GetObservedTimeseriesRequest) (*GetObservedTimeseriesResponse, error)
 	GetLatestForecast(context.Context, *GetLatestForecastRequest) (*GetLatestForecastResponse, error)
 	GetLocationsAsGeoJSON(context.Context, *GetLocationsAsGeoJSONRequest) (*GetLocationsAsGeoJSONResponse, error)
 	CreateSite(context.Context, *CreateSiteRequest) (*CreateLocationResponse, error)
@@ -244,8 +235,8 @@ func (UnimplementedQuartzAPIServer) GetPredictedTimeseriesDeltas(context.Context
 func (UnimplementedQuartzAPIServer) GetPredictedCrossSection(context.Context, *GetPredictedCrossSectionRequest) (*GetPredictedCrossSectionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPredictedCrossSection not implemented")
 }
-func (UnimplementedQuartzAPIServer) GetObservedTimeseries(*GetObservedTimeseriesRequest, grpc.ServerStreamingServer[GetObservedTimeseriesResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method GetObservedTimeseries not implemented")
+func (UnimplementedQuartzAPIServer) GetObservedTimeseries(context.Context, *GetObservedTimeseriesRequest) (*GetObservedTimeseriesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetObservedTimeseries not implemented")
 }
 func (UnimplementedQuartzAPIServer) GetLatestForecast(context.Context, *GetLatestForecastRequest) (*GetLatestForecastResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLatestForecast not implemented")
@@ -341,16 +332,23 @@ func _QuartzAPI_GetPredictedCrossSection_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _QuartzAPI_GetObservedTimeseries_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(GetObservedTimeseriesRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
+func _QuartzAPI_GetObservedTimeseries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetObservedTimeseriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
 	}
-	return srv.(QuartzAPIServer).GetObservedTimeseries(m, &grpc.GenericServerStream[GetObservedTimeseriesRequest, GetObservedTimeseriesResponse]{ServerStream: stream})
+	if interceptor == nil {
+		return srv.(QuartzAPIServer).GetObservedTimeseries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QuartzAPI_GetObservedTimeseries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QuartzAPIServer).GetObservedTimeseries(ctx, req.(*GetObservedTimeseriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type QuartzAPI_GetObservedTimeseriesServer = grpc.ServerStreamingServer[GetObservedTimeseriesResponse]
 
 func _QuartzAPI_GetLatestForecast_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetLatestForecastRequest)
@@ -530,6 +528,10 @@ var QuartzAPI_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _QuartzAPI_GetPredictedCrossSection_Handler,
 		},
 		{
+			MethodName: "GetObservedTimeseries",
+			Handler:    _QuartzAPI_GetObservedTimeseries_Handler,
+		},
+		{
 			MethodName: "GetLatestForecast",
 			Handler:    _QuartzAPI_GetLatestForecast_Handler,
 		},
@@ -570,11 +572,6 @@ var QuartzAPI_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "GetPredictedTimeseries",
 			Handler:       _QuartzAPI_GetPredictedTimeseries_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "GetObservedTimeseries",
-			Handler:       _QuartzAPI_GetObservedTimeseries_Handler,
 			ServerStreams: true,
 		},
 	},

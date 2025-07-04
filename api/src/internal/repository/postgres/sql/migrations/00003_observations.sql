@@ -37,6 +37,7 @@ CREATE TABLE obs.observed_generation_values (
     -- max smallint value (32767). This allows for some measurement leeway.
     value SMALLINT NOT NULL
         CHECK ( value >= 0 ),
+    -- TODO: Move this logic to the observer
     source_type_id SMALLINT NOT NULL
         REFERENCES loc.source_types(source_type_id)
         ON DELETE RESTRICT,

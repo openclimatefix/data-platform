@@ -38,7 +38,8 @@ CREATE TABLE pred.models (
         ),
     is_default BOOLEAN DEFAULT NULL
         CHECK (is_default),
-    created_at_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        CHECK (created_at_utc <= CURRENT_TIMESTAMP),
     PRIMARY KEY (model_id),
     UNIQUE (model_name, model_version),
     UNIQUE (is_default)
@@ -64,7 +65,11 @@ CREATE TABLE pred.forecasts (
         REFERENCES pred.models(model_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
-    init_time_utc TIMESTAMP NOT NULL,
+    init_time_utc TIMESTAMP NOT NULL
+        CHECK (
+            init_time_utc >= '2000-01-01 00:00:00'::timestamp
+            AND init_time_utc < CURRENT_TIMESTAMP + make_interval(days => 30)
+        ),
     PRIMARY KEY (forecast_id),
     UNIQUE (location_id, source_type_id, model_id, init_time_utc)
 );

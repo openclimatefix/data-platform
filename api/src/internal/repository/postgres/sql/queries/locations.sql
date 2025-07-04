@@ -87,6 +87,17 @@ WHERE
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
     AND UPPER(sys_period) IS NULL;
 
+-- name: GetLocationSources :many
+SELECT 
+    location_id,
+    (capacity::bigint * POWER(10::bigint, capacity_unit_prefix_factor - 3))::bigint AS capacity_kw,
+    metadata
+FROM loc.location_sources
+WHERE 
+    location_id = ANY(sqlc.arg(location_ids)::integer[])
+    AND source_type_id = (SELECT st.source_type_id FROM loc.source_types st WHERE st.source_type_name = $1)
+    AND UPPER(sys_period) IS NULL;
+
 -- name: CreateLocationSource :one
 INSERT INTO loc.location_sources (
     location_id, source_type_id, capacity,

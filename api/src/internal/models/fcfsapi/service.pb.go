@@ -24,12 +24,12 @@ var File_fcfsapi_service_proto protoreflect.FileDescriptor
 
 const file_fcfsapi_service_proto_rawDesc = "" +
 	"\n" +
-	"\x15fcfsapi/service.proto\x12\afcfsapi\x1a\x12fcfsapi/crud.proto\x1a\x16fcfsapi/quartzui.proto2\xdb\t\n" +
+	"\x15fcfsapi/service.proto\x12\afcfsapi\x1a\x12fcfsapi/crud.proto\x1a\x16fcfsapi/quartzui.proto2\xd9\t\n" +
 	"\tQuartzAPI\x12m\n" +
 	"\x16GetPredictedTimeseries\x12&.fcfsapi.GetPredictedTimeseriesRequest\x1a'.fcfsapi.GetPredictedTimeseriesResponse\"\x000\x01\x12}\n" +
 	"\x1cGetPredictedTimeseriesDeltas\x12,.fcfsapi.GetPredictedTimeseriesDeltasRequest\x1a-.fcfsapi.GetPredictedTimeseriesDeltasResponse\"\x00\x12q\n" +
-	"\x18GetPredictedCrossSection\x12(.fcfsapi.GetPredictedCrossSectionRequest\x1a).fcfsapi.GetPredictedCrossSectionResponse\"\x00\x12j\n" +
-	"\x15GetObservedTimeseries\x12%.fcfsapi.GetObservedTimeseriesRequest\x1a&.fcfsapi.GetObservedTimeseriesResponse\"\x000\x01\x12\\\n" +
+	"\x18GetPredictedCrossSection\x12(.fcfsapi.GetPredictedCrossSectionRequest\x1a).fcfsapi.GetPredictedCrossSectionResponse\"\x00\x12h\n" +
+	"\x15GetObservedTimeseries\x12%.fcfsapi.GetObservedTimeseriesRequest\x1a&.fcfsapi.GetObservedTimeseriesResponse\"\x00\x12\\\n" +
 	"\x11GetLatestForecast\x12!.fcfsapi.GetLatestForecastRequest\x1a\".fcfsapi.GetLatestForecastResponse\"\x00\x12h\n" +
 	"\x15GetLocationsAsGeoJSON\x12%.fcfsapi.GetLocationsAsGeoJSONRequest\x1a&.fcfsapi.GetLocationsAsGeoJSONResponse\"\x00\x12K\n" +
 	"\n" +

@@ -2,7 +2,7 @@ name: Build Containers
 
 on:
   push:
-    branches: ["main"]
+    branches-ignore: ['main']
     paths-ignore:
       - 'README.md'
 

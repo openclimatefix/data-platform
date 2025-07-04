@@ -5,6 +5,7 @@ syntax = "proto3";
 package fcfsapi;
 
 import "fcfsapi/common.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/devsjc/fcfs/api/src/internal/models/fcfsapi;fcfsapi";
 
@@ -75,8 +76,10 @@ message GetPredictedTimeseriesDeltasResponse {
 
 
 message GetObservedTimeseriesRequest {
-  repeated string location_ids = 1;
-  EnergySource energy_source = 2;
+  int32 location_id = 1;
+  string observer_name = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
 }
 
 message GetObservedTimeseriesResponse {
@@ -92,8 +95,14 @@ message GetPredictedCrossSectionRequest {
 }
 
 message GetPredictedCrossSectionResponse {
+ 
+  message YieldPredictionAtLocation {
+    int32 location_id = 1;
+    int64 yield_kw = 2;
+  }
+
   int64 timestamp_unix = 1;
-  repeated int64 yields_kw = 2;
+  repeated YieldPredictionAtLocation yields = 2;
 }
 
 

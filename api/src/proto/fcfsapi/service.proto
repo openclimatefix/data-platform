@@ -15,7 +15,7 @@ service QuartzAPI {
   rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesResponse) {}
   rpc GetPredictedTimeseriesDeltas(GetPredictedTimeseriesDeltasRequest) returns (GetPredictedTimeseriesDeltasResponse) {}
   rpc GetPredictedCrossSection(GetPredictedCrossSectionRequest) returns (GetPredictedCrossSectionResponse) {}
-  rpc GetObservedTimeseries(GetObservedTimeseriesRequest) returns (stream GetObservedTimeseriesResponse) {}
+  rpc GetObservedTimeseries(GetObservedTimeseriesRequest) returns (GetObservedTimeseriesResponse) {}
   rpc GetLatestForecast(GetLatestForecastRequest) returns (GetLatestForecastResponse) {}
   rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
 

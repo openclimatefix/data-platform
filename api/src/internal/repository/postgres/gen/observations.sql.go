@@ -11,40 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type CopyCreateObservationsParams struct {
+type CreateObservationsAsInt16UsingCopyParams struct {
 	LocationID         int32
 	SourceTypeID       int16
 	ObserverID         int32
 	ObservationTimeUtc pgtype.Timestamp
 	Value              int16
-}
-
-const createObservation = `-- name: CreateObservation :exec
-INSERT INTO obs.observed_generation_values (
-    location_id, source_type_id, observer_id, observation_time_utc, value
-) VALUES (
-    $1, (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $3, $4,
-    encode_pct($5::real)
-)
-`
-
-type CreateObservationParams struct {
-	LocationID         int32
-	SourceTypeName     string
-	ObserverID         int32
-	ObservationTimeUtc pgtype.Timestamp
-	YieldPct           float32
-}
-
-func (q *Queries) CreateObservation(ctx context.Context, arg CreateObservationParams) error {
-	_, err := q.db.Exec(ctx, createObservation,
-		arg.LocationID,
-		arg.SourceTypeName,
-		arg.ObserverID,
-		arg.ObservationTimeUtc,
-		arg.YieldPct,
-	)
-	return err
 }
 
 const createObserver = `-- name: CreateObserver :one
@@ -58,51 +30,58 @@ func (q *Queries) CreateObserver(ctx context.Context, observerName string) (int3
 	return observer_id, err
 }
 
-const getObservations = `-- name: GetObservations :many
+const getObservationsAsInt16Between = `-- name: GetObservationsAsInt16Between :many
 SELECT
-    location_id, source_type_id, observation_time_utc,
-    decode_smallint(value)::real AS yield_pct
+    location_id,
+    source_type_id,
+    observation_time_utc,
+    value
 FROM obs.observed_generation_values
 WHERE
     location_id = $1
     AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
     AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = $3)
-    AND observation_time_utc = ANY($4::timestamp[])
+    AND observation_time_utc BETWEEN $4::timestamp AND $5::timestamp
 `
 
-type GetObservationsParams struct {
-	LocationID         int32
-	SourceTypeName     string
-	ObserverName       string
-	ObservationTimeUtc []pgtype.Timestamp
+type GetObservationsAsInt16BetweenParams struct {
+	LocationID     int32
+	SourceTypeName string
+	ObserverName   string
+	StartTimeUtc   pgtype.Timestamp
+	EndTimeUtc     pgtype.Timestamp
 }
 
-type GetObservationsRow struct {
+type GetObservationsAsInt16BetweenRow struct {
 	LocationID         int32
 	SourceTypeID       int16
 	ObservationTimeUtc pgtype.Timestamp
-	YieldPct           float32
+	Value              int16
 }
 
-func (q *Queries) GetObservations(ctx context.Context, arg GetObservationsParams) ([]GetObservationsRow, error) {
-	rows, err := q.db.Query(ctx, getObservations,
+// GetObservationsAsInt16 gets observations between two timestamps
+// and returns their values as 16-bit integers, with 0 representing 0%
+// and 30000 representing 100% of capacity. This is faster than converting the values to percentages.
+func (q *Queries) GetObservationsAsInt16Between(ctx context.Context, arg GetObservationsAsInt16BetweenParams) ([]GetObservationsAsInt16BetweenRow, error) {
+	rows, err := q.db.Query(ctx, getObservationsAsInt16Between,
 		arg.LocationID,
 		arg.SourceTypeName,
 		arg.ObserverName,
-		arg.ObservationTimeUtc,
+		arg.StartTimeUtc,
+		arg.EndTimeUtc,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetObservationsRow{}
+	items := []GetObservationsAsInt16BetweenRow{}
 	for rows.Next() {
-		var i GetObservationsRow
+		var i GetObservationsAsInt16BetweenRow
 		if err := rows.Scan(
 			&i.LocationID,
 			&i.SourceTypeID,
 			&i.ObservationTimeUtc,
-			&i.YieldPct,
+			&i.Value,
 		); err != nil {
 			return nil, err
 		}
@@ -114,7 +93,7 @@ func (q *Queries) GetObservations(ctx context.Context, arg GetObservationsParams
 	return items, nil
 }
 
-const getObservationsBetween = `-- name: GetObservationsBetween :many
+const getObservationsAsPercentBetween = `-- name: GetObservationsAsPercentBetween :many
 SELECT
     location_id,
     source_type_id,
@@ -128,7 +107,7 @@ WHERE
     AND observation_time_utc BETWEEN $4::timestamp AND $5::timestamp
 `
 
-type GetObservationsBetweenParams struct {
+type GetObservationsAsPercentBetweenParams struct {
 	LocationID     int32
 	SourceTypeName string
 	ObserverName   string
@@ -136,15 +115,19 @@ type GetObservationsBetweenParams struct {
 	EndTimeUtc     pgtype.Timestamp
 }
 
-type GetObservationsBetweenRow struct {
+type GetObservationsAsPercentBetweenRow struct {
 	LocationID         int32
 	SourceTypeID       int16
 	ObservationTimeUtc pgtype.Timestamp
 	YieldPct           float32
 }
 
-func (q *Queries) GetObservationsBetween(ctx context.Context, arg GetObservationsBetweenParams) ([]GetObservationsBetweenRow, error) {
-	rows, err := q.db.Query(ctx, getObservationsBetween,
+// GetObservationsAsPercent gets observations between two timestamps
+// and returns their values as percentage of capacity.
+// Has been measured to be 10 times slower than returning the values directly, so use in non-critical paths
+// where readability or understandability is more important than performance.
+func (q *Queries) GetObservationsAsPercentBetween(ctx context.Context, arg GetObservationsAsPercentBetweenParams) ([]GetObservationsAsPercentBetweenRow, error) {
+	rows, err := q.db.Query(ctx, getObservationsAsPercentBetween,
 		arg.LocationID,
 		arg.SourceTypeName,
 		arg.ObserverName,
@@ -155,9 +138,9 @@ func (q *Queries) GetObservationsBetween(ctx context.Context, arg GetObservation
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetObservationsBetweenRow{}
+	items := []GetObservationsAsPercentBetweenRow{}
 	for rows.Next() {
-		var i GetObservationsBetweenRow
+		var i GetObservationsAsPercentBetweenRow
 		if err := rows.Scan(
 			&i.LocationID,
 			&i.SourceTypeID,
@@ -181,9 +164,14 @@ FROM obs.observers
 WHERE observer_name = $1
 `
 
-func (q *Queries) GetObserverByName(ctx context.Context, observerName string) (ObsObserver, error) {
+type GetObserverByNameRow struct {
+	ObserverID   int32
+	ObserverName string
+}
+
+func (q *Queries) GetObserverByName(ctx context.Context, observerName string) (GetObserverByNameRow, error) {
 	row := q.db.QueryRow(ctx, getObserverByName, observerName)
-	var i ObsObserver
+	var i GetObserverByNameRow
 	err := row.Scan(&i.ObserverID, &i.ObserverName)
 	return i, err
 }
@@ -194,15 +182,20 @@ SELECT
 FROM obs.observers
 `
 
-func (q *Queries) ListObservers(ctx context.Context) ([]ObsObserver, error) {
+type ListObserversRow struct {
+	ObserverID   int32
+	ObserverName string
+}
+
+func (q *Queries) ListObservers(ctx context.Context) ([]ListObserversRow, error) {
 	rows, err := q.db.Query(ctx, listObservers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ObsObserver{}
+	items := []ListObserversRow{}
 	for rows.Next() {
-		var i ObsObserver
+		var i ListObserversRow
 		if err := rows.Scan(&i.ObserverID, &i.ObserverName); err != nil {
 			return nil, err
 		}

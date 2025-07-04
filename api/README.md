@@ -22,10 +22,10 @@ The API is defined using `.proto` files in `src/proto`.
 These represent the contract between the client and any servers invoking the API.
 
 Relevant models and interfaces for both client and server implementations are then generated
-using the [protoc compiler](https://protobuf.dev/installation/), invoked through `go generate`:
+using the [protoc compiler](https://protobuf.dev/installation/), invoked through `make`:
 
 ```bash
-$ go generate ./...
+$ make gen-proto
 ```
 
 This will populate the `src/gen` directory with language-specific bindings for the API.
@@ -50,7 +50,7 @@ similarly, data layers can be swapped out or modified without breaking the API c
 |<--Uses generated bindings-->|  |<------------Logic in the the API repository------------->|          
 ```
 
-Currently [postgres](https://www.postgresql.org/) is the only concrete data repository implementation,
+[Postgres](https://www.postgresql.org/) is the only planned concrete data repository implementation,
 but there is also a dummy repository for testing purposes. These are found in `src/internal/repository`.
 
 ## Example usage

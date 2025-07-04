@@ -11,6 +11,7 @@ package fcfsapi
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -397,8 +398,10 @@ func (x *GetPredictedTimeseriesDeltasResponse) GetDeltas() []*YieldDelta {
 
 type GetObservedTimeseriesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds   []string               `protobuf:"bytes,1,rep,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
-	EnergySource  EnergySource           `protobuf:"varint,2,opt,name=energy_source,json=energySource,proto3,enum=fcfsapi.EnergySource" json:"energy_source,omitempty"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	ObserverName  string                 `protobuf:"bytes,2,opt,name=observer_name,json=observerName,proto3" json:"observer_name,omitempty"`
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -433,18 +436,32 @@ func (*GetObservedTimeseriesRequest) Descriptor() ([]byte, []int) {
 	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *GetObservedTimeseriesRequest) GetLocationIds() []string {
+func (x *GetObservedTimeseriesRequest) GetLocationId() int32 {
 	if x != nil {
-		return x.LocationIds
+		return x.LocationId
+	}
+	return 0
+}
+
+func (x *GetObservedTimeseriesRequest) GetObserverName() string {
+	if x != nil {
+		return x.ObserverName
+	}
+	return ""
+}
+
+func (x *GetObservedTimeseriesRequest) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
 	}
 	return nil
 }
 
-func (x *GetObservedTimeseriesRequest) GetEnergySource() EnergySource {
+func (x *GetObservedTimeseriesRequest) GetEndTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.EnergySource
+		return x.EndTime
 	}
-	return EnergySource_ENERGY_SOURCE_UNSPECIFIED
+	return nil
 }
 
 type GetObservedTimeseriesResponse struct {
@@ -560,9 +577,9 @@ func (x *GetPredictedCrossSectionRequest) GetTimestampUnix() int64 {
 }
 
 type GetPredictedCrossSectionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TimestampUnix int64                  `protobuf:"varint,1,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
-	YieldsKw      []int64                `protobuf:"varint,2,rep,packed,name=yields_kw,json=yieldsKw,proto3" json:"yields_kw,omitempty"`
+	state         protoimpl.MessageState                                        `protogen:"open.v1"`
+	TimestampUnix int64                                                         `protobuf:"varint,1,opt,name=timestamp_unix,json=timestampUnix,proto3" json:"timestamp_unix,omitempty"`
+	Yields        []*GetPredictedCrossSectionResponse_YieldPredictionAtLocation `protobuf:"bytes,2,rep,name=yields,proto3" json:"yields,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -604,9 +621,9 @@ func (x *GetPredictedCrossSectionResponse) GetTimestampUnix() int64 {
 	return 0
 }
 
-func (x *GetPredictedCrossSectionResponse) GetYieldsKw() []int64 {
+func (x *GetPredictedCrossSectionResponse) GetYields() []*GetPredictedCrossSectionResponse_YieldPredictionAtLocation {
 	if x != nil {
-		return x.YieldsKw
+		return x.Yields
 	}
 	return nil
 }
@@ -775,11 +792,63 @@ func (x *YieldPrediction_Uncertainty) GetUpperKw() int64 {
 	return 0
 }
 
+type GetPredictedCrossSectionResponse_YieldPredictionAtLocation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LocationId    int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
+	YieldKw       int64                  `protobuf:"varint,2,opt,name=yield_kw,json=yieldKw,proto3" json:"yield_kw,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPredictedCrossSectionResponse_YieldPredictionAtLocation) Reset() {
+	*x = GetPredictedCrossSectionResponse_YieldPredictionAtLocation{}
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPredictedCrossSectionResponse_YieldPredictionAtLocation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPredictedCrossSectionResponse_YieldPredictionAtLocation) ProtoMessage() {}
+
+func (x *GetPredictedCrossSectionResponse_YieldPredictionAtLocation) ProtoReflect() protoreflect.Message {
+	mi := &file_fcfsapi_quartzui_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPredictedCrossSectionResponse_YieldPredictionAtLocation.ProtoReflect.Descriptor instead.
+func (*GetPredictedCrossSectionResponse_YieldPredictionAtLocation) Descriptor() ([]byte, []int) {
+	return file_fcfsapi_quartzui_proto_rawDescGZIP(), []int{9, 0}
+}
+
+func (x *GetPredictedCrossSectionResponse_YieldPredictionAtLocation) GetLocationId() int32 {
+	if x != nil {
+		return x.LocationId
+	}
+	return 0
+}
+
+func (x *GetPredictedCrossSectionResponse_YieldPredictionAtLocation) GetYieldKw() int64 {
+	if x != nil {
+		return x.YieldKw
+	}
+	return 0
+}
+
 var File_fcfsapi_quartzui_proto protoreflect.FileDescriptor
 
 const file_fcfsapi_quartzui_proto_rawDesc = "" +
 	"\n" +
-	"\x16fcfsapi/quartzui.proto\x12\afcfsapi\x1a\x14fcfsapi/common.proto\"\xe0\x01\n" +
+	"\x16fcfsapi/quartzui.proto\x12\afcfsapi\x1a\x14fcfsapi/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\x01\n" +
 	"\x0fYieldPrediction\x12\x19\n" +
 	"\byield_kw\x18\x01 \x01(\x03R\ayieldKw\x12%\n" +
 	"\x0etimestamp_unix\x18\x02 \x01(\x03R\rtimestampUnix\x12F\n" +
@@ -811,10 +880,14 @@ const file_fcfsapi_quartzui_proto_rawDesc = "" +
 	"$GetPredictedTimeseriesDeltasResponse\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12+\n" +
-	"\x06deltas\x18\x02 \x03(\v2\x13.fcfsapi.YieldDeltaR\x06deltas\"}\n" +
-	"\x1cGetObservedTimeseriesRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\tR\vlocationIds\x12:\n" +
-	"\renergy_source\x18\x02 \x01(\x0e2\x15.fcfsapi.EnergySourceR\fenergySource\"h\n" +
+	"\x06deltas\x18\x02 \x03(\v2\x13.fcfsapi.YieldDeltaR\x06deltas\"\xd6\x01\n" +
+	"\x1cGetObservedTimeseriesRequest\x12\x1f\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
+	"locationId\x12#\n" +
+	"\robserver_name\x18\x02 \x01(\tR\fobserverName\x129\n" +
+	"\n" +
+	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
+	"\bend_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\"h\n" +
 	"\x1dGetObservedTimeseriesResponse\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12&\n" +
@@ -822,10 +895,14 @@ const file_fcfsapi_quartzui_proto_rawDesc = "" +
 	"\x1fGetPredictedCrossSectionRequest\x12!\n" +
 	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x12:\n" +
 	"\renergy_source\x18\x02 \x01(\x0e2\x15.fcfsapi.EnergySourceR\fenergySource\x12%\n" +
-	"\x0etimestamp_unix\x18\x03 \x01(\x03R\rtimestampUnix\"f\n" +
+	"\x0etimestamp_unix\x18\x03 \x01(\x03R\rtimestampUnix\"\xff\x01\n" +
 	" GetPredictedCrossSectionResponse\x12%\n" +
-	"\x0etimestamp_unix\x18\x01 \x01(\x03R\rtimestampUnix\x12\x1b\n" +
-	"\tyields_kw\x18\x02 \x03(\x03R\byieldsKw\"w\n" +
+	"\x0etimestamp_unix\x18\x01 \x01(\x03R\rtimestampUnix\x12[\n" +
+	"\x06yields\x18\x02 \x03(\v2C.fcfsapi.GetPredictedCrossSectionResponse.YieldPredictionAtLocationR\x06yields\x1aW\n" +
+	"\x19YieldPredictionAtLocation\x12\x1f\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
+	"locationId\x12\x19\n" +
+	"\byield_kw\x18\x02 \x01(\x03R\ayieldKw\"w\n" +
 	"\x18GetLatestForecastRequest\x12\x1f\n" +
 	"\vlocation_id\x18\x01 \x01(\x05R\n" +
 	"locationId\x12:\n" +
@@ -849,40 +926,44 @@ func file_fcfsapi_quartzui_proto_rawDescGZIP() []byte {
 	return file_fcfsapi_quartzui_proto_rawDescData
 }
 
-var file_fcfsapi_quartzui_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_fcfsapi_quartzui_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_fcfsapi_quartzui_proto_goTypes = []any{
-	(*YieldPrediction)(nil),                      // 0: fcfsapi.YieldPrediction
-	(*YieldDelta)(nil),                           // 1: fcfsapi.YieldDelta
-	(*GetPredictedTimeseriesRequest)(nil),        // 2: fcfsapi.GetPredictedTimeseriesRequest
-	(*GetPredictedTimeseriesResponse)(nil),       // 3: fcfsapi.GetPredictedTimeseriesResponse
-	(*GetPredictedTimeseriesDeltasRequest)(nil),  // 4: fcfsapi.GetPredictedTimeseriesDeltasRequest
-	(*GetPredictedTimeseriesDeltasResponse)(nil), // 5: fcfsapi.GetPredictedTimeseriesDeltasResponse
-	(*GetObservedTimeseriesRequest)(nil),         // 6: fcfsapi.GetObservedTimeseriesRequest
-	(*GetObservedTimeseriesResponse)(nil),        // 7: fcfsapi.GetObservedTimeseriesResponse
-	(*GetPredictedCrossSectionRequest)(nil),      // 8: fcfsapi.GetPredictedCrossSectionRequest
-	(*GetPredictedCrossSectionResponse)(nil),     // 9: fcfsapi.GetPredictedCrossSectionResponse
-	(*GetLatestForecastRequest)(nil),             // 10: fcfsapi.GetLatestForecastRequest
-	(*GetLatestForecastResponse)(nil),            // 11: fcfsapi.GetLatestForecastResponse
-	(*YieldPrediction_Uncertainty)(nil),          // 12: fcfsapi.YieldPrediction.Uncertainty
-	(EnergySource)(0),                            // 13: fcfsapi.EnergySource
-	(*Yield)(nil),                                // 14: fcfsapi.Yield
+	(*YieldPrediction)(nil),                                            // 0: fcfsapi.YieldPrediction
+	(*YieldDelta)(nil),                                                 // 1: fcfsapi.YieldDelta
+	(*GetPredictedTimeseriesRequest)(nil),                              // 2: fcfsapi.GetPredictedTimeseriesRequest
+	(*GetPredictedTimeseriesResponse)(nil),                             // 3: fcfsapi.GetPredictedTimeseriesResponse
+	(*GetPredictedTimeseriesDeltasRequest)(nil),                        // 4: fcfsapi.GetPredictedTimeseriesDeltasRequest
+	(*GetPredictedTimeseriesDeltasResponse)(nil),                       // 5: fcfsapi.GetPredictedTimeseriesDeltasResponse
+	(*GetObservedTimeseriesRequest)(nil),                               // 6: fcfsapi.GetObservedTimeseriesRequest
+	(*GetObservedTimeseriesResponse)(nil),                              // 7: fcfsapi.GetObservedTimeseriesResponse
+	(*GetPredictedCrossSectionRequest)(nil),                            // 8: fcfsapi.GetPredictedCrossSectionRequest
+	(*GetPredictedCrossSectionResponse)(nil),                           // 9: fcfsapi.GetPredictedCrossSectionResponse
+	(*GetLatestForecastRequest)(nil),                                   // 10: fcfsapi.GetLatestForecastRequest
+	(*GetLatestForecastResponse)(nil),                                  // 11: fcfsapi.GetLatestForecastResponse
+	(*YieldPrediction_Uncertainty)(nil),                                // 12: fcfsapi.YieldPrediction.Uncertainty
+	(*GetPredictedCrossSectionResponse_YieldPredictionAtLocation)(nil), // 13: fcfsapi.GetPredictedCrossSectionResponse.YieldPredictionAtLocation
+	(EnergySource)(0),                                                  // 14: fcfsapi.EnergySource
+	(*timestamppb.Timestamp)(nil),                                      // 15: google.protobuf.Timestamp
+	(*Yield)(nil),                                                      // 16: fcfsapi.Yield
 }
 var file_fcfsapi_quartzui_proto_depIdxs = []int32{
 	12, // 0: fcfsapi.YieldPrediction.uncertainty:type_name -> fcfsapi.YieldPrediction.Uncertainty
-	13, // 1: fcfsapi.GetPredictedTimeseriesRequest.energy_source:type_name -> fcfsapi.EnergySource
+	14, // 1: fcfsapi.GetPredictedTimeseriesRequest.energy_source:type_name -> fcfsapi.EnergySource
 	0,  // 2: fcfsapi.GetPredictedTimeseriesResponse.yields:type_name -> fcfsapi.YieldPrediction
-	13, // 3: fcfsapi.GetPredictedTimeseriesDeltasRequest.energy_source:type_name -> fcfsapi.EnergySource
+	14, // 3: fcfsapi.GetPredictedTimeseriesDeltasRequest.energy_source:type_name -> fcfsapi.EnergySource
 	1,  // 4: fcfsapi.GetPredictedTimeseriesDeltasResponse.deltas:type_name -> fcfsapi.YieldDelta
-	13, // 5: fcfsapi.GetObservedTimeseriesRequest.energy_source:type_name -> fcfsapi.EnergySource
-	14, // 6: fcfsapi.GetObservedTimeseriesResponse.yields:type_name -> fcfsapi.Yield
-	13, // 7: fcfsapi.GetPredictedCrossSectionRequest.energy_source:type_name -> fcfsapi.EnergySource
-	13, // 8: fcfsapi.GetLatestForecastRequest.energy_source:type_name -> fcfsapi.EnergySource
-	0,  // 9: fcfsapi.GetLatestForecastResponse.yields:type_name -> fcfsapi.YieldPrediction
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	15, // 5: fcfsapi.GetObservedTimeseriesRequest.start_time:type_name -> google.protobuf.Timestamp
+	15, // 6: fcfsapi.GetObservedTimeseriesRequest.end_time:type_name -> google.protobuf.Timestamp
+	16, // 7: fcfsapi.GetObservedTimeseriesResponse.yields:type_name -> fcfsapi.Yield
+	14, // 8: fcfsapi.GetPredictedCrossSectionRequest.energy_source:type_name -> fcfsapi.EnergySource
+	13, // 9: fcfsapi.GetPredictedCrossSectionResponse.yields:type_name -> fcfsapi.GetPredictedCrossSectionResponse.YieldPredictionAtLocation
+	14, // 10: fcfsapi.GetLatestForecastRequest.energy_source:type_name -> fcfsapi.EnergySource
+	0,  // 11: fcfsapi.GetLatestForecastResponse.yields:type_name -> fcfsapi.YieldPrediction
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_fcfsapi_quartzui_proto_init() }
@@ -897,7 +978,7 @@ func file_fcfsapi_quartzui_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_fcfsapi_quartzui_proto_rawDesc), len(file_fcfsapi_quartzui_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
