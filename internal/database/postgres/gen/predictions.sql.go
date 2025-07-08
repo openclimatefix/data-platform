@@ -14,17 +14,17 @@ import (
 const createForecast = `-- name: CreateForecast :one
 
 INSERT INTO pred.forecasts(
-    source_type_id, location_id, model_id, init_time_utc
+    location_id, source_type_id, predictor_id, init_time_utc
 ) VALUES (
-    (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2), $1, $3, $4
-) RETURNING forecast_id, init_time_utc, source_type_id, location_id, model_id
+    $1, $2, $3, $4
+) RETURNING forecast_id, init_time_utc, source_type_id, location_id, predictor_id
 `
 
 type CreateForecastParams struct {
-	LocationID     int32
-	SourceTypeName string
-	ModelID        int32
-	InitTimeUtc    pgtype.Timestamp
+	LocationID   int32
+	SourceTypeID int16
+	PredictorID  int32
+	InitTimeUtc  pgtype.Timestamp
 }
 
 type CreateForecastRow struct {
@@ -32,15 +32,15 @@ type CreateForecastRow struct {
 	InitTimeUtc  pgtype.Timestamp
 	SourceTypeID int16
 	LocationID   int32
-	ModelID      int32
+	PredictorID  int32
 }
 
-// --- Forecasts ---
+// --- Forecasts ------------------------------------------------------------------------------
 func (q *Queries) CreateForecast(ctx context.Context, arg CreateForecastParams) (CreateForecastRow, error) {
 	row := q.db.QueryRow(ctx, createForecast,
 		arg.LocationID,
-		arg.SourceTypeName,
-		arg.ModelID,
+		arg.SourceTypeID,
+		arg.PredictorID,
 		arg.InitTimeUtc,
 	)
 	var i CreateForecastRow
@@ -49,333 +49,228 @@ func (q *Queries) CreateForecast(ctx context.Context, arg CreateForecastParams) 
 		&i.InitTimeUtc,
 		&i.SourceTypeID,
 		&i.LocationID,
-		&i.ModelID,
+		&i.PredictorID,
 	)
 	return i, err
 }
 
-const createModel = `-- name: CreateModel :one
-
-INSERT INTO pred.models (model_name, model_version) VALUES (
-    $1, $2
-) RETURNING model_id
-`
-
-type CreateModelParams struct {
-	ModelName    string
-	ModelVersion string
-}
-
-// --- Models ---
-func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (int32, error) {
-	row := q.db.QueryRow(ctx, createModel, arg.ModelName, arg.ModelVersion)
-	var model_id int32
-	err := row.Scan(&model_id)
-	return model_id, err
-}
-
 type CreatePredictionsAsInt16UsingCopyParams struct {
 	HorizonMins   int16
-	P10           *int16
-	P50           int16
-	P90           *int16
+	P10Sip        *int16
+	P50Sip        int16
+	P90Sip        *int16
 	ForecastID    int32
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
 }
 
-const getDefaultModel = `-- name: GetDefaultModel :one
-SELECT
-    model_id, model_name, model_version, created_at_utc
-FROM pred.models
-WHERE is_default = true
-LIMIT 1
+const createPredictor = `-- name: CreatePredictor :one
+
+INSERT INTO pred.predictors (predictor_name, predictor_version) VALUES (
+    $1, $2
+) RETURNING predictor_id
 `
 
-type GetDefaultModelRow struct {
-	ModelID      int32
-	ModelName    string
-	ModelVersion string
-	CreatedAtUtc pgtype.Timestamp
+type CreatePredictorParams struct {
+	PredictorName    string
+	PredictorVersion string
 }
 
-func (q *Queries) GetDefaultModel(ctx context.Context) (GetDefaultModelRow, error) {
-	row := q.db.QueryRow(ctx, getDefaultModel)
-	var i GetDefaultModelRow
-	err := row.Scan(
-		&i.ModelID,
-		&i.ModelName,
-		&i.ModelVersion,
-		&i.CreatedAtUtc,
-	)
-	return i, err
+// --- Predictor ------------------------------------------------------------------------------
+func (q *Queries) CreatePredictor(ctx context.Context, arg CreatePredictorParams) (int32, error) {
+	row := q.db.QueryRow(ctx, createPredictor, arg.PredictorName, arg.PredictorVersion)
+	var predictor_id int32
+	err := row.Scan(&predictor_id)
+	return predictor_id, err
 }
 
-const getForecast = `-- name: GetForecast :one
+const getLatestForecastAtHorizonSincePivot = `-- name: GetLatestForecastAtHorizonSincePivot :one
+/* GetLatestForecastAtHorizonSincePivot retrieves the latest forecast for a given location,
+ * source type, and predictor. Only forecasts that are older than the pivot time
+ * minus the specified horizon are considered.
+ */
 SELECT
     f.forecast_id,
     f.init_time_utc,
     f.source_type_id,
     f.location_id,
-    f.model_id
+    f.predictor_id
 FROM pred.forecasts f
 WHERE f.location_id = $1
-AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-AND f.model_id = $3
-AND f.init_time_utc = $4
-`
-
-type GetForecastParams struct {
-	LocationID     int32
-	SourceTypeName string
-	ModelID        int32
-	InitTimeUtc    pgtype.Timestamp
-}
-
-type GetForecastRow struct {
-	ForecastID   int32
-	InitTimeUtc  pgtype.Timestamp
-	SourceTypeID int16
-	LocationID   int32
-	ModelID      int32
-}
-
-func (q *Queries) GetForecast(ctx context.Context, arg GetForecastParams) (GetForecastRow, error) {
-	row := q.db.QueryRow(ctx, getForecast,
-		arg.LocationID,
-		arg.SourceTypeName,
-		arg.ModelID,
-		arg.InitTimeUtc,
-	)
-	var i GetForecastRow
-	err := row.Scan(
-		&i.ForecastID,
-		&i.InitTimeUtc,
-		&i.SourceTypeID,
-		&i.LocationID,
-		&i.ModelID,
-	)
-	return i, err
-}
-
-const getForecastsTimeComponent = `-- name: GetForecastsTimeComponent :many
-WITH desired_init_times AS (
-    SELECT 
-        (d.day::date + make_time(sqlq.arg(hour)::integer, $4::integer, 0))::timestamp AS init_time_utc 
-    FROM generate_series(
-        NOW() - INTERVAL '7 days',
-        NOW() - INTERVAL '1 day',
-        INTERVAL '1 day'
-    ) AS d(day)
-    ORDER BY d.day ASC
-)
-SELECT
-    f.forecast_id,
-    f.init_time_utc,
-    f.source_type_id,
-    f.location_id,
-    f.model_id
-FROM pred.forecasts f
-INNER JOIN desired_init_times dit ON f.init_time_utc = dit.init_time_utc
-WHERE f.location_id = $1
-AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-AND f.model_id = $3
-`
-
-type GetForecastsTimeComponentParams struct {
-	LocationID     int32
-	SourceTypeName string
-	ModelID        int32
-	Minute         int32
-}
-
-type GetForecastsTimeComponentRow struct {
-	ForecastID   int32
-	InitTimeUtc  pgtype.Timestamp
-	SourceTypeID int16
-	LocationID   int32
-	ModelID      int32
-}
-
-func (q *Queries) GetForecastsTimeComponent(ctx context.Context, arg GetForecastsTimeComponentParams) ([]GetForecastsTimeComponentRow, error) {
-	rows, err := q.db.Query(ctx, getForecastsTimeComponent,
-		arg.LocationID,
-		arg.SourceTypeName,
-		arg.ModelID,
-		arg.Minute,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetForecastsTimeComponentRow{}
-	for rows.Next() {
-		var i GetForecastsTimeComponentRow
-		if err := rows.Scan(
-			&i.ForecastID,
-			&i.InitTimeUtc,
-			&i.SourceTypeID,
-			&i.LocationID,
-			&i.ModelID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getLatestForecastAtHorizon = `-- name: GetLatestForecastAtHorizon :one
-SELECT
-    f.forecast_id,
-    f.init_time_utc,
-    f.source_type_id,
-    f.location_id,
-    f.model_id
-FROM pred.forecasts f
-WHERE f.location_id = $1
-AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-AND f.model_id = $3
+AND f.source_type_id = $2
+AND f.predictor_id = $3
 AND f.init_time_utc <= $4::timestamp - MAKE_INTERVAL(mins => $5::integer)
 ORDER BY f.init_time_utc DESC
 LIMIT 1
 `
 
-type GetLatestForecastAtHorizonParams struct {
+type GetLatestForecastAtHorizonSincePivotParams struct {
 	LocationID     int32
-	SourceTypeName string
-	ModelID        int32
+	SourceTypeID   int16
+	PredictorID    int32
 	PivotTimestamp pgtype.Timestamp
 	HorizonMins    int32
 }
 
-type GetLatestForecastAtHorizonRow struct {
+type GetLatestForecastAtHorizonSincePivotRow struct {
 	ForecastID   int32
 	InitTimeUtc  pgtype.Timestamp
 	SourceTypeID int16
 	LocationID   int32
-	ModelID      int32
+	PredictorID  int32
 }
 
-// GetLatestForecastAtHorizon retrieves the latest forecast for a given location,
-// source type, and model. Only forecasts that are older than the specified horizon
-// are considered.
-func (q *Queries) GetLatestForecastAtHorizon(ctx context.Context, arg GetLatestForecastAtHorizonParams) (GetLatestForecastAtHorizonRow, error) {
-	row := q.db.QueryRow(ctx, getLatestForecastAtHorizon,
+func (q *Queries) GetLatestForecastAtHorizonSincePivot(ctx context.Context, arg GetLatestForecastAtHorizonSincePivotParams) (GetLatestForecastAtHorizonSincePivotRow, error) {
+	row := q.db.QueryRow(ctx, getLatestForecastAtHorizonSincePivot,
 		arg.LocationID,
-		arg.SourceTypeName,
-		arg.ModelID,
+		arg.SourceTypeID,
+		arg.PredictorID,
 		arg.PivotTimestamp,
 		arg.HorizonMins,
 	)
-	var i GetLatestForecastAtHorizonRow
+	var i GetLatestForecastAtHorizonSincePivotRow
 	err := row.Scan(
 		&i.ForecastID,
 		&i.InitTimeUtc,
 		&i.SourceTypeID,
 		&i.LocationID,
-		&i.ModelID,
+		&i.PredictorID,
 	)
 	return i, err
 }
 
-const getLatestModelByName = `-- name: GetLatestModelByName :one
+const getPredictorElseLatest = `-- name: GetPredictorElseLatest :one
+/* GetPredictor retrieves a predictor by its name and version.
+ * If no version is provided (empty string), it defaults to the latest version
+ * for the given predictor name.
+*/
 SELECT
-    model_id, model_name, model_version, created_at_utc
-FROM pred.models
-WHERE model_name = $1
-ORDER BY created_at_utc DESC
-LIMIT 1
+    predictor_id, predictor_name, predictor_version, created_at_utc
+FROM pred.predictors
+WHERE 
+    predictor_name = $1::text
+    AND predictor_version = COALESCE(
+        NULLIF($2::text, ''),
+        (
+            SELECT p.predictor_version
+            FROM pred.predictors p
+            WHERE p.predictor_name = $1::text
+            ORDER BY p.created_at_utc DESC
+            LIMIT 1
+        )
+    )
 `
 
-type GetLatestModelByNameRow struct {
-	ModelID      int32
-	ModelName    string
-	ModelVersion string
-	CreatedAtUtc pgtype.Timestamp
+type GetPredictorElseLatestParams struct {
+	PredictorName    string
+	PredictorVersion string
 }
 
-func (q *Queries) GetLatestModelByName(ctx context.Context, modelName string) (GetLatestModelByNameRow, error) {
-	row := q.db.QueryRow(ctx, getLatestModelByName, modelName)
-	var i GetLatestModelByNameRow
+func (q *Queries) GetPredictorElseLatest(ctx context.Context, arg GetPredictorElseLatestParams) (PredPredictor, error) {
+	row := q.db.QueryRow(ctx, getPredictorElseLatest, arg.PredictorName, arg.PredictorVersion)
+	var i PredPredictor
 	err := row.Scan(
-		&i.ModelID,
-		&i.ModelName,
-		&i.ModelVersion,
+		&i.PredictorID,
+		&i.PredictorName,
+		&i.PredictorVersion,
 		&i.CreatedAtUtc,
 	)
 	return i, err
 }
 
-const getModelById = `-- name: GetModelById :one
+const getWeekAverageDeltasForLocations = `-- name: GetWeekAverageDeltasForLocations :many
+/* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed generation values
+ * for a given source type, predictor, and observer, across a week of forecasts made with the same init time.
+ * The pivot timestamp is used to determine the week and init time of interest.
+ * The results are grouped by location and horizon.
+ */
+WITH desired_init_times AS (
+    SELECT 
+        (d.day::date + $4::timestamp::time)::timestamp AS init_time_utc 
+    FROM generate_series(
+        $4::timestamp::date - INTERVAL '7 days',
+        $4::timestamp::date - INTERVAL '1 day',
+        INTERVAL '1 day'
+    ) AS d(day)
+    ORDER BY d.day ASC
+),
+relevant_forecasts AS (
+    SELECT 
+        f.forecast_id,
+        f.init_time_utc,
+        f.source_type_id,
+        f.location_id,
+        f.predictor_id
+    FROM pred.forecasts f
+    INNER JOIN desired_init_times dit ON f.init_time_utc = dit.init_time_utc
+    WHERE f.location_id = ANY($5::integer[])
+    AND f.source_type_id = $1
+    AND f.predictor_id = $2
+),
+predicted_values AS (
+    SELECT
+        rf.location_id,
+        rf.forecast_id,
+        rf.source_type_id,
+        pgv.target_time_utc,
+        pgv.horizon_mins,
+        pgv.p50_sip
+    FROM relevant_forecasts rf
+    INNER JOIN pred.predicted_generation_values pgv USING (forecast_id)
+),
+deltas AS (
+    SELECT
+        pv.location_id,
+        pv.source_type_id,
+        pv.forecast_id,
+        pv.target_time_utc,
+        pv.horizon_mins,
+        pv.p50_sip - ov.value_sip AS delta_sip
+    FROM predicted_values pv
+    LEFT JOIN obs.observed_generation_values ov USING (location_id, source_type_id)
+    WHERE
+        ov.observer_id = $3
+        AND ov.observation_time_utc = pv.target_time_utc
+)
 SELECT
-    model_id, model_name, model_version, created_at_utc
-FROM pred.models
-WHERE model_id = $1
+    d.location_id,
+    d.horizon_mins,
+    AVG(d.delta_sip) AS avg_delta_sip
+FROM deltas d
+GROUP BY d.location_id, d.horizon_mins
+ORDER BY d.location_id, d.horizon_mins
 `
 
-type GetModelByIdRow struct {
-	ModelID      int32
-	ModelName    string
-	ModelVersion string
-	CreatedAtUtc pgtype.Timestamp
+type GetWeekAverageDeltasForLocationsParams struct {
+	SourceTypeID   int16
+	PredictorID    int32
+	ObserverID     int32
+	PivotTimestamp pgtype.Timestamp
+	LocationIds    []int32
 }
 
-func (q *Queries) GetModelById(ctx context.Context, modelID int32) (GetModelByIdRow, error) {
-	row := q.db.QueryRow(ctx, getModelById, modelID)
-	var i GetModelByIdRow
-	err := row.Scan(
-		&i.ModelID,
-		&i.ModelName,
-		&i.ModelVersion,
-		&i.CreatedAtUtc,
+type GetWeekAverageDeltasForLocationsRow struct {
+	LocationID  int32
+	HorizonMins int16
+	AvgDeltaSip float64
+}
+
+func (q *Queries) GetWeekAverageDeltasForLocations(ctx context.Context, arg GetWeekAverageDeltasForLocationsParams) ([]GetWeekAverageDeltasForLocationsRow, error) {
+	rows, err := q.db.Query(ctx, getWeekAverageDeltasForLocations,
+		arg.SourceTypeID,
+		arg.PredictorID,
+		arg.ObserverID,
+		arg.PivotTimestamp,
+		arg.LocationIds,
 	)
-	return i, err
-}
-
-const getPredictionsAsInt16ByForecastID = `-- name: GetPredictionsAsInt16ByForecastID :many
-SELECT
-    horizon_mins,
-    p10 AS p10_int16,
-    p50 AS p50_int16,
-    p90 AS p90_int16,
-    target_time_utc,
-    metadata
-FROM pred.predicted_generation_values
-WHERE forecast_id = $1
-`
-
-type GetPredictionsAsInt16ByForecastIDRow struct {
-	HorizonMins   int16
-	P10Int16      *int16
-	P50Int16      int16
-	P90Int16      *int16
-	TargetTimeUtc pgtype.Timestamp
-	Metadata      []byte
-}
-
-// GetPredictionsAsInt16ByForecastID retrieves predicted generation values as 16-bit integers,
-// with 0 representing 0% and 30000 representing 100% of capacity.
-func (q *Queries) GetPredictionsAsInt16ByForecastID(ctx context.Context, forecastID int32) ([]GetPredictionsAsInt16ByForecastIDRow, error) {
-	rows, err := q.db.Query(ctx, getPredictionsAsInt16ByForecastID, forecastID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetPredictionsAsInt16ByForecastIDRow{}
+	items := []GetWeekAverageDeltasForLocationsRow{}
 	for rows.Next() {
-		var i GetPredictionsAsInt16ByForecastIDRow
-		if err := rows.Scan(
-			&i.HorizonMins,
-			&i.P10Int16,
-			&i.P50Int16,
-			&i.P90Int16,
-			&i.TargetTimeUtc,
-			&i.Metadata,
-		); err != nil {
+		var i GetWeekAverageDeltasForLocationsRow
+		if err := rows.Scan(&i.LocationID, &i.HorizonMins, &i.AvgDeltaSip); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -386,7 +281,12 @@ func (q *Queries) GetPredictionsAsInt16ByForecastID(ctx context.Context, forecas
 	return items, nil
 }
 
-const getPredictionsAsPercentAtTimeAndHorizonForLocations = `-- name: GetPredictionsAsPercentAtTimeAndHorizonForLocations :many
+const listPredictionsAtTimeForLocations = `-- name: ListPredictionsAtTimeForLocations :many
+/* ListPredictionsAtTimeForLocations retrieves predicted generation values as percentages
+ * of capacity for a specific time and horizon.
+ * This is useful for comparing predictions across multiple locations.
+ * Predicted values are 16-bit integers, with 0 representing 0% and 30000 representing 100% of capacity.
+ */
 WITH relevant_forecasts AS (
     SELECT
         f.forecast_id,
@@ -395,8 +295,8 @@ WITH relevant_forecasts AS (
         ROW_NUMBER() OVER (PARTITION BY f.location_id ORDER BY f.init_time_utc DESC) AS rn
     FROM pred.forecasts f
     WHERE f.location_id = ANY($4::integer[])
-    AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $1)
-    AND f.model_id = $2
+    AND f.source_type_id = $1
+    AND f.predictor_id = $2
     AND f.init_time_utc <= $5::timestamp - MAKE_INTERVAL(mins => $3::integer)
 ),
 latest_relevant_forecasts AS (
@@ -410,9 +310,9 @@ latest_relevant_forecasts AS (
 SELECT
     rf.location_id,
     pgv.horizon_mins,
-    decode_smallint(pgv.p10) AS p10_pct,
-    decode_smallint(pgv.p50) AS p50_pct,
-    decode_smallint(pgv.p90) AS p90_pct,
+    pgv.p10_sip,
+    pgv.p50_sip,
+    pgv.p90_sip,
     pgv.target_time_utc,
     pgv.metadata
 FROM pred.predicted_generation_values pgv
@@ -420,30 +320,28 @@ INNER JOIN latest_relevant_forecasts rf USING (forecast_id)
 WHERE pgv.horizon_mins = $3::integer
 `
 
-type GetPredictionsAsPercentAtTimeAndHorizonForLocationsParams struct {
-	SourceTypeName string
-	ModelID        int32
-	HorizonMins    int32
-	LocationIds    []int32
-	Time           pgtype.Timestamp
+type ListPredictionsAtTimeForLocationsParams struct {
+	SourceTypeID int16
+	PredictorID  int32
+	HorizonMins  int32
+	LocationIds  []int32
+	Time         pgtype.Timestamp
 }
 
-type GetPredictionsAsPercentAtTimeAndHorizonForLocationsRow struct {
+type ListPredictionsAtTimeForLocationsRow struct {
 	LocationID    int32
 	HorizonMins   int16
-	P10Pct        float32
-	P50Pct        float32
-	P90Pct        float32
+	P10Sip        *int16
+	P50Sip        int16
+	P90Sip        *int16
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
 }
 
-// GetPredictionsAsPercentAtTimeAndHorizonForLocations retrieves predicted generation values as percentages
-// of capacity for a specific time and horizon. This is useful for comparing predictions across multiple locations.
-func (q *Queries) GetPredictionsAsPercentAtTimeAndHorizonForLocations(ctx context.Context, arg GetPredictionsAsPercentAtTimeAndHorizonForLocationsParams) ([]GetPredictionsAsPercentAtTimeAndHorizonForLocationsRow, error) {
-	rows, err := q.db.Query(ctx, getPredictionsAsPercentAtTimeAndHorizonForLocations,
-		arg.SourceTypeName,
-		arg.ModelID,
+func (q *Queries) ListPredictionsAtTimeForLocations(ctx context.Context, arg ListPredictionsAtTimeForLocationsParams) ([]ListPredictionsAtTimeForLocationsRow, error) {
+	rows, err := q.db.Query(ctx, listPredictionsAtTimeForLocations,
+		arg.SourceTypeID,
+		arg.PredictorID,
 		arg.HorizonMins,
 		arg.LocationIds,
 		arg.Time,
@@ -452,15 +350,15 @@ func (q *Queries) GetPredictionsAsPercentAtTimeAndHorizonForLocations(ctx contex
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetPredictionsAsPercentAtTimeAndHorizonForLocationsRow{}
+	items := []ListPredictionsAtTimeForLocationsRow{}
 	for rows.Next() {
-		var i GetPredictionsAsPercentAtTimeAndHorizonForLocationsRow
+		var i ListPredictionsAtTimeForLocationsRow
 		if err := rows.Scan(
 			&i.LocationID,
 			&i.HorizonMins,
-			&i.P10Pct,
-			&i.P50Pct,
-			&i.P90Pct,
+			&i.P10Sip,
+			&i.P50Sip,
+			&i.P90Sip,
 			&i.TargetTimeUtc,
 			&i.Metadata,
 		); err != nil {
@@ -474,44 +372,45 @@ func (q *Queries) GetPredictionsAsPercentAtTimeAndHorizonForLocations(ctx contex
 	return items, nil
 }
 
-const getPredictionsAsPercentByForecastID = `-- name: GetPredictionsAsPercentByForecastID :many
+const listPredictionsForForecast = `-- name: ListPredictionsForForecast :many
+/* ListPredictionsForForecast retrieves predicted generation values
+ * for a given forecast as smallint percentages (sip) of capacity;
+ * with 0 representing 0% and 30000 representing 100% of capacity.
+ */
 SELECT
     horizon_mins,
-    decode_smallint(p10) AS p10_pct,
-    decode_smallint(p50) AS p50_pct,
-    decode_smallint(p90) AS p90_pct,
+    p10_sip,
+    p50_sip,
+    p90_sip,
     target_time_utc,
     metadata
 FROM pred.predicted_generation_values
 WHERE forecast_id = $1
 `
 
-type GetPredictionsAsPercentByForecastIDRow struct {
+type ListPredictionsForForecastRow struct {
 	HorizonMins   int16
-	P10Pct        float32
-	P50Pct        float32
-	P90Pct        float32
+	P10Sip        *int16
+	P50Sip        int16
+	P90Sip        *int16
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
 }
 
-// GetPredictionsAsPercentByForecastID retrieves predicted generation values as percentages of
-// capacity for a specific forecast ID. This is slower than returning the values directly,
-// so use where readability or understandability is more important than performance.
-func (q *Queries) GetPredictionsAsPercentByForecastID(ctx context.Context, forecastID int32) ([]GetPredictionsAsPercentByForecastIDRow, error) {
-	rows, err := q.db.Query(ctx, getPredictionsAsPercentByForecastID, forecastID)
+func (q *Queries) ListPredictionsForForecast(ctx context.Context, forecastID int32) ([]ListPredictionsForForecastRow, error) {
+	rows, err := q.db.Query(ctx, listPredictionsForForecast, forecastID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetPredictionsAsPercentByForecastIDRow{}
+	items := []ListPredictionsForForecastRow{}
 	for rows.Next() {
-		var i GetPredictionsAsPercentByForecastIDRow
+		var i ListPredictionsForForecastRow
 		if err := rows.Scan(
 			&i.HorizonMins,
-			&i.P10Pct,
-			&i.P50Pct,
-			&i.P90Pct,
+			&i.P10Sip,
+			&i.P50Sip,
+			&i.P90Sip,
 			&i.TargetTimeUtc,
 			&i.Metadata,
 		); err != nil {
@@ -525,47 +424,55 @@ func (q *Queries) GetPredictionsAsPercentByForecastID(ctx context.Context, forec
 	return items, nil
 }
 
-const getPredictionsTimeseriesAsPercentAtHorizon = `-- name: GetPredictionsTimeseriesAsPercentAtHorizon :many
+const listPredictionsForLocation = `-- name: ListPredictionsForLocation :many
+/* ListPredictionsForLocation retrieves predicted generation values as a timeseries.
+ * Multiple overlapping forecasts can make up the timeseries, so predictions with the same target time
+ * are filtered by lowest allowable horizon (i.e. predicted closest to their target time).
+ * Predicted values are smallint percentages (sip) of capcity;
+ * with 0 representing 0% and 30000 representing 100% of capacity.
+ */
 WITH relevant_forecasts AS (
-    -- Get all the forecasts that fall within the time window for the given location, source, and model
+    /* Get all the forecasts that fall within the time window for the given location, source, and predictor */
     SELECT
         f.forecast_id
     FROM pred.forecasts f
     WHERE f.location_id = $1
-    AND f.source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-    AND f.model_id = $3
-    AND f.init_time_utc >= $4::timestamp - MAKE_INTERVAL(
-        mins => $5::integer, hours => 36
-    )
+    AND f.source_type_id = $2
+    AND f.predictor_id = $3
+    AND f.init_time_utc BETWEEN
+        $4::timestamp - MAKE_INTERVAL(mins => $5::integer)
+        AND $6::timestamp
 ),
 filteredPredictions AS (
-    -- Get all the predicted generation values for the relevant forecasts who's horizon is greater than
-    -- or equal to the specified horizon_mins
+    /* Get all the predicted generation values for the relevant forecasts who's horizon is greater than
+     * or equal to the specified horizon_mins */
     SELECT
         pv.horizon_mins,
-        pv.p10,
-        pv.p50,
-        pv.p90,
+        pv.p10_sip,
+        pv.p50_sip,
+        pv.p90_sip,
         pv.target_time_utc,
         pv.metadata
     FROM pred.predicted_generation_values pv
     INNER JOIN relevant_forecasts rf USING (forecast_id)
-    WHERE pv.target_time_utc >= $4::timestamp - MAKE_INTERVAL(mins => $5::integer, hours => 36)
+    WHERE pv.target_time_utc BETWEEN
+        $4::timestamp - MAKE_INTERVAL(mins => $5::integer)
+        AND $6::timestamp
     AND pv.horizon_mins >= $5::integer
 ),
 rankedPredictions AS (
-    -- Rank the predictions by horizon_mins for each target_time_utc
+    /* Rank the predictions by horizon_mins for each target_time_utc */
     SELECT
-        horizon_mins, p10, p50, p90, target_time_utc, metadata,
+        horizon_mins, p10_sip, p50_sip, p90_sip, target_time_utc, metadata,
         ROW_NUMBER() OVER (PARTITION BY target_time_utc ORDER BY horizon_mins ASC) AS rn
     FROM filteredPredictions
 )
 SELECT
-    -- For each target time, choose the value with the lowest available horizon
+    /* For each target time, choose the value with the lowest available horizon */
     rp.horizon_mins,
-    decode_smallint(p10) AS p10_pct,
-    decode_smallint(p50) AS p50_pct,
-    decode_smallint(p90) AS p90_pct,
+    p10_sip,
+    p50_sip,
+    p90_sip,
     rp.target_time_utc,
     rp.metadata
 FROM rankedPredictions rp
@@ -573,49 +480,45 @@ WHERE rp.rn = 1
 ORDER BY rp.target_time_utc ASC
 `
 
-type GetPredictionsTimeseriesAsPercentAtHorizonParams struct {
+type ListPredictionsForLocationParams struct {
 	LocationID     int32
-	SourceTypeName string
-	ModelID        int32
-	PivotTimestamp pgtype.Timestamp
+	SourceTypeID   int16
+	PredictorID    int32
+	StartTimestamp pgtype.Timestamp
 	HorizonMins    int32
+	EndTimestamp   pgtype.Timestamp
 }
 
-type GetPredictionsTimeseriesAsPercentAtHorizonRow struct {
+type ListPredictionsForLocationRow struct {
 	HorizonMins   int16
-	P10Pct        float32
-	P50Pct        float32
-	P90Pct        float32
+	P10Sip        *int16
+	P50Sip        int16
+	P90Sip        *int16
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
 }
 
-// GetPredictionsTimeseriesAsPercentAtHorizon retrieves predicted generation values as a timeseries.
-// Multiple forecasts make up the timeseries, so overlapping predictions are filtered
-// according to the lowest allowable horizon. The timeseries window is 36 hours ago to now.
-// Yields are returned as percentages of capacity.
-// Has been measured to be 10 times slower than returning the values directly, so use in non-critical paths
-// where readability or understandability is more important than performance.
-func (q *Queries) GetPredictionsTimeseriesAsPercentAtHorizon(ctx context.Context, arg GetPredictionsTimeseriesAsPercentAtHorizonParams) ([]GetPredictionsTimeseriesAsPercentAtHorizonRow, error) {
-	rows, err := q.db.Query(ctx, getPredictionsTimeseriesAsPercentAtHorizon,
+func (q *Queries) ListPredictionsForLocation(ctx context.Context, arg ListPredictionsForLocationParams) ([]ListPredictionsForLocationRow, error) {
+	rows, err := q.db.Query(ctx, listPredictionsForLocation,
 		arg.LocationID,
-		arg.SourceTypeName,
-		arg.ModelID,
-		arg.PivotTimestamp,
+		arg.SourceTypeID,
+		arg.PredictorID,
+		arg.StartTimestamp,
 		arg.HorizonMins,
+		arg.EndTimestamp,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetPredictionsTimeseriesAsPercentAtHorizonRow{}
+	items := []ListPredictionsForLocationRow{}
 	for rows.Next() {
-		var i GetPredictionsTimeseriesAsPercentAtHorizonRow
+		var i ListPredictionsForLocationRow
 		if err := rows.Scan(
 			&i.HorizonMins,
-			&i.P10Pct,
-			&i.P50Pct,
-			&i.P90Pct,
+			&i.P10Sip,
+			&i.P50Sip,
+			&i.P90Sip,
 			&i.TargetTimeUtc,
 			&i.Metadata,
 		); err != nil {
@@ -629,33 +532,26 @@ func (q *Queries) GetPredictionsTimeseriesAsPercentAtHorizon(ctx context.Context
 	return items, nil
 }
 
-const listModels = `-- name: ListModels :many
+const listPredictors = `-- name: ListPredictors :many
 SELECT
-    model_id, model_name, model_version, created_at_utc
-FROM pred.models
+    predictor_id, predictor_name, predictor_version, created_at_utc
+FROM pred.predictors
 ORDER BY created_at_utc DESC
 `
 
-type ListModelsRow struct {
-	ModelID      int32
-	ModelName    string
-	ModelVersion string
-	CreatedAtUtc pgtype.Timestamp
-}
-
-func (q *Queries) ListModels(ctx context.Context) ([]ListModelsRow, error) {
-	rows, err := q.db.Query(ctx, listModels)
+func (q *Queries) ListPredictors(ctx context.Context) ([]PredPredictor, error) {
+	rows, err := q.db.Query(ctx, listPredictors)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListModelsRow{}
+	items := []PredPredictor{}
 	for rows.Next() {
-		var i ListModelsRow
+		var i PredPredictor
 		if err := rows.Scan(
-			&i.ModelID,
-			&i.ModelName,
-			&i.ModelVersion,
+			&i.PredictorID,
+			&i.PredictorName,
+			&i.PredictorVersion,
 			&i.CreatedAtUtc,
 		); err != nil {
 			return nil, err
@@ -666,18 +562,4 @@ func (q *Queries) ListModels(ctx context.Context) ([]ListModelsRow, error) {
 		return nil, err
 	}
 	return items, nil
-}
-
-const setDefaultModel = `-- name: SetDefaultModel :exec
-UPDATE pred.models AS m SET
-    is_default = c.new_is_default
-FROM (VALUES
-    ((SELECT model_id FROM pred.models WHERE is_default = true), NULL), ($1::integer, true)
-) AS c(model_id, new_is_default)
-WHERE m.model_id = c.model_id
-`
-
-func (q *Queries) SetDefaultModel(ctx context.Context, modelID int32) error {
-	_, err := q.db.Exec(ctx, setDefaultModel, modelID)
-	return err
 }

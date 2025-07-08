@@ -21,7 +21,7 @@ type LocLocationSource struct {
 	SourceTypeID             int16
 	Capacity                 int16
 	CapacityUnitPrefixFactor int16
-	CapacityLimit            *int16
+	CapacityLimitSip         *int16
 	RecordID                 int32
 	LocationID               int32
 	Metadata                 []byte
@@ -39,7 +39,7 @@ type LocSourceType struct {
 }
 
 type ObsObservedGenerationValue struct {
-	Value              int16
+	ValueSip           int16
 	SourceTypeID       int16
 	ObserverID         int32
 	LocationID         int32
@@ -55,24 +55,23 @@ type PredForecast struct {
 	SourceTypeID int16
 	ForecastID   int32
 	LocationID   int32
-	ModelID      int32
+	PredictorID  int32
 	InitTimeUtc  pgtype.Timestamp
-}
-
-type PredModel struct {
-	ModelID      int32
-	ModelName    string
-	ModelVersion string
-	IsDefault    *bool
-	CreatedAtUtc pgtype.Timestamp
 }
 
 type PredPredictedGenerationValue struct {
 	HorizonMins   int16
-	P10           *int16
-	P50           int16
-	P90           *int16
+	P50Sip        int16
+	P10Sip        *int16
+	P90Sip        *int16
 	ForecastID    int32
 	TargetTimeUtc pgtype.Timestamp
 	Metadata      []byte
+}
+
+type PredPredictor struct {
+	PredictorID      int32
+	PredictorName    string
+	PredictorVersion string
+	CreatedAtUtc     pgtype.Timestamp
 }

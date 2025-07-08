@@ -24,9 +24,10 @@ gen-proto-internal:
 
 gen-proto-python:
 	mkdir -p protogen/python
-	protoc \
+	uvx --from 'betterproto[compiler]==2.0.0b7' protoc \
 		proto/ocf/dp/*.proto \
 		-I=proto \
+		--python_betterproto_opt=typing.310 \
 		--python_betterproto_out=protogen/python
 
 gen-proto-typescript:

@@ -9,88 +9,53 @@ import (
 )
 
 type Querier interface {
-	// --- Forecasts ---
+	// --- Forecasts ------------------------------------------------------------------------------
 	CreateForecast(ctx context.Context, arg CreateForecastParams) (CreateForecastRow, error)
 	// CreateForecastsUsingBatch inserts a new forecasts as a batch process.
-	CreateForecastsUsingBatch(ctx context.Context, arg []CreateForecastsUsingBatchParams) *CreateForecastsUsingBatchBatchResults
+	CreateForecastsUsingCopy(ctx context.Context, arg []CreateForecastsUsingCopyParams) *CreateForecastsUsingCopyBatchResults
 	CreateLocation(ctx context.Context, arg CreateLocationParams) (CreateLocationRow, error)
 	CreateLocationSource(ctx context.Context, arg CreateLocationSourceParams) (CreateLocationSourceRow, error)
-	// --- Models ---
-	CreateModel(ctx context.Context, arg CreateModelParams) (int32, error)
 	// CreateObservationsCopy inserts a batch of observations using postgres COPY protocol,
 	// making it the fastest way to perform large inserts of observations.
 	// Input yields are expected as 16-bit integers, with 0 representing 0%
 	// and 30000 representing 100% of capacity.
 	CreateObservationsAsInt16UsingCopy(ctx context.Context, arg []CreateObservationsAsInt16UsingCopyParams) (int64, error)
-	// CreateObservationsAsPercentUsingBatch inserts observed yields as a batch process.
-	// Input yields are expected as a percentage of capacity. This is more readable but
-	// slower than using the COPY protocol.
-	CreateObservationsAsPercentUsingBatch(ctx context.Context, arg []CreateObservationsAsPercentUsingBatchParams) *CreateObservationsAsPercentUsingBatchBatchResults
 	CreateObserver(ctx context.Context, observerName string) (int32, error)
-	// CreatePredictionsAsInt16UsingCopy inserts predicted generation values using
-	// postgres COPY protocol, making it the fastest way to perform large inserts of predictions.
-	// Input p-values are expected as 16-bit integers, with 0 representing 0%
-	// and 30000 representing 100% of capacity.
 	CreatePredictionsAsInt16UsingCopy(ctx context.Context, arg []CreatePredictionsAsInt16UsingCopyParams) (int64, error)
-	// CreatePredictedYieldsAsPercentUsingBatch inserts predicted generation values as a batch process.
-	// Input p-values are expected as a percentage of capacity. This is more readable but
-	// slower than using the COPY protocol.
-	CreatePredictionsAsPercentUsingBatch(ctx context.Context, arg []CreatePredictionsAsPercentUsingBatchParams) *CreatePredictionsAsPercentUsingBatchBatchResults
+	// --- Predictor ------------------------------------------------------------------------------
+	CreatePredictor(ctx context.Context, arg CreatePredictorParams) (int32, error)
 	DecomissionLocationSource(ctx context.Context, arg DecomissionLocationSourceParams) error
-	GetDefaultModel(ctx context.Context) (GetDefaultModelRow, error)
-	GetForecast(ctx context.Context, arg GetForecastParams) (GetForecastRow, error)
-	GetForecastsTimeComponent(ctx context.Context, arg GetForecastsTimeComponentParams) ([]GetForecastsTimeComponentRow, error)
-	// GetLatestForecastAtHorizon retrieves the latest forecast for a given location,
-	// source type, and model. Only forecasts that are older than the specified horizon
-	// are considered.
-	GetLatestForecastAtHorizon(ctx context.Context, arg GetLatestForecastAtHorizonParams) (GetLatestForecastAtHorizonRow, error)
-	GetLatestModelByName(ctx context.Context, modelName string) (GetLatestModelByNameRow, error)
+	GetLatestForecastAtHorizonSincePivot(ctx context.Context, arg GetLatestForecastAtHorizonSincePivotParams) (GetLatestForecastAtHorizonSincePivotRow, error)
 	GetLocationById(ctx context.Context, locationID int32) (GetLocationByIdRow, error)
 	GetLocationGeoJSONByIds(ctx context.Context, arg GetLocationGeoJSONByIdsParams) ([]byte, error)
 	// Get latest active record via the UPPER(sys_period) IS NULL condition
 	GetLocationSource(ctx context.Context, arg GetLocationSourceParams) (GetLocationSourceRow, error)
-	GetLocationSources(ctx context.Context, arg GetLocationSourcesParams) ([]GetLocationSourcesRow, error)
-	GetModelById(ctx context.Context, modelID int32) (GetModelByIdRow, error)
 	// GetObservationsAsInt16 gets observations between two timestamps
 	// and returns their values as 16-bit integers, with 0 representing 0%
 	// and 30000 representing 100% of capacity. This is faster than converting the values to percentages.
 	GetObservationsAsInt16Between(ctx context.Context, arg GetObservationsAsInt16BetweenParams) ([]GetObservationsAsInt16BetweenRow, error)
-	// GetObservationsAsPercent gets observations between two timestamps
-	// and returns their values as percentage of capacity.
-	// Has been measured to be 10 times slower than returning the values directly, so use in non-critical paths
-	// where readability or understandability is more important than performance.
-	GetObservationsAsPercentBetween(ctx context.Context, arg GetObservationsAsPercentBetweenParams) ([]GetObservationsAsPercentBetweenRow, error)
 	GetObserverByName(ctx context.Context, observerName string) (ObsObserver, error)
-	// GetPredictionsAsInt16ByForecastID retrieves predicted generation values as 16-bit integers,
-	// with 0 representing 0% and 30000 representing 100% of capacity.
-	GetPredictionsAsInt16ByForecastID(ctx context.Context, forecastID int32) ([]GetPredictionsAsInt16ByForecastIDRow, error)
-	// GetPredictionsAsPercentAtTimeAndHorizonForLocations retrieves predicted generation values as percentages
-	// of capacity for a specific time and horizon. This is useful for comparing predictions across multiple locations.
-	GetPredictionsAsPercentAtTimeAndHorizonForLocations(ctx context.Context, arg GetPredictionsAsPercentAtTimeAndHorizonForLocationsParams) ([]GetPredictionsAsPercentAtTimeAndHorizonForLocationsRow, error)
-	// GetPredictionsAsPercentByForecastID retrieves predicted generation values as percentages of
-	// capacity for a specific forecast ID. This is slower than returning the values directly,
-	// so use where readability or understandability is more important than performance.
-	GetPredictionsAsPercentByForecastID(ctx context.Context, forecastID int32) ([]GetPredictionsAsPercentByForecastIDRow, error)
-	// GetPredictionsTimeseriesAsPercentAtHorizon retrieves predicted generation values as a timeseries.
-	// Multiple forecasts make up the timeseries, so overlapping predictions are filtered
-	// according to the lowest allowable horizon. The timeseries window is 36 hours ago to now.
-	// Yields are returned as percentages of capacity.
-	// Has been measured to be 10 times slower than returning the values directly, so use in non-critical paths
-	// where readability or understandability is more important than performance.
-	GetPredictionsTimeseriesAsPercentAtHorizon(ctx context.Context, arg GetPredictionsTimeseriesAsPercentAtHorizonParams) ([]GetPredictionsTimeseriesAsPercentAtHorizonRow, error)
+	GetPredictorElseLatest(ctx context.Context, arg GetPredictorElseLatestParams) (PredPredictor, error)
+	//- Queries for the locations table ------------------------------
 	GetSourceTypeByName(ctx context.Context, sourceTypeName string) (LocSourceType, error)
+	GetWeekAverageDeltasForLocations(ctx context.Context, arg GetWeekAverageDeltasForLocationsParams) ([]GetWeekAverageDeltasForLocationsRow, error)
 	ListLocationGeometryByType(ctx context.Context, locationTypeName string) ([]ListLocationGeometryByTypeRow, error)
 	ListLocationIdsByType(ctx context.Context, locationTypeName string) ([]ListLocationIdsByTypeRow, error)
-	ListLocationSourceCapacityHistory(ctx context.Context, arg ListLocationSourceCapacityHistoryParams) ([]ListLocationSourceCapacityHistoryRow, error)
+	// ListLocationSourceHistory shows all the historical records for a given location and source type.
 	ListLocationSourceHistory(ctx context.Context, arg ListLocationSourceHistoryParams) ([]ListLocationSourceHistoryRow, error)
 	ListLocationsByType(ctx context.Context, locationTypeName string) ([]LocLocation, error)
-	ListModels(ctx context.Context) ([]ListModelsRow, error)
+	ListLocationsSources(ctx context.Context, arg ListLocationsSourcesParams) ([]ListLocationsSourcesRow, error)
 	ListObservers(ctx context.Context) ([]ObsObserver, error)
-	//- Queries for the locations table ------------------------------
-	ListSourceTypes(ctx context.Context) ([]LocSourceType, error)
-	SetDefaultModel(ctx context.Context, modelID int32) error
-	UpdateLocationSourceCapacity(ctx context.Context, arg UpdateLocationSourceCapacityParams) error
-	UpdateLocationSourceMetadata(ctx context.Context, arg UpdateLocationSourceMetadataParams) error
+	ListPredictionsAtTimeForLocations(ctx context.Context, arg ListPredictionsAtTimeForLocationsParams) ([]ListPredictionsAtTimeForLocationsRow, error)
+	ListPredictionsForForecast(ctx context.Context, forecastID int32) ([]ListPredictionsForForecastRow, error)
+	ListPredictionsForLocation(ctx context.Context, arg ListPredictionsForLocationParams) ([]ListPredictionsForLocationRow, error)
+	ListPredictors(ctx context.Context) ([]PredPredictor, error)
+	// UpdateLocationSource modifies an existing location source record.
+	// Updates targeting tracked columns (capacity, capacity_unit_prefix_factor, capacity_limit, metadata)
+	// create a new record instead of modifying the existing one.
+	// Fields that want to remain unchanged should be set to their current values,
+	// as the database cannot know if NULL is intended to be a new value or a flag to ignore the update.
+	UpdateLocationSource(ctx context.Context, arg UpdateLocationSourceParams) error
 }
 
 var _ Querier = (*Queries)(nil)

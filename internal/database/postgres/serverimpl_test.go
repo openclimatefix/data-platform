@@ -26,7 +26,8 @@ import (
 
 // --- HELPERS ------------------------------------------------------------------------------------
 
-type TBLogConsumer struct{tb testing.TB}
+type TBLogConsumer struct{ tb testing.TB }
+
 func (lc *TBLogConsumer) Accept(l testcontainers.Log) {
 	if strings.Contains(string(l.Content), "NOTICE:") {
 		lc.tb.Logf("pgcontainer: %s", l.Content)
@@ -58,9 +59,9 @@ func createPostgresContainer(tb testing.TB) string {
 			wait.ForListeningPort("5432/tcp"),
 		),
 		LogConsumerCfg: &testcontainers.LogConsumerConfig{
-        	Opts:      []testcontainers.LogProductionOption{testcontainers.WithLogProductionTimeout(10 * time.Second)},
+			Opts:      []testcontainers.LogProductionOption{testcontainers.WithLogProductionTimeout(10 * time.Second)},
 			Consumers: []testcontainers.LogConsumer{&g},
-    	},
+		},
 	}
 	pgC, err := testcontainers.GenericContainer(
 		tb.Context(),
@@ -114,7 +115,7 @@ func seed(tb testing.TB, pgConnString string, params seedDBParams) (numPgvs int)
 }
 
 // Create a GRPC client for running tests with
-func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformServiceClient  {
+func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformServiceClient {
 	tb.Helper()
 	// Create server using in-memory listener
 	s := grpc.NewServer()
@@ -168,28 +169,26 @@ func (s *seedDBParams) NumPgvRows() int {
 
 // --- Tests --------------------------------------------------------------------------------------
 
-func TestCapacityKWToMultiplier(t *testing.T) {
-	// Test cases
+func TestCapacityToMultiplier(t *testing.T) {
 	type TestCase struct {
-		capacityKw         int64
+		capacityWatts      uint64
 		expectedValue      int16
 		expectedMultiplier int16
 		shouldError        bool
 	}
 	tests := []TestCase{
-		{-1, 0, 0, true},
 		{0, 0, 0, false},
-		{500, 500, 3, false},
-		{32767, 32767, 3, false},
-		{32768, 33, 6, false}, // Needs rounding, should go to 33 MW
-		{33000, 33, 6, false},
-		{1000000000, 1000, 9, false}, // 1TW
-		{12345678, 12346, 6, false},  // 12 GW
+		{500000, 500, 3, false},
+		{32767000, 32767, 3, false},
+		{32768000, 33, 6, false}, // Needs rounding, should go to 33 MW
+		{33000000, 33, 6, false},
+		{1000000000000, 1000, 9, false}, // 1TW
+		{12345678000, 12346, 6, false},  // 12 GW
 	}
 
 	for _, test := range tests {
-		t.Run(fmt.Sprintf("capacityKw=%d", test.capacityKw), func(t *testing.T) {
-			capacity, prefix, err := capacityKwToValueMultiplier(test.capacityKw)
+		t.Run(fmt.Sprintf("capacityWatts=%d", test.capacityWatts), func(t *testing.T) {
+			capacity, prefix, err := capacityToValueMultiplier(test.capacityWatts)
 			if test.shouldError {
 				require.Error(t, err)
 			} else {
@@ -204,70 +203,57 @@ func TestCapacityKWToMultiplier(t *testing.T) {
 func TestCreateSolarSite(t *testing.T) {
 	c := setupClient(t, createPostgresContainer(t))
 
-	defaultSite := &pb.CreateSiteRequest{
-		Name:         "GREENWICH OBSERVATORY",
-		Latitude:     51.4769,
-		Longitude:    -0.0005,
-		CapacityKw:   1280,
-		Metadata:     `{"group": "test-sites"}`,
-		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+	defaultReq := &pb.CreateSiteRequest{
+		Name: "GREENWICH OBSERVATORY",
+		Latlng: &pb.LatLng{
+			Latitude:  51.4769,
+			Longitude: -0.0005,
+		},
+		CapacityWatts: 1280000,
+		Metadata:      `{"group": "test-sites"}`,
+		EnergySource:  pb.EnergySource_SOLAR,
 	}
 
 	tests := []struct {
 		name        string
-		site        *pb.CreateSiteRequest
+		req        *pb.CreateSiteRequest
 		shouldError bool
 	}{
 		{
 			name:        "Should create default site",
-			site:        defaultSite,
+			req:        defaultReq,
 			shouldError: false,
 		},
 		{
 			name: "Should create site with large capacity",
-			site: &pb.CreateSiteRequest{
-				Name:         "LARGE CAPACITY SITE",
-				Latitude:     defaultSite.Latitude,
-				Longitude:    defaultSite.Longitude,
-				CapacityKw:   100000000, // 100 GW
-				Metadata:     defaultSite.Metadata,
-				EnergySource: defaultSite.EnergySource,
+			req: &pb.CreateSiteRequest{
+				Name:          "LARGE CAPACITY SITE",
+				Latlng:        defaultReq.Latlng,
+				CapacityWatts: 100000000000, // 100 GW
+				Metadata:      defaultReq.Metadata,
+				EnergySource:  defaultReq.EnergySource,
 			},
 			shouldError: false,
 		},
 		{
-			name: "Shouldn't create site with negative capacity",
-			site: &pb.CreateSiteRequest{
-				Name:         "NEGATIVE CAPACITY SITE",
-				Latitude:     defaultSite.Latitude,
-				Longitude:    defaultSite.Longitude,
-				CapacityKw:   -1000, // Invalid capacity
-				Metadata:     defaultSite.Metadata,
-				EnergySource: defaultSite.EnergySource,
-			},
-			shouldError: true,
-		},
-		{
 			name: "Shouldn't create site with invalid metadata",
-			site: &pb.CreateSiteRequest{
-				Name:         "INVALID METADATA SITE",
-				Latitude:     defaultSite.Latitude,
-				Longitude:    defaultSite.Longitude,
-				CapacityKw:   defaultSite.CapacityKw,
-				Metadata:     "{}", // Empty metadata
-				EnergySource: defaultSite.EnergySource,
+			req: &pb.CreateSiteRequest{
+				Name:          "INVALID METADATA SITE",
+				Latlng:        defaultReq.Latlng,
+				CapacityWatts: defaultReq.CapacityWatts,
+				Metadata:      "{}", // Empty metadata
+				EnergySource:  defaultReq.EnergySource,
 			},
 			shouldError: true,
 		},
 		{
 			name: "Shouldn't create site with invalid name",
-			site: &pb.CreateSiteRequest{
-				Name:         "",
-				Latitude:     defaultSite.Latitude,
-				Longitude:    defaultSite.Longitude,
-				CapacityKw:   defaultSite.CapacityKw,
-				Metadata:     defaultSite.Metadata,
-				EnergySource: defaultSite.EnergySource,
+			req: &pb.CreateSiteRequest{
+				Name:          "",
+				Latlng:        defaultReq.Latlng,
+				CapacityWatts: defaultReq.CapacityWatts,
+				Metadata:      defaultReq.Metadata,
+				EnergySource:  defaultReq.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -275,7 +261,7 @@ func TestCreateSolarSite(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := c.CreateSite(t.Context(), tt.site)
+			resp, err := c.CreateSite(t.Context(), tt.req)
 			if tt.shouldError {
 				require.Error(t, err)
 			} else {
@@ -283,14 +269,17 @@ func TestCreateSolarSite(t *testing.T) {
 				// Try to read it back
 				resp2, err := c.GetLocation(
 					t.Context(),
-					&pb.GetLocationRequest{LocationId: resp.LocationId},
+					&pb.GetLocationRequest{
+						LocationId: resp.LocationId,
+						EnergySource: defaultReq.EnergySource,
+					},
 				)
 				require.NoError(t, err)
-				require.Equal(t, tt.site.Name, resp2.Name)
-				require.Equal(t, tt.site.Latitude, resp2.Latitude)
-				require.Equal(t, tt.site.Longitude, resp2.Longitude)
-				require.Equal(t, tt.site.CapacityKw, resp2.CapacityKw)
-				require.Equal(t, tt.site.Metadata, resp2.Metadata)
+				require.Equal(t, tt.req.Name, resp2.Name)
+				require.Equal(t, tt.req.Latlng.Latitude, resp2.Latlng.Latitude)
+				require.Equal(t, tt.req.Latlng.Longitude, resp2.Latlng.Longitude)
+				require.Equal(t, tt.req.CapacityWatts, resp2.CapacityWatts)
+				require.Equal(t, tt.req.Metadata, resp2.Metadata)
 			}
 		})
 	}
@@ -307,11 +296,11 @@ func TestCreateSolarGSP(t *testing.T) {
 	c := setupClient(t, createPostgresContainer(t))
 
 	defaultGsp := &pb.CreateGspRequest{
-		Name:         "OXFORDSHIRE",
-		Metadata:     `{"group": "test-gsps"}`,
-		Geometry:     "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5))",
-		CapacityMw:   2002,
-		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		Name:          "OXFORDSHIRE",
+		Metadata:      `{"group": "test-gsps"}`,
+		Geometry:      "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5))",
+		CapacityWatts: 2002000000, // 2002 MW
+		EnergySource:  pb.EnergySource_SOLAR,
 	}
 
 	tests := []struct {
@@ -327,66 +316,55 @@ func TestCreateSolarGSP(t *testing.T) {
 		{
 			name: "Should create GSP with large capacity",
 			gsp: &pb.CreateGspRequest{
-				Name:         "LARGE CAPACITY GSP",
-				Metadata:     defaultGsp.Metadata,
-				Geometry:     defaultGsp.Geometry,
-				CapacityMw:   1000000, // 1000 GW
-				EnergySource: defaultGsp.EnergySource,
+				Name:          "LARGE CAPACITY GSP",
+				Metadata:      defaultGsp.Metadata,
+				Geometry:      defaultGsp.Geometry,
+				CapacityWatts: 1000000000000, // 1000 GW
+				EnergySource:  defaultGsp.EnergySource,
 			},
 			shouldError: false,
 		},
 		{
-			name: "Shouldn't create GSP with negative capacity",
-			gsp: &pb.CreateGspRequest{
-				Name:         "NEGATIVE CAPACITY GSP",
-				Metadata:     defaultGsp.Metadata,
-				Geometry:     defaultGsp.Geometry,
-				CapacityMw:   -1000, // Invalid capacity
-				EnergySource: defaultGsp.EnergySource,
-			},
-			shouldError: true,
-		},
-		{
 			name: "Shouldn't create GSP with invalid geometry 1 (non-WKT)",
 			gsp: &pb.CreateGspRequest{
-				Name:         "INVALID GEOMETRY GSP",
-				Metadata:     defaultGsp.Metadata,
-				Geometry:     "INVALID GEOMETRY",
-				CapacityMw:   defaultGsp.CapacityMw,
-				EnergySource: defaultGsp.EnergySource,
+				Name:          "INVALID GEOMETRY GSP",
+				Metadata:      defaultGsp.Metadata,
+				Geometry:      "INVALID GEOMETRY",
+				CapacityWatts: defaultGsp.CapacityWatts,
+				EnergySource:  defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
 		{
 			name: "Shouldn't create a GSP with invalid geometry 2 (3D geometry)",
 			gsp: &pb.CreateGspRequest{
-				Name:         "3D GEOMETRY GSP",
-				Metadata:     defaultGsp.Metadata,
-				Geometry:     "POLYGON((0.0 51.5 0.0, 1.0 51.5 0.0, 1.0 52.0 0.0, 0.0 52.0 0.0, 0.0 51.5 0.0))",
-				CapacityMw:   defaultGsp.CapacityMw,
-				EnergySource: defaultGsp.EnergySource,
+				Name:          "3D GEOMETRY GSP",
+				Metadata:      defaultGsp.Metadata,
+				Geometry:      "POLYGON((0.0 51.5 0.0, 1.0 51.5 0.0, 1.0 52.0 0.0, 0.0 52.0 0.0, 0.0 51.5 0.0))",
+				CapacityWatts: defaultGsp.CapacityWatts,
+				EnergySource:  defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
 		{
 			name: "Shouldn't create GSP with empty geometry",
 			gsp: &pb.CreateGspRequest{
-				Name:         "EMPTY GEOMETRY GSP",
-				Metadata:     defaultGsp.Metadata,
-				Geometry:     "",
-				CapacityMw:   defaultGsp.CapacityMw,
-				EnergySource: defaultGsp.EnergySource,
+				Name:          "EMPTY GEOMETRY GSP",
+				Metadata:      defaultGsp.Metadata,
+				Geometry:      "",
+				CapacityWatts: defaultGsp.CapacityWatts,
+				EnergySource:  defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
 		{
 			name: "Shouldn't create GSP with empty name",
 			gsp: &pb.CreateGspRequest{
-				Name:         "",
-				Metadata:     defaultGsp.Metadata,
-				Geometry:     defaultGsp.Geometry,
-				CapacityMw:   defaultGsp.CapacityMw,
-				EnergySource: defaultGsp.EnergySource,
+				Name:          "",
+				Metadata:      defaultGsp.Metadata,
+				Geometry:      defaultGsp.Geometry,
+				CapacityWatts: defaultGsp.CapacityWatts,
+				EnergySource:  defaultGsp.EnergySource,
 			},
 			shouldError: true,
 		},
@@ -401,12 +379,15 @@ func TestCreateSolarGSP(t *testing.T) {
 				require.NoError(t, err)
 				// Try to read it back
 				resp2, err := c.GetLocation(
-					t.Context(), &pb.GetLocationRequest{LocationId: resp.LocationId},
+					t.Context(), &pb.GetLocationRequest{
+						LocationId: resp.LocationId,
+						EnergySource: tt.gsp.EnergySource,
+					},
 				)
 				require.NoError(t, err)
 				require.Equal(t, tt.gsp.Name, resp2.Name)
 				require.Equal(t, tt.gsp.Metadata, resp2.Metadata)
-				require.Equal(t, tt.gsp.CapacityMw*1000, resp2.CapacityKw)
+				require.Equal(t, tt.gsp.CapacityWatts, resp2.CapacityWatts)
 			}
 		})
 	}
@@ -435,9 +416,11 @@ func TestGetPredictedCrossSection(t *testing.T) {
 	}
 
 	crossSectionResp, err := c.GetPredictedCrossSection(t.Context(), &pb.GetPredictedCrossSectionRequest{
-		TimestampUnix: pivotTime.Unix(),
-		LocationIds: locationIds,
-	})
+		EnergySource:  pb.EnergySource_SOLAR,
+		TimestampUnix: timestamppb.New(pivotTime),
+		LocationIds:   locationIds,
+		Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10",
+	}})
 	require.NoError(t, err)
 	require.NotNil(t, crossSectionResp)
 	require.Len(t, crossSectionResp.Yields, len(locationIds))
@@ -450,12 +433,14 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 	siteIds := make([]int32, 3)
 	for i := range siteIds {
 		resp, err := c.CreateSite(t.Context(), &pb.CreateSiteRequest{
-			Name:         fmt.Sprintf("TESTSITE%02d", i),
-			Latitude:     51.5 + float32(i)*0.01,
-			Longitude:    -0.1 + float32(i)*0.01,
-			CapacityKw:   int64(1000 + i*100),
-			Metadata:     "",
-			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			Name: fmt.Sprintf("TESTSITE%02d", i),
+			Latlng: &pb.LatLng{
+				Latitude:  51.5 + float32(i)*0.01,
+				Longitude: -0.1 + float32(i)*0.01,
+			},
+			CapacityWatts: uint64(1000000 + i*100),
+			Metadata:      "",
+			EnergySource:  pb.EnergySource_SOLAR,
 		})
 		require.NoError(t, err)
 		siteIds[i] = resp.LocationId
@@ -489,7 +474,7 @@ func TestGetPredictedTimeseries(t *testing.T) {
 	// For each horizon, get the predicted timeseries
 	tests := []struct {
 		horizonMins    int32
-		expectedValues []int64
+		expectedValues []float32
 	}{
 		{
 			// For horizon 0, we should get all the values from the latest forecast,
@@ -497,44 +482,43 @@ func TestGetPredictedTimeseries(t *testing.T) {
 			// for each target time.
 			// Since the predicted values are every 5 minutes, and the forecasts are every 30,
 			// we should get 6 values from each forecast, until the latest where we get all 12.
-			// 100 // 12 = 8, so
-			// This means the values we are fetching should be
+			// The forecast values are seeded increasing from 0% to 100% in regular intervals,
+			// and there are 12 values per forecast - 100 // 12 = 8, so
+			// this means the values we are fetching should be
 			// 0, 8, 16, 24, 32, 40 (horizons 0 to 25 minutes from forecast 3)
 			// Then the same from forecast 2, as it's horizon is smaller - likewise then forecast 1
 			// 0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88 (horizons 0 to 55 minutes from forecast 0)
-			// These values are all percentages of the capacity, which is 1000kW, so they should be
-			// all multiplied by 10 to get the actual values in kW.
 			horizonMins: 0,
-			expectedValues: []int64{
-				0, 80, 160, 240, 320, 400,
-				0, 80, 160, 240, 320, 400,
-				0, 80, 160, 240, 320, 400,
-				0, 80, 160, 240, 320, 400, 480, 560, 640, 720, 800, 880,
+			expectedValues: []float32{
+				0, 8, 16, 24, 32, 40,
+				0, 8, 16, 24, 32, 40,
+				0, 8, 16, 24, 32, 40,
+				0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88,
 			},
 		},
 		{
 			// For horizon of 14 minutes, anything with a lesser horizon should not be included.
 			// So the value for 0, 5, and 10 minutes should not be included.
 			horizonMins: 14,
-			expectedValues: []int64{
-				240, 320, 400, 480, 560, 640,
-				240, 320, 400, 480, 560, 640,
-				240, 320, 400, 480, 560, 640,
-				240, 320, 400, 480, 560, 640, 720, 800, 880,
+			expectedValues: []float32{
+				24, 32, 40, 48, 56, 64,
+				24, 32, 40, 48, 56, 64,
+				24, 32, 40, 48, 56, 64,
+				24, 32, 40, 48, 56, 64, 72, 80, 88,
 			},
 		},
 		{
 			horizonMins: 30,
-			expectedValues: []int64{
-				480, 560, 640, 720, 800, 880,
-				480, 560, 640, 720, 800, 880,
-				480, 560, 640, 720, 800, 880,
-				480, 560, 640, 720, 800, 880,
+			expectedValues: []float32{
+				48, 56, 64, 72, 80, 88,
+				48, 56, 64, 72, 80, 88,
+				48, 56, 64, 72, 80, 88,
+				48, 56, 64, 72, 80, 88,
 			},
 		},
 		{
 			horizonMins:    60,
-			expectedValues: []int64{},
+			expectedValues: []float32{},
 		},
 	}
 
@@ -543,6 +527,7 @@ func TestGetPredictedTimeseries(t *testing.T) {
 			stream, err := c.GetPredictedTimeseries(t.Context(), &pb.GetPredictedTimeseriesRequest{
 				LocationIds: []int32{0},
 				HorizonMins: int32(tt.horizonMins),
+				Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 			})
 			require.NoError(t, err)
 
@@ -556,8 +541,8 @@ func TestGetPredictedTimeseries(t *testing.T) {
 				targetTimes := make([]int64, len(resp.Yields))
 				actualValues := make([]int64, len(resp.Yields))
 				for i, v := range resp.Yields {
-					targetTimes[i] = v.TimestampUnix
-					actualValues[i] = v.YieldKw
+					targetTimes[i] = v.TimestampUnix.AsTime().Unix()
+					actualValues[i] = int64(v.YieldPercent)
 				}
 				require.IsIncreasing(t, targetTimes)
 				require.Equal(t, tt.expectedValues, actualValues)
@@ -594,14 +579,16 @@ func TestGetObservedTimeseries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("Start %s End %s", tt.startTime, tt.endTime), func(t *testing.T) {
 			resp, err := c.GetObservedTimeseries(t.Context(), &pb.GetObservedTimeseriesRequest{
-				LocationId:   1,
-				StartTime:    &timestamppb.Timestamp{Seconds: tt.startTime.Unix()},
-				EndTime:      &timestamppb.Timestamp{Seconds: tt.endTime.Unix()},
+				LocationId: 1,
+				EnergySource: pb.EnergySource_SOLAR,
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUnix: timestamppb.New(tt.startTime),
+					EndTimestampUnix:   timestamppb.New(tt.endTime),
+				},
 				ObserverName: "test_observer",
 			})
 			require.NoError(t, err)
 			require.Equal(t, len(resp.Yields), tt.expectedSize)
-
 		})
 	}
 }
@@ -620,18 +607,18 @@ func TestGetPredictedTimeseriesDeltas(t *testing.T) {
 
 	tests := []struct {
 		horizonMins    int32
-		expectedValues []int64
+		expectedValues []float32
 	}{
 		{
-			// Observed values are half of the capacity, so subtract 500 from the expected values from
-			// the non-delta test. Observed values also aren't seeded into the future, so only the 
+			// Observed values are half of the capacity, so subtract 50 from the expected values from
+			// the non-delta test. Observed values also aren't seeded into the future, so only the
 			// zero-horizon value from the latest forecast is included at the end.
 			horizonMins: 0,
-			expectedValues: []int64{
-				0 - 500, 80 - 500, 160 - 500, 240 - 500, 320 - 500, 400 - 500,
-				0 - 500, 80 - 500, 160 - 500, 240 - 500, 320 - 500, 400 - 500,
-				0 - 500, 80 - 500, 160 - 500, 240 - 500, 320 - 500, 400 - 500,
-				0 - 500,
+			expectedValues: []float32{
+				0 - 50, 8 - 50, 16 - 50, 24 - 50, 32 - 50, 40 - 50,
+				0 - 50, 8 - 50, 16 - 50, 24 - 50, 32 - 50, 40 - 50,
+				0 - 50, 8 - 50, 16 - 50, 24 - 50, 32 - 50, 40 - 50,
+				0 - 50,
 			},
 		},
 	}
@@ -641,21 +628,46 @@ func TestGetPredictedTimeseriesDeltas(t *testing.T) {
 			deltaResp, err := c.GetPredictedTimeseriesDeltas(t.Context(), &pb.GetPredictedTimeseriesDeltasRequest{
 				LocationId:   1,
 				HorizonMins:  int32(tt.horizonMins),
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				EnergySource: pb.EnergySource_SOLAR,
 				ObserverName: "test_observer",
+				Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 			})
 			require.NoError(t, err)
 
 			targetTimes := make([]int64, len(deltaResp.Deltas))
-			actualValues := make([]int64, len(deltaResp.Deltas))
+			actualValues := make([]float32, len(deltaResp.Deltas))
 			for i, v := range deltaResp.Deltas {
-				targetTimes[i] = v.TimestampUnix
-				actualValues[i] = v.DeltaKw
+				targetTimes[i] = v.TimestampUnix.AsTime().Unix()
+				actualValues[i] = v.DeltaPercent
 			}
 			require.IsIncreasing(t, targetTimes)
 			require.Equal(t, tt.expectedValues, actualValues)
 		})
 	}
+}
+
+func TestGetWeekAverageDeltas(t *testing.T) {
+	pgConnString := createPostgresContainer(t)
+	c := setupClient(t, pgConnString)
+	_ = seed(t, pgConnString, seedDBParams{
+		NumLocations:            1,
+		NumModels:               1,
+		NumForecastsPerLocation: 500,
+		PgvResolutionMins:       30,
+		ForecastResolutionMins:  30,
+		ForecastLengthHours:     8,
+	})
+
+	deltaResp, err := c.GetWeekAverageDeltas(t.Context(), &pb.GetWeekAverageDeltasRequest{
+		LocationId:   1,
+		EnergySource: pb.EnergySource_SOLAR,
+		Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+		ObserverName: "test_observer",
+		PivotTime: timestamppb.New(time.Now().UTC().Truncate(time.Minute)),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, deltaResp)
+	require.Len(t, deltaResp.Deltas, 8 * 60 / 30) // One per horizon
 }
 
 // --- BENCHMARKS ---------------------------------------------------------------------------------
@@ -668,7 +680,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 		{NumLocations: 373, PgvResolutionMins: 30, ForecastResolutionMins: 60, ForecastLengthHours: 8, NumForecastsPerLocation: 10},
 		{NumLocations: 373, PgvResolutionMins: 5, ForecastResolutionMins: 60, ForecastLengthHours: 16, NumForecastsPerLocation: 48},
 		{NumLocations: 1000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 256},
-		// {NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 76},
+		{NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 76},
 		// {NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 256},
 	}
 	for _, tt := range tests {
@@ -679,8 +691,9 @@ func BenchmarkPostgresClient(b *testing.B) {
 		b.Run(fmt.Sprintf("%d/GetPredictedTimeseries", numPgvs), func(b *testing.B) {
 			for b.Loop() {
 				stream, err := c.GetPredictedTimeseries(b.Context(), &pb.GetPredictedTimeseriesRequest{
-					LocationIds: []int32{1},
-					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					LocationIds:  []int32{1},
+					EnergySource: pb.EnergySource_SOLAR,
+					Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 				})
 				require.NoError(b, err)
 				for {
@@ -701,9 +714,10 @@ func BenchmarkPostgresClient(b *testing.B) {
 			}
 			for b.Loop() {
 				crossSectionResp, err := c.GetPredictedCrossSection(b.Context(), &pb.GetPredictedCrossSectionRequest{
-					EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					EnergySource:  pb.EnergySource_SOLAR,
 					LocationIds:   locationIds,
-					TimestampUnix: pivotTime.Unix(),
+					Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+					TimestampUnix: timestamppb.New(pivotTime),
 				})
 				require.NoError(b, err)
 				require.NotNil(b, crossSectionResp)
@@ -715,19 +729,23 @@ func BenchmarkPostgresClient(b *testing.B) {
 				obsResp, err := c.GetObservedTimeseries(b.Context(), &pb.GetObservedTimeseriesRequest{
 					LocationId:   1,
 					ObserverName: "test_observer",
-					StartTime:    &timestamppb.Timestamp{Seconds: pivotTime.Add(-time.Hour * 36).Unix()},
-					EndTime:      &timestamppb.Timestamp{Seconds: pivotTime.Unix()},
+					EnergySource: pb.EnergySource_SOLAR,
+					TimeWindow: &pb.TimeWindow{
+						StartTimestampUnix: timestamppb.New(pivotTime.Add(-time.Hour * 36)),
+						EndTimestampUnix:   timestamppb.New(pivotTime),
+					},
 				})
 				require.NoError(b, err)
-				require.GreaterOrEqual(b, len(obsResp.Yields), 36 * 60 / tt.PgvResolutionMins)
+				require.GreaterOrEqual(b, len(obsResp.Yields), 36*60/tt.PgvResolutionMins)
 			}
 		})
 		b.Run(fmt.Sprintf("%d/GetPredictedTimeseriesDeltas", numPgvs), func(b *testing.B) {
 			for b.Loop() {
 				deltasResp, err := c.GetPredictedTimeseriesDeltas(b.Context(), &pb.GetPredictedTimeseriesDeltasRequest{
 					LocationId:   1,
-					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					EnergySource: pb.EnergySource_SOLAR,
 					ObserverName: "test_observer",
+					Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 				})
 				require.NoError(b, err)
 				require.NotNil(b, deltasResp)

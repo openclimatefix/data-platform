@@ -16,7 +16,7 @@ type CreateObservationsAsInt16UsingCopyParams struct {
 	SourceTypeID       int16
 	ObserverID         int32
 	ObservationTimeUtc pgtype.Timestamp
-	Value              int16
+	ValueSip           int16
 }
 
 const createObserver = `-- name: CreateObserver :one
@@ -35,28 +35,28 @@ SELECT
     location_id,
     source_type_id,
     observation_time_utc,
-    value
+    value_sip
 FROM obs.observed_generation_values
 WHERE
     location_id = $1
-    AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-    AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = $3)
+    AND source_type_id = $2
+    AND observer_id = $3
     AND observation_time_utc BETWEEN $4::timestamp AND $5::timestamp
 `
 
 type GetObservationsAsInt16BetweenParams struct {
-	LocationID     int32
-	SourceTypeName string
-	ObserverName   string
-	StartTimeUtc   pgtype.Timestamp
-	EndTimeUtc     pgtype.Timestamp
+	LocationID   int32
+	SourceTypeID int16
+	ObserverID   int32
+	StartTimeUtc pgtype.Timestamp
+	EndTimeUtc   pgtype.Timestamp
 }
 
 type GetObservationsAsInt16BetweenRow struct {
 	LocationID         int32
 	SourceTypeID       int16
 	ObservationTimeUtc pgtype.Timestamp
-	Value              int16
+	ValueSip           int16
 }
 
 // GetObservationsAsInt16 gets observations between two timestamps
@@ -65,8 +65,8 @@ type GetObservationsAsInt16BetweenRow struct {
 func (q *Queries) GetObservationsAsInt16Between(ctx context.Context, arg GetObservationsAsInt16BetweenParams) ([]GetObservationsAsInt16BetweenRow, error) {
 	rows, err := q.db.Query(ctx, getObservationsAsInt16Between,
 		arg.LocationID,
-		arg.SourceTypeName,
-		arg.ObserverName,
+		arg.SourceTypeID,
+		arg.ObserverID,
 		arg.StartTimeUtc,
 		arg.EndTimeUtc,
 	)
@@ -81,71 +81,7 @@ func (q *Queries) GetObservationsAsInt16Between(ctx context.Context, arg GetObse
 			&i.LocationID,
 			&i.SourceTypeID,
 			&i.ObservationTimeUtc,
-			&i.Value,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getObservationsAsPercentBetween = `-- name: GetObservationsAsPercentBetween :many
-SELECT
-    location_id,
-    source_type_id,
-    observation_time_utc,
-    decode_smallint(value)::real AS yield_pct
-FROM obs.observed_generation_values
-WHERE
-    location_id = $1
-    AND source_type_id = (SELECT source_type_id FROM loc.source_types WHERE source_type_name = $2)
-    AND observer_id = (SELECT observer_id FROM obs.observers WHERE observer_name = $3)
-    AND observation_time_utc BETWEEN $4::timestamp AND $5::timestamp
-`
-
-type GetObservationsAsPercentBetweenParams struct {
-	LocationID     int32
-	SourceTypeName string
-	ObserverName   string
-	StartTimeUtc   pgtype.Timestamp
-	EndTimeUtc     pgtype.Timestamp
-}
-
-type GetObservationsAsPercentBetweenRow struct {
-	LocationID         int32
-	SourceTypeID       int16
-	ObservationTimeUtc pgtype.Timestamp
-	YieldPct           float32
-}
-
-// GetObservationsAsPercent gets observations between two timestamps
-// and returns their values as percentage of capacity.
-// Has been measured to be 10 times slower than returning the values directly, so use in non-critical paths
-// where readability or understandability is more important than performance.
-func (q *Queries) GetObservationsAsPercentBetween(ctx context.Context, arg GetObservationsAsPercentBetweenParams) ([]GetObservationsAsPercentBetweenRow, error) {
-	rows, err := q.db.Query(ctx, getObservationsAsPercentBetween,
-		arg.LocationID,
-		arg.SourceTypeName,
-		arg.ObserverName,
-		arg.StartTimeUtc,
-		arg.EndTimeUtc,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetObservationsAsPercentBetweenRow{}
-	for rows.Next() {
-		var i GetObservationsAsPercentBetweenRow
-		if err := rows.Scan(
-			&i.LocationID,
-			&i.SourceTypeID,
-			&i.ObservationTimeUtc,
-			&i.YieldPct,
+			&i.ValueSip,
 		); err != nil {
 			return nil, err
 		}
