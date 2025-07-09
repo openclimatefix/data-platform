@@ -78,12 +78,12 @@ message TimeWindow {
   option (buf.validate.message).cel = {
     id: "maximum_window_size"
     message: "window size must not exceed 7 days"
-    expression: "(end_timestamp_unix - start_timestamp_unix) <= duration('7d')"
+    expression: "this.end_timestamp_unix - this.start_timestamp_unix <= duration('604800s')"
   };
   option (buf.validate.message).cel = {
     id: "start_before_end"
     message: "start_timestamp_unix must be before end_timestamp_unix"
-    expression: "start_timestamp_unix < end_timestamp_unix"
+    expression: "this.start_timestamp_unix <= this.end_timestamp_unix"
   };
 }
 

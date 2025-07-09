@@ -20,6 +20,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	"buf.build/go/protovalidate"
+	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 
 	"github.com/stretchr/testify/require"
 )
@@ -118,7 +120,12 @@ func seed(tb testing.TB, pgConnString string, params seedDBParams) (numPgvs int)
 func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformServiceClient {
 	tb.Helper()
 	// Create server using in-memory listener
-	s := grpc.NewServer()
+
+	validator, err := protovalidate.New()
+	require.NoError(tb, err)
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor(validator)),
+	)
 	lis := bufconn.Listen(1024 * 1024)
 	pb.RegisterDataPlatformServiceServer(s, NewPostgresDataPlatformServerImpl(pgConnString))
 	go func() {

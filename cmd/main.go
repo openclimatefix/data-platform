@@ -12,6 +12,8 @@ import (
 
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"buf.build/go/protovalidate"
+	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 
 	pb "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp"
 	dbpg "github.com/devsjc/fcfs/dp/internal/database/postgres"
@@ -34,7 +36,16 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to listen")
 	}
-	s := grpc.NewServer()
+
+	// Create the GRPC server
+	// * Add an interceptor for request validation
+	validator, err := protovalidate.New()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create validator")
+	}
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor(validator)),
+	)
 	pb.RegisterDataPlatformServiceServer(s, dpServerImpl)
 	grpc_health_v1.RegisterHealthServer(s, health.NewServer())
 	reflection.Register(s)
