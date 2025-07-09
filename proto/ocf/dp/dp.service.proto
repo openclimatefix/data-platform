@@ -13,7 +13,7 @@ service DataPlatformService {
   /* GetPredictedTimeseries fetches a horizontal slice of predicted data:
    * i.e. many points in time at a single location.
    */
-  rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (stream GetPredictedTimeseriesResponse) {}
+  rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (GetPredictedTimeseriesResponse) {}
   /* GetPredictedTimeseriesDeltas fetches a horizontal slice of data:
    * i.e. many points in time at a single location.
    * The deltas represent the difference between the predicted and observed value at each time.

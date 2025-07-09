@@ -531,29 +531,23 @@ func TestGetPredictedTimeseries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("Horizon %d mins", tt.horizonMins), func(t *testing.T) {
-			stream, err := c.GetPredictedTimeseries(t.Context(), &pb.GetPredictedTimeseriesRequest{
-				LocationIds: []int32{0},
+			resp, err := c.GetPredictedTimeseries(t.Context(), &pb.GetPredictedTimeseriesRequest{
+				LocationId: 1,
 				HorizonMins: int32(tt.horizonMins),
 				Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+				EnergySource: pb.EnergySource_SOLAR,
 			})
 			require.NoError(t, err)
+			require.NotNil(t, resp)
 
-			for {
-				resp, err := stream.Recv()
-				if err != nil {
-					break
-				}
-				require.NotNil(t, resp)
-
-				targetTimes := make([]int64, len(resp.Yields))
-				actualValues := make([]int64, len(resp.Yields))
-				for i, v := range resp.Yields {
-					targetTimes[i] = v.TimestampUnix.AsTime().Unix()
-					actualValues[i] = int64(v.YieldPercent)
-				}
-				require.IsIncreasing(t, targetTimes)
-				require.Equal(t, tt.expectedValues, actualValues)
+			targetTimes := make([]int64, len(resp.Yields))
+			actualValues := make([]float32, len(resp.Yields))
+			for i, v := range resp.Yields {
+				targetTimes[i] = v.TimestampUnix.AsTime().Unix()
+				actualValues[i] = v.YieldPercent
 			}
+			require.IsIncreasing(t, targetTimes)
+			require.Equal(t, tt.expectedValues, actualValues)
 		})
 	}
 }
@@ -584,7 +578,7 @@ func TestGetObservedTimeseries(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("Start %s End %s", tt.startTime, tt.endTime), func(t *testing.T) {
+		t.Run(fmt.Sprintf("Size %d", tt.expectedSize), func(t *testing.T) {
 			resp, err := c.GetObservedTimeseries(t.Context(), &pb.GetObservedTimeseriesRequest{
 				LocationId: 1,
 				EnergySource: pb.EnergySource_SOLAR,
@@ -697,21 +691,15 @@ func BenchmarkPostgresClient(b *testing.B) {
 
 		b.Run(fmt.Sprintf("%d/GetPredictedTimeseries", numPgvs), func(b *testing.B) {
 			for b.Loop() {
-				stream, err := c.GetPredictedTimeseries(b.Context(), &pb.GetPredictedTimeseriesRequest{
-					LocationIds:  []int32{1},
+				resp, err := c.GetPredictedTimeseries(b.Context(), &pb.GetPredictedTimeseriesRequest{
+					LocationId: 1,
 					EnergySource: pb.EnergySource_SOLAR,
 					Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 				})
 				require.NoError(b, err)
-				for {
-					resp, err := stream.Recv()
-					if err != nil {
-						break // End of stream
-					}
-					require.NotNil(b, resp)
-					require.Equal(b, int32(1), resp.LocationId)
-					require.GreaterOrEqual(b, len(resp.Yields), 1)
-				}
+				require.NotNil(b, resp)
+				require.Equal(b, int32(1), resp.LocationId)
+				require.GreaterOrEqual(b, len(resp.Yields), 1)
 			}
 		})
 		b.Run(fmt.Sprintf("%d/GetPredictedCrossSection", numPgvs), func(b *testing.B) {

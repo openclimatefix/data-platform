@@ -41,7 +41,7 @@ const (
 type DataPlatformServiceClient interface {
 	// GetPredictedTimeseries fetches a horizontal slice of predicted data:
 	// i.e. many points in time at a single location.
-	GetPredictedTimeseries(ctx context.Context, in *GetPredictedTimeseriesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetPredictedTimeseriesResponse], error)
+	GetPredictedTimeseries(ctx context.Context, in *GetPredictedTimeseriesRequest, opts ...grpc.CallOption) (*GetPredictedTimeseriesResponse, error)
 	// GetPredictedTimeseriesDeltas fetches a horizontal slice of data:
 	// i.e. many points in time at a single location.
 	// The deltas represent the difference between the predicted and observed value at each time.
@@ -72,24 +72,15 @@ func NewDataPlatformServiceClient(cc grpc.ClientConnInterface) DataPlatformServi
 	return &dataPlatformServiceClient{cc}
 }
 
-func (c *dataPlatformServiceClient) GetPredictedTimeseries(ctx context.Context, in *GetPredictedTimeseriesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetPredictedTimeseriesResponse], error) {
+func (c *dataPlatformServiceClient) GetPredictedTimeseries(ctx context.Context, in *GetPredictedTimeseriesRequest, opts ...grpc.CallOption) (*GetPredictedTimeseriesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DataPlatformService_ServiceDesc.Streams[0], DataPlatformService_GetPredictedTimeseries_FullMethodName, cOpts...)
+	out := new(GetPredictedTimeseriesResponse)
+	err := c.cc.Invoke(ctx, DataPlatformService_GetPredictedTimeseries_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[GetPredictedTimeseriesRequest, GetPredictedTimeseriesResponse]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return out, nil
 }
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type DataPlatformService_GetPredictedTimeseriesClient = grpc.ServerStreamingClient[GetPredictedTimeseriesResponse]
 
 func (c *dataPlatformServiceClient) GetPredictedTimeseriesDeltas(ctx context.Context, in *GetPredictedTimeseriesDeltasRequest, opts ...grpc.CallOption) (*GetPredictedTimeseriesDeltasResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -227,7 +218,7 @@ func (c *dataPlatformServiceClient) GetWeekAverageDeltas(ctx context.Context, in
 type DataPlatformServiceServer interface {
 	// GetPredictedTimeseries fetches a horizontal slice of predicted data:
 	// i.e. many points in time at a single location.
-	GetPredictedTimeseries(*GetPredictedTimeseriesRequest, grpc.ServerStreamingServer[GetPredictedTimeseriesResponse]) error
+	GetPredictedTimeseries(context.Context, *GetPredictedTimeseriesRequest) (*GetPredictedTimeseriesResponse, error)
 	// GetPredictedTimeseriesDeltas fetches a horizontal slice of data:
 	// i.e. many points in time at a single location.
 	// The deltas represent the difference between the predicted and observed value at each time.
@@ -257,8 +248,8 @@ type DataPlatformServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedDataPlatformServiceServer struct{}
 
-func (UnimplementedDataPlatformServiceServer) GetPredictedTimeseries(*GetPredictedTimeseriesRequest, grpc.ServerStreamingServer[GetPredictedTimeseriesResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method GetPredictedTimeseries not implemented")
+func (UnimplementedDataPlatformServiceServer) GetPredictedTimeseries(context.Context, *GetPredictedTimeseriesRequest) (*GetPredictedTimeseriesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPredictedTimeseries not implemented")
 }
 func (UnimplementedDataPlatformServiceServer) GetPredictedTimeseriesDeltas(context.Context, *GetPredictedTimeseriesDeltasRequest) (*GetPredictedTimeseriesDeltasResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPredictedTimeseriesDeltas not implemented")
@@ -319,16 +310,23 @@ func RegisterDataPlatformServiceServer(s grpc.ServiceRegistrar, srv DataPlatform
 	s.RegisterService(&DataPlatformService_ServiceDesc, srv)
 }
 
-func _DataPlatformService_GetPredictedTimeseries_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(GetPredictedTimeseriesRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
+func _DataPlatformService_GetPredictedTimeseries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPredictedTimeseriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
 	}
-	return srv.(DataPlatformServiceServer).GetPredictedTimeseries(m, &grpc.GenericServerStream[GetPredictedTimeseriesRequest, GetPredictedTimeseriesResponse]{ServerStream: stream})
+	if interceptor == nil {
+		return srv.(DataPlatformServiceServer).GetPredictedTimeseries(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DataPlatformService_GetPredictedTimeseries_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DataPlatformServiceServer).GetPredictedTimeseries(ctx, req.(*GetPredictedTimeseriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type DataPlatformService_GetPredictedTimeseriesServer = grpc.ServerStreamingServer[GetPredictedTimeseriesResponse]
 
 func _DataPlatformService_GetPredictedTimeseriesDeltas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetPredictedTimeseriesDeltasRequest)
@@ -572,6 +570,10 @@ var DataPlatformService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*DataPlatformServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "GetPredictedTimeseries",
+			Handler:    _DataPlatformService_GetPredictedTimeseries_Handler,
+		},
+		{
 			MethodName: "GetPredictedTimeseriesDeltas",
 			Handler:    _DataPlatformService_GetPredictedTimeseriesDeltas_Handler,
 		},
@@ -624,12 +626,6 @@ var DataPlatformService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DataPlatformService_GetWeekAverageDeltas_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "GetPredictedTimeseries",
-			Handler:       _DataPlatformService_GetPredictedTimeseries_Handler,
-			ServerStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "ocf/dp/dp.service.proto",
 }

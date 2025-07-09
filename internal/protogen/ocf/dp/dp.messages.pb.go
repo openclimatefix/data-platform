@@ -355,7 +355,7 @@ func (x *TimeWindow) GetEndTimestampUnix() *timestamppb.Timestamp {
 
 type GetPredictedTimeseriesRequest struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
-	LocationIds  []int32                `protobuf:"varint,1,rep,packed,name=location_ids,json=locationIds,proto3" json:"location_ids,omitempty"`
+	LocationId   int32                  `protobuf:"varint,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	EnergySource EnergySource           `protobuf:"varint,2,opt,name=energy_source,json=energySource,proto3,enum=ocf.dp.EnergySource" json:"energy_source,omitempty"`
 	// The desired minimum difference between the forecast initialisation time,
 	// and each target time in minutes.
@@ -401,11 +401,11 @@ func (*GetPredictedTimeseriesRequest) Descriptor() ([]byte, []int) {
 	return file_ocf_dp_dp_messages_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetPredictedTimeseriesRequest) GetLocationIds() []int32 {
+func (x *GetPredictedTimeseriesRequest) GetLocationId() int32 {
 	if x != nil {
-		return x.LocationIds
+		return x.LocationId
 	}
-	return nil
+	return 0
 }
 
 func (x *GetPredictedTimeseriesRequest) GetEnergySource() EnergySource {
@@ -2426,9 +2426,10 @@ const file_ocf_dp_dp_messages_proto_rawDesc = "" +
 	"\x12end_timestamp_unix\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\r\xbaH\n" +
 	"\xb2\x01\a*\x05\b\x80\xf8\xb35R\x10endTimestampUnix:\x8f\x02\xbaH\x8b\x02\x1a\x85\x01\n" +
 	"\x13maximum_window_size\x12\"window size must not exceed 7 days\x1aJthis.end_timestamp_unix - this.start_timestamp_unix <= duration('604800s')\x1a\x80\x01\n" +
-	"\x10start_before_end\x126start_timestamp_unix must be before end_timestamp_unix\x1a4this.start_timestamp_unix <= this.end_timestamp_unix\"\x82\x02\n" +
-	"\x1dGetPredictedTimeseriesRequest\x12!\n" +
-	"\flocation_ids\x18\x01 \x03(\x05R\vlocationIds\x129\n" +
+	"\x10start_before_end\x126start_timestamp_unix must be before end_timestamp_unix\x1a4this.start_timestamp_unix <= this.end_timestamp_unix\"\x80\x02\n" +
+	"\x1dGetPredictedTimeseriesRequest\x12\x1f\n" +
+	"\vlocation_id\x18\x01 \x01(\x05R\n" +
+	"locationId\x129\n" +
 	"\renergy_source\x18\x02 \x01(\x0e2\x14.ocf.dp.EnergySourceR\fenergySource\x12!\n" +
 	"\fhorizon_mins\x18\x03 \x01(\x05R\vhorizonMins\x123\n" +
 	"\vtime_window\x18\x04 \x01(\v2\x12.ocf.dp.TimeWindowR\n" +

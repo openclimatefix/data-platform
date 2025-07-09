@@ -19,7 +19,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -569,7 +568,7 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx contex
 }
 
 func (s *PostgresDataPlatformServerImpl) GetLatestPredictions(ctx context.Context, req *pb.GetLatestPredictionsRequest) (*pb.GetLatestPredictionsResponse, error) {
-	l := log.With().Str("method", "GetLatestForecast").Logger()
+	l := log.With().Str("method", "GetLatestPredictions").Logger()
 	l.Debug().Msg("recieved method call")
 
 	currentTime := time.Now().UTC().Truncate(time.Minute)
@@ -972,101 +971,85 @@ func (s *PostgresDataPlatformServerImpl) GetLocationsAsGeoJSON(ctx context.Conte
 }
 
 // GetPredictedTimeseries implements proto.QuartzAPIServer.
-func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseries(req *pb.GetPredictedTimeseriesRequest, stream grpc.ServerStreamingServer[pb.GetPredictedTimeseriesResponse]) error {
+func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseries(ctx context.Context, req *pb.GetPredictedTimeseriesRequest) (*pb.GetPredictedTimeseriesResponse, error) {
 	l := log.With().Str("method", "GetPredictedTimeseries").Logger()
 	l.Debug().Msg("recieved method call")
 
 	// Establish a transaction with the database
-	tx, err := s.pool.Begin(stream.Context())
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		l.Err(err).Msg("q.pool.Begin()")
-		return status.Errorf(codes.Internal, "Encountered database connection error")
+		return nil, status.Errorf(codes.Internal, "Encountered database connection error")
 	}
-	defer tx.Rollback(stream.Context())
+	defer tx.Rollback(ctx)
 	querier := db.New(tx)
 
-	for _, locationId := range req.LocationIds {
-
-		// Get the location and source
-		params := db.GetLocationSourceParams{LocationID: locationId, SourceTypeName: req.EnergySource.String()}
-		dbLocationSource, err := querier.GetLocationSource(stream.Context(), params)
-		if err != nil {
-			l.Err(err).Msgf("querier.GetLocationSource(%+v)", params)
-			return status.Errorf(
-				codes.NotFound, "No location found for ID %d with source type '%s'.",
-				locationId, req.EnergySource,
-			)
-		}
-
-		// Get the relevant predictor
-		params2 := db.GetPredictorElseLatestParams{
-			PredictorName:    req.Model.ModelName,
-			PredictorVersion: req.Model.ModelVersion,
-		}
-		dbPredictor, err := querier.GetPredictorElseLatest(stream.Context(), params2)
-		if err != nil {
-			l.Err(err).Msgf("querier.GetPredictorElseLatest(%+v)", params2)
-			return status.Errorf(
-				codes.NotFound, "No model found for name '%s' and version '%s'.",
-				req.Model.ModelName, req.Model.ModelVersion,
-			)
-		}
-
-		// Get the predictions for the given location source
-		start, end, err := timeWindowToPgWindow(req.TimeWindow)
-		params3 := db.ListPredictionsForLocationParams{
-			LocationID:     locationId,
-			PredictorID:    dbPredictor.PredictorID,
-			SourceTypeID:   dbLocationSource.SourceTypeID,
-			HorizonMins:    req.HorizonMins,
-			StartTimestamp: start,
-			EndTimestamp:   end,
-		}
-		dbValues, err := querier.ListPredictionsForLocation(stream.Context(), params3)
-		if err != nil {
-			l.Err(err).Msgf("querier.GetWindowedPredictedGenerationValuesAtHorizon(%+v)", params3)
-			return status.Errorf(
-				codes.NotFound,
-				"No values found for location %d with horizon %d minutes",
-				locationId, req.HorizonMins,
-			)
-		}
-		l.Debug().Msgf(
-			"Found %d values for location %d with horizon %d minutes",
-			len(dbValues), locationId, req.HorizonMins,
+	// Get the location and source
+	glParams := db.GetLocationSourceParams{LocationID: req.LocationId, SourceTypeName: req.EnergySource.String()}
+	dbLocationSource, err := querier.GetLocationSource(ctx, glParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetLocationSource(%+v)", glParams)
+		return nil, status.Errorf(
+			codes.NotFound, "No location found for ID %d with source type '%s'.",
+			req.LocationId, req.EnergySource,
 		)
+	}
 
-		yields := make([]*pb.YieldPrediction, len(dbValues))
-		for i, yield := range dbValues {
-			yields[i] = &pb.YieldPrediction{
-				YieldPercent:  (float32(yield.P50Sip) / 30000.0) * 100.0,
-				TimestampUnix: timestamppb.New(yield.TargetTimeUtc.Time),
-				Uncertainty: &pb.YieldPrediction_Uncertainty{
-					UpperPercent: (float32(*yield.P90Sip) / 30000.0) * 100.0,
-					LowerPercent: (float32(*yield.P10Sip) / 30000.0) * 100.0,
-				},
-			}
-		}
+	// Get the relevant predictor
+	gpParams := db.GetPredictorElseLatestParams{
+		PredictorName:    req.Model.ModelName,
+		PredictorVersion: req.Model.ModelVersion,
+	}
+	dbPredictor, err := querier.GetPredictorElseLatest(ctx, gpParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetPredictorElseLatest(%+v)", gpParams)
+		return nil, status.Errorf(
+			codes.NotFound, "No model found for name '%s' and version '%s'.",
+			req.Model.ModelName, req.Model.ModelVersion,
+		)
+	}
 
-		err = stream.Send(&pb.GetPredictedTimeseriesResponse{
-			LocationId:    locationId,
-			CapacityWatts: uint64(dbLocationSource.Capacity) * uint64(math.Pow10(int(dbLocationSource.CapacityUnitPrefixFactor))),
-			Yields:        yields,
-		})
-		if err != nil {
-			l.Err(err).Msgf(
-				"stream.Send(GetPredictedTimeseriesResponse({locationID: %d, yields: (arr, len %d)}))",
-				locationId, len(yields),
-			)
-			return status.Errorf(
-				codes.Internal,
-				"Failed to send predicted timeseries response for location %d",
-				locationId,
-			)
+	// Get the predictions for the given location source
+	start, end, err := timeWindowToPgWindow(req.TimeWindow)
+	lpParams := db.ListPredictionsForLocationParams{
+		LocationID:     req.LocationId,
+		PredictorID:    dbPredictor.PredictorID,
+		SourceTypeID:   dbLocationSource.SourceTypeID,
+		HorizonMins:    req.HorizonMins,
+		StartTimestamp: start,
+		EndTimestamp:   end,
+	}
+	dbValues, err := querier.ListPredictionsForLocation(ctx, lpParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetWindowedPredictedGenerationValuesAtHorizon(%+v)", lpParams)
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No values found for location %d with horizon %d minutes",
+			req.LocationId, req.HorizonMins,
+		)
+	}
+	l.Debug().Msgf(
+		"Found %d values for location %d with horizon %d minutes",
+		len(dbValues), req.LocationId, req.HorizonMins,
+	)
+
+	yields := make([]*pb.YieldPrediction, len(dbValues))
+	for i, yield := range dbValues {
+		yields[i] = &pb.YieldPrediction{
+			YieldPercent:  (float32(yield.P50Sip) / 30000.0) * 100.0,
+			TimestampUnix: timestamppb.New(yield.TargetTimeUtc.Time),
+			Uncertainty: &pb.YieldPrediction_Uncertainty{
+				UpperPercent: (float32(*yield.P90Sip) / 30000.0) * 100.0,
+				LowerPercent: (float32(*yield.P10Sip) / 30000.0) * 100.0,
+			},
 		}
 	}
 
-	return nil
+	return &pb.GetPredictedTimeseriesResponse{
+		LocationId:    req.LocationId,
+		CapacityWatts: uint64(dbLocationSource.Capacity) * uint64(math.Pow10(int(dbLocationSource.CapacityUnitPrefixFactor))),
+		Yields:        yields,
+	}, tx.Commit(ctx)
 }
 
 // NewPostgresDataPlatformServerImpl creates a new instance of the PostgresDataPlatformServer

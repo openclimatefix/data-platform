@@ -90,7 +90,7 @@ message TimeWindow {
 // --- Requests and Responses --------------------------------------------------------
 
 message GetPredictedTimeseriesRequest {
-  repeated int32 location_ids = 1;
+  int32 location_id = 1;
   EnergySource energy_source = 2;
 
   /* The desired minimum difference between the forecast initialisation time,

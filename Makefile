@@ -23,6 +23,7 @@ gen-proto-internal:
 		--go-grpc_opt=paths=source_relative \
 
 gen-proto-python:
+	rm -rf protogen/python
 	mkdir -p protogen/python
 	uvx --from 'betterproto[compiler]==2.0.0b7' protoc \
 		proto/ocf/dp/*.proto \
@@ -31,6 +32,7 @@ gen-proto-python:
 		--python_betterproto_out=protogen/python
 
 gen-proto-typescript:
+	rm -rf protogen/typescript
 	mkdir -p protogen/typescript
 	protoc \
 		proto/ocf/dp/*.proto \
@@ -38,6 +40,8 @@ gen-proto-typescript:
 		--ts_out=protogen/typescript \
 
 gen-proto-openapi:
+	rm -rf protogen/openapi
+	mkdir -p protogen/openapi
 	protoc \
 		proto/ocf/dp/*.proto \
 		-I=proto \
@@ -51,7 +55,7 @@ migrate-db:
 	goose postgres "postgresql://postgres:postgres@localhost:5400/postgres" -dir ./internal/database/postgres/sql/migrations up
 
 run-api:
-	DATABASE_URL=postgres://postgres:postgres@localhost:5400/postgres DATABASE_TYPE=postgres go run src/cmd/main.go
+	DATABASE_URL=postgres://postgres:postgres@localhost:5400/postgres DATABASE_TYPE=postgres LOGLEVEL=DEBUG go run cmd/main.go
 
 run-grpc-client:
 	grpcui -plaintext localhost:50051

@@ -24,10 +24,10 @@ var File_ocf_dp_dp_service_proto protoreflect.FileDescriptor
 
 const file_ocf_dp_dp_service_proto_rawDesc = "" +
 	"\n" +
-	"\x17ocf/dp/dp.service.proto\x12\x06ocf.dp\x1a\x18ocf/dp/dp.messages.proto2\xae\n" +
+	"\x17ocf/dp/dp.service.proto\x12\x06ocf.dp\x1a\x18ocf/dp/dp.messages.proto2\xac\n" +
 	"\n" +
-	"\x13DataPlatformService\x12k\n" +
-	"\x16GetPredictedTimeseries\x12%.ocf.dp.GetPredictedTimeseriesRequest\x1a&.ocf.dp.GetPredictedTimeseriesResponse\"\x000\x01\x12{\n" +
+	"\x13DataPlatformService\x12i\n" +
+	"\x16GetPredictedTimeseries\x12%.ocf.dp.GetPredictedTimeseriesRequest\x1a&.ocf.dp.GetPredictedTimeseriesResponse\"\x00\x12{\n" +
 	"\x1cGetPredictedTimeseriesDeltas\x12+.ocf.dp.GetPredictedTimeseriesDeltasRequest\x1a,.ocf.dp.GetPredictedTimeseriesDeltasResponse\"\x00\x12o\n" +
 	"\x18GetPredictedCrossSection\x12'.ocf.dp.GetPredictedCrossSectionRequest\x1a(.ocf.dp.GetPredictedCrossSectionResponse\"\x00\x12f\n" +
 	"\x15GetObservedTimeseries\x12$.ocf.dp.GetObservedTimeseriesRequest\x1a%.ocf.dp.GetObservedTimeseriesResponse\"\x00\x12c\n" +

@@ -181,4 +181,3 @@ func getWindow() (time.Time, time.Time) {
 	windowEnd := time.Now().UTC().Add(time.Hour * 48).Truncate(time.Hour * 24)
 	return windowStart, windowEnd
 }
-

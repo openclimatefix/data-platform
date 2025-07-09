@@ -2,12 +2,16 @@ package main
 
 import (
 	"net"
+	"slices"
 	"os"
-	"strconv"
+	"strings"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	// Installing the gzip encoding registers it as an available compressor.
+	// gRPC will automatically negotiate and use gzip if the client supports it.
+	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/reflection"
 
 	"google.golang.org/grpc/health"
@@ -15,21 +19,29 @@ import (
 	"buf.build/go/protovalidate"
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 
-	pb "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp"
 	dbpg "github.com/devsjc/fcfs/dp/internal/database/postgres"
+	pb "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp"
 )
 
 func main() {
 	// Set logging level based on environment
-	logLevel, err := strconv.Atoi(os.Getenv("LOGLEVEL"))
+	logLevel, err := zerolog.ParseLevel(os.Getenv("LOGLEVEL"))
 	if err != nil {
-		logLevel = int(zerolog.InfoLevel)
+		logLevel = zerolog.InfoLevel
 	}
-	zerolog.SetGlobalLevel(zerolog.Level(logLevel))
+	zerolog.SetGlobalLevel(logLevel)
 
-	log.Debug().Str("type", os.Getenv("DATABASE_TYPE")).Msg("Connecting to backend")
-	connString := os.Getenv("DATABASE_URL")
-	dpServerImpl := dbpg.NewPostgresDataPlatformServerImpl(connString)
+	databaseUrl := os.Getenv("DATABASE_URL")
+	var dpServerImpl pb.DataPlatformServiceServer
+	if slices.Contains([]string{"", "dummy", "fake"}, strings.ToLower(databaseUrl)) {
+		log.Info().Msg("Running in test mode with fake data")
+		log.Fatal().Msg("Not yet implemented!")
+	} else if strings.HasPrefix(databaseUrl, "postgres") && strings.Contains(databaseUrl, "://") {
+		log.Debug().Str("type", "postgresql").Msg("Connecting to database backend")
+		dpServerImpl = dbpg.NewPostgresDataPlatformServerImpl(databaseUrl)
+	} else {
+		log.Fatal().Str("url", databaseUrl).Msg("Unsupported DATABASE_URL format")
+	}
 
 	log.Info().Int("port", 50051).Msg("Starting GRPC server")
 	lis, err := net.Listen("tcp", ":50051")
