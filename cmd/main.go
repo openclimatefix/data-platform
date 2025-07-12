@@ -2,8 +2,8 @@ package main
 
 import (
 	"net"
-	"slices"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -14,10 +14,10 @@ import (
 	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/reflection"
 
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/health/grpc_health_v1"
 	"buf.build/go/protovalidate"
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	dbpg "github.com/devsjc/fcfs/dp/internal/database/postgres"
 	pb "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp"
@@ -63,4 +63,4 @@ func main() {
 	reflection.Register(s)
 	log.Info().Msg("Listening on :50051")
 	s.Serve(lis)
-};
+}

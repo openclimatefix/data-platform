@@ -3,8 +3,7 @@ name: Unit Test
 on:
   push:
     branches-ignore: ['main']
-    paths-ignore:
-      - 'README.md'
+    paths-ignore: ['README.md', 'examples/**']
 
 jobs:
   test:
@@ -24,12 +23,20 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Check linting
+        run: |
+          make lint >> $GITHUB_STEP_SUMMARY
+          if [ -n "$(cat $GITHUB_STEP_SUMMARY)" ]; then
+            exit 1
+          fi
+
       - name: Run unit tests
-        run: go run gotest.tools/gotestsum@latest --junitfile unit-tests.xml --format testname
+        run: make test
 
       - name: Test Summary
-        uses: test-summary/action@v2
+        uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2.4
         with:
           paths: "unit-tests.xml"
+          show: "all"
         if: always()
 

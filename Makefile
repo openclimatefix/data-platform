@@ -1,10 +1,18 @@
 .PHONY: all test bench gen-int gen-ext gen-db-internal gen-proto-internal gen-proto-python gen-proto-typescript gen-proto-openapi run-db migrate-db run-api run-grpc-client gen-reqs
 
+REF_NAME ?= $(shell git symbolic-ref HEAD --short | tr / - 2>/dev/null)
+
 test:
 	go run gotest.tools/gotestsum@latest --format=testname --junitfile unit-tests.xml
 
 bench:
-	go test ./...  -bench=BenchmarkPostgresClient -run=BenchmarkPostgresClient -timeout=50m
+	go test ./...  -bench=. -run=^a -timeout=15m > bench-$(REF_NAME).txt
+	@test -s benchstat || go install golang.org/x/perf/cmd/benchstat@latest
+	@test -e bench-master.txt && benchstat bench-master.txt bench-$(REF_NAME).txt || benchstat bench-$(REF_NAME).txt
+
+lint:
+	@go mod tidy
+	@gofmt -l -w .
 
 gen-int: gen-db-internal gen-proto-internal
 

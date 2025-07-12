@@ -163,7 +163,7 @@ func (s *PostgresDataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Contex
 	avgParams := db.GetWeekAverageDeltasForLocationsParams{
 		SourceTypeID:   dbLocationSource.SourceTypeID,
 		PredictorID:    dbPredictor.PredictorID,
-		ObserverID:   	dbObserver.ObserverID,
+		ObserverID:     dbObserver.ObserverID,
 		PivotTimestamp: pgtype.Timestamp{Time: req.PivotTime.AsTime(), Valid: true},
 		LocationIds:    []int32{req.LocationId},
 	}
@@ -180,14 +180,14 @@ func (s *PostgresDataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Contex
 	deltas := make([]*pb.GetWeekAverageDeltasResponse_AverageDelta, len(dbDeltas))
 	for i, delta := range dbDeltas {
 		deltas[i] = &pb.GetWeekAverageDeltasResponse_AverageDelta{
-			DeltaPercent:  (float32(delta.AvgDeltaSip)/ 30000.0) * 100.0,
-			HorizonMins: int32(delta.HorizonMins),
+			DeltaPercent: (float32(delta.AvgDeltaSip) / 30000.0) * 100.0,
+			HorizonMins:  int32(delta.HorizonMins),
 		}
 	}
 	return &pb.GetWeekAverageDeltasResponse{
 		Deltas:        deltas,
 		CapacityWatts: uint64(dbLocationSource.Capacity) * uint64(math.Pow10(int(dbLocationSource.CapacityUnitPrefixFactor))),
-		InitTime: req.PivotTime.AsTime().Format("03:04"),
+		InitTime:      req.PivotTime.AsTime().Format("03:04"),
 	}, nil
 }
 

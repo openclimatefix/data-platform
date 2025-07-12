@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
 	pb "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp"
+	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
 	"github.com/testcontainers/testcontainers-go"
@@ -20,8 +22,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	"buf.build/go/protovalidate"
-	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 
 	"github.com/stretchr/testify/require"
 )
@@ -223,12 +223,12 @@ func TestCreateSolarSite(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		req        *pb.CreateSiteRequest
+		req         *pb.CreateSiteRequest
 		shouldError bool
 	}{
 		{
 			name:        "Should create default site",
-			req:        defaultReq,
+			req:         defaultReq,
 			shouldError: false,
 		},
 		{
@@ -277,7 +277,7 @@ func TestCreateSolarSite(t *testing.T) {
 				resp2, err := c.GetLocation(
 					t.Context(),
 					&pb.GetLocationRequest{
-						LocationId: resp.LocationId,
+						LocationId:   resp.LocationId,
 						EnergySource: defaultReq.EnergySource,
 					},
 				)
@@ -387,7 +387,7 @@ func TestCreateSolarGSP(t *testing.T) {
 				// Try to read it back
 				resp2, err := c.GetLocation(
 					t.Context(), &pb.GetLocationRequest{
-						LocationId: resp.LocationId,
+						LocationId:   resp.LocationId,
 						EnergySource: tt.gsp.EnergySource,
 					},
 				)
@@ -426,8 +426,7 @@ func TestGetPredictedCrossSection(t *testing.T) {
 		EnergySource:  pb.EnergySource_SOLAR,
 		TimestampUnix: timestamppb.New(pivotTime),
 		LocationIds:   locationIds,
-		Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10",
-	}})
+		Model:         &pb.Model{ModelName: "test_model", ModelVersion: "v10"}})
 	require.NoError(t, err)
 	require.NotNil(t, crossSectionResp)
 	require.Len(t, crossSectionResp.Yields, len(locationIds))
@@ -532,9 +531,9 @@ func TestGetPredictedTimeseries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("Horizon %d mins", tt.horizonMins), func(t *testing.T) {
 			resp, err := c.GetPredictedTimeseries(t.Context(), &pb.GetPredictedTimeseriesRequest{
-				LocationId: 1,
-				HorizonMins: int32(tt.horizonMins),
-				Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+				LocationId:   1,
+				HorizonMins:  int32(tt.horizonMins),
+				Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 				EnergySource: pb.EnergySource_SOLAR,
 			})
 			require.NoError(t, err)
@@ -580,7 +579,7 @@ func TestGetObservedTimeseries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("Size %d", tt.expectedSize), func(t *testing.T) {
 			resp, err := c.GetObservedTimeseries(t.Context(), &pb.GetObservedTimeseriesRequest{
-				LocationId: 1,
+				LocationId:   1,
 				EnergySource: pb.EnergySource_SOLAR,
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUnix: timestamppb.New(tt.startTime),
@@ -631,7 +630,7 @@ func TestGetPredictedTimeseriesDeltas(t *testing.T) {
 				HorizonMins:  int32(tt.horizonMins),
 				EnergySource: pb.EnergySource_SOLAR,
 				ObserverName: "test_observer",
-				Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+				Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 			})
 			require.NoError(t, err)
 
@@ -664,11 +663,11 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 		EnergySource: pb.EnergySource_SOLAR,
 		Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 		ObserverName: "test_observer",
-		PivotTime: timestamppb.New(time.Now().UTC().Truncate(time.Minute)),
+		PivotTime:    timestamppb.New(time.Now().UTC().Truncate(time.Minute)),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, deltaResp)
-	require.Len(t, deltaResp.Deltas, 8 * 60 / 30) // One per horizon
+	require.Len(t, deltaResp.Deltas, 8*60/30) // One per horizon
 }
 
 // --- BENCHMARKS ---------------------------------------------------------------------------------
@@ -678,10 +677,10 @@ func BenchmarkPostgresClient(b *testing.B) {
 	pivotTime := time.Now().UTC().Truncate(time.Minute)
 
 	tests := []seedDBParams{
-		{NumLocations: 373, PgvResolutionMins: 30, ForecastResolutionMins: 60, ForecastLengthHours: 8, NumForecastsPerLocation: 10},
-		{NumLocations: 373, PgvResolutionMins: 5, ForecastResolutionMins: 60, ForecastLengthHours: 16, NumForecastsPerLocation: 48},
-		{NumLocations: 1000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 256},
-		{NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 76},
+		// {NumLocations: 373, PgvResolutionMins: 30, ForecastResolutionMins: 60, ForecastLengthHours: 8, NumForecastsPerLocation: 10},
+		// {NumLocations: 373, PgvResolutionMins: 5, ForecastResolutionMins: 60, ForecastLengthHours: 16, NumForecastsPerLocation: 48},
+		{NumLocations: 500, PgvResolutionMins: 30, ForecastResolutionMins: 30, ForecastLengthHours: 24, NumForecastsPerLocation: 256},
+		// {NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 76},
 		// {NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 256},
 	}
 	for _, tt := range tests {
@@ -692,9 +691,9 @@ func BenchmarkPostgresClient(b *testing.B) {
 		b.Run(fmt.Sprintf("%d/GetPredictedTimeseries", numPgvs), func(b *testing.B) {
 			for b.Loop() {
 				resp, err := c.GetPredictedTimeseries(b.Context(), &pb.GetPredictedTimeseriesRequest{
-					LocationId: 1,
+					LocationId:   1,
 					EnergySource: pb.EnergySource_SOLAR,
-					Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+					Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 				})
 				require.NoError(b, err)
 				require.NotNil(b, resp)
@@ -711,7 +710,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 				crossSectionResp, err := c.GetPredictedCrossSection(b.Context(), &pb.GetPredictedCrossSectionRequest{
 					EnergySource:  pb.EnergySource_SOLAR,
 					LocationIds:   locationIds,
-					Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+					Model:         &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 					TimestampUnix: timestamppb.New(pivotTime),
 				})
 				require.NoError(b, err)
@@ -740,7 +739,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 					LocationId:   1,
 					EnergySource: pb.EnergySource_SOLAR,
 					ObserverName: "test_observer",
-					Model: &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+					Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
 				})
 				require.NoError(b, err)
 				require.NotNil(b, deltasResp)

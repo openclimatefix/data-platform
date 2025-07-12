@@ -20,6 +20,7 @@ coverage.*
 *.coverprofile
 profile.cov
 unit-test.xml
+bench-*.txt
 
 # Go workspace file
 go.work

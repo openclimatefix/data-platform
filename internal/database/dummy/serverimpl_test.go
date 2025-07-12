@@ -23,7 +23,7 @@ func plotHelper(tb testing.TB, filename string) {
 	p.Add(plotter.NewGrid())
 
 	tb.Cleanup(func() {})
-	
+
 	err := p.Save(40*vg.Centimeter, 20*vg.Centimeter, filename)
 	require.NoError(tb, err)
 }
@@ -50,10 +50,9 @@ func TestPlots(t *testing.T) {
 	daySds := make([]SolarData, 24*60)
 	for i := range dayPts {
 		t := startDate.Add(time.Duration(float64(i) * float64(time.Minute)))
-		dayPts[i].X = float64(i)/60.0
+		dayPts[i].X = float64(i) / 60.0
 		daySds[i] = determineIrradience(t, lnglat{5, 0})
 	}
-
 
 	// Plot the solar declination over a year
 	solarDeclinationPlot := plot.New()
@@ -144,7 +143,7 @@ func TestDetermineIrradience(t *testing.T) {
 	// Test the function with a known date and location
 	date := time.Date(2019, time.January, 1, 12, 0, 0, 0, time.UTC)
 
-	tests := []struct{
+	tests := []struct {
 		name     string
 		date     time.Time
 		lngLat   lnglat
@@ -155,8 +154,8 @@ func TestDetermineIrradience(t *testing.T) {
 			date,
 			lnglat{5, 0},
 			SolarData{
-				sunriseTimeTst: date.Truncate(24*time.Hour).Add(6*time.Hour),
-				sunsetTimeTst: date.Truncate(24*time.Hour).Add(18*time.Hour),
+				sunriseTimeTst: date.Truncate(24 * time.Hour).Add(6 * time.Hour),
+				sunsetTimeTst:  date.Truncate(24 * time.Hour).Add(18 * time.Hour),
 				daylengthHours: 12,
 			},
 		},
@@ -165,8 +164,8 @@ func TestDetermineIrradience(t *testing.T) {
 			date.AddDate(3452, 15, 242),
 			lnglat{60, 0},
 			SolarData{
-				sunriseTimeTst: date.AddDate(3452, 15, 242).Truncate(24*time.Hour).Add(6*time.Hour),
-				sunsetTimeTst: date.AddDate(3452, 15, 242).Truncate(24*time.Hour).Add(18*time.Hour),
+				sunriseTimeTst: date.AddDate(3452, 15, 242).Truncate(24 * time.Hour).Add(6 * time.Hour),
+				sunsetTimeTst:  date.AddDate(3452, 15, 242).Truncate(24 * time.Hour).Add(18 * time.Hour),
 				daylengthHours: 12,
 			},
 		},

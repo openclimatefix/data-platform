@@ -1,0 +1,36 @@
+name: bench
+on:
+  push:
+    tags: ['v*']
+    branches: ['main']
+    paths-ignore: ['README.md', 'examples/**']
+  pull_request_target:
+    branches: ['main']
+    paths-ignore: ['README.md', 'examples/**']
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: 'bench-master.txt'
+          # Use base SHA for pull requests to ensure cache is reused
+          key: ${{ runner.os }}-bench-${{ (github.event.pull_request.base.sha != github.event.after) && github.event.pull_request.base.sha || github.event.after }}
+
+      - name: Run benchmarks
+        run: |
+          REF_NAME=${GITHUB_REF##*/} make bench >> $GITHUB_STEP_SUMMARY
