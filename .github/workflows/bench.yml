@@ -1,4 +1,4 @@
-name: bench
+name: Benchmark
 on:
   push:
     tags: ['v*']
@@ -12,6 +12,7 @@ jobs:
   bench:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: write
 
     steps:
@@ -33,4 +34,7 @@ jobs:
 
       - name: Run benchmarks
         run: |
+          echo "## Benchmark results" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
           REF_NAME=${GITHUB_REF##*/} make bench >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
