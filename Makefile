@@ -7,8 +7,10 @@ test:
 
 bench:
 	go test ./...  -bench=. -run=^a -timeout=15m > bench-$(REF_NAME).txt
+
+bench-stat:
 	@test -s benchstat || go install golang.org/x/perf/cmd/benchstat@latest
-	@test -e bench-master.txt && benchstat bench-master.txt bench-$(REF_NAME).txt || benchstat bench-$(REF_NAME).txt
+	@test -e bench-main.txt && benchstat bench-main.txt bench-$(REF_NAME).txt || benchstat bench-$(REF_NAME).txt
 
 lint:
 	@go mod tidy
