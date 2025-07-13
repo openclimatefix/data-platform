@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	dbpg "github.com/devsjc/fcfs/dp/internal/database/postgres"
-	pb "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp"
+	pb "github.com/devsjc/fcfs/dp/internal/gen/ocf/dp"
 )
 
 func main() {

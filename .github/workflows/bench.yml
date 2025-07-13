@@ -35,44 +35,29 @@ jobs:
       - name: Run benchmarks
         id: bench
         run: |
-          REF_NAME=${GITHUB_REF##*/} make bench
-          OUTPUT=$(cat bench-${GITHUB_REF##*/}.txt)
-          OUTPUT="${OUTPUT//'%'/'%25'}"
-          OUTPUT="${OUTPUT//$'\n'/'%0A'}"
-          OUTPUT="${OUTPUT//$'\r'/'%0D'}"
-          echo "result=$OUTPUT" >> $GITHUB_OUTPUT
-          OUTPUT=$(REF_NAME=${GITHUB_REF##*/} make bench-stat)
-          OUTPUT="${OUTPUT//'%'/'%25'}"
-          OUTPUT="${OUTPUT//$'\n'/'%0A'}"
-          OUTPUT="${OUTPUT//$'\r'/'%0D'}"
-          echo "diff=$OUTPUT" >> $GITHUB_OUTPUT
+          make bench >> bench-${GITHUB_REF##*/}.txt
+          PAYLOAD=$(cat bench-${GITHUB_REF##*/}.txt)
+          echo "result<<EOF"$'\n'"$PAYLOAD"$'\n'EOF >> "$GITHUB_OUTPUT"
+          REF_NAME=${GITHUB_REF##*/} make bench-stat >> bench-diff.txt
+          PAYLOAD=$(cat bench-diff.txt)
+          echo "diff<<EOF"$'\n'"$PAYLOAD"$'\n'EOF >> "$GITHUB_OUTPUT"
 
-      - name: Write result to PR comment
+      - name: Write results to PR comment
         if: github.event_name == 'pull_request_target'
         uses: marocchino/sticky-pull-request-comment@d2ad0de260ae8b0235ce059e63f2949ba9e05943 # v2.9.3
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           header: bench
           message: |
-            ### Benchmark Result
-            <details><summary>Benchmark diff with base branch</summary>
+            ### Benchmark Results
 
-            ```
-            ${{ steps.bench.outputs.diff }}
-            ```
-            </details>
-
-            <details><summary>Benchmark result</summary>
-
+            <details><summary>Benchmark results</summary>
             ```
             ${{ steps.bench.outputs.result }}
             ```
             </details>
 
-      - name: Echo result
-        if: github.event_name != 'pull_request_target'
-        run: |
-          echo "Benchmark diff with base branch:"
-          echo "${{ steps.bench.outputs.diff }}"
-          echo "Benchmark result:"
-          echo "${{ steps.bench.outputs.result }}"
+            <details><summary>Benchmark vs base branch</summary>
+            ```
+            ${{ steps.bench.outputs.diff }}
+            ```
+            </details>

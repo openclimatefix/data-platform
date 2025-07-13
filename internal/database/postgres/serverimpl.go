@@ -24,12 +24,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	db "github.com/devsjc/fcfs/dp/internal/database/postgres/gen"
-	pb "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp"
+	pb "github.com/devsjc/fcfs/dp/internal/gen/ocf/dp"
 
 	"github.com/rs/zerolog/log"
 )
-
-//go:generate sqlc generate --file .sqlc.yaml
 
 //go:embed sql/migrations/*.sql
 var embedMigrations embed.FS

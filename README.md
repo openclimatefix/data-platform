@@ -53,17 +53,31 @@ $ cd examples/python-notebook && uvx --with="marimo" marimo edit --headless exam
 $ go run src/cmd/main/go
 ```
 
-## Installation
+## Development
 
-Install using docker
+This project requires the [Go Toolchain](https://go.dev/doc/install) to be installed.
+Clone the repository, then run
 
 ```bash
-$ docker build . --tag api:local
+$ make init
 ```
 
-or via Go
+This will fetch the dependencies, and install the git hooks required for development.
 
-```
-$ go install github.com/devsjc/fcfs
-```
+> [!Note]
+> Since this project is uses lots of generated code, these hooks are vital to keep this generated
+> code up to date, and as such running `make init` is a vital step towards a smooth development
+> experience.
 
+### Running tests
+
+Unit tests can be run using `make test`. Benchmarks can be run using `make bench`.
+Both of these utilise [TestContainers](https://github.com/testcontainers/testcontainers-go),
+so ensure you meet their 
+[general system requirements](https://golang.testcontainers.org/system_requirements/).
+
+### Generating code
+
+If you make changes to the SQL migrations or queries, or to the Protocol Buffers schema,
+you will need to regenrate the Go library code to reflect these changes. Again there is a make
+target for this, `make gen`.

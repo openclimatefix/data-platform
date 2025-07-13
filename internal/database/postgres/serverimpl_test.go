@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"buf.build/go/protovalidate"
-	pb "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp"
+	pb "github.com/devsjc/fcfs/dp/internal/gen/ocf/dp"
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
@@ -426,7 +426,8 @@ func TestGetPredictedCrossSection(t *testing.T) {
 		EnergySource:  pb.EnergySource_SOLAR,
 		TimestampUnix: timestamppb.New(pivotTime),
 		LocationIds:   locationIds,
-		Model:         &pb.Model{ModelName: "test_model", ModelVersion: "v10"}})
+		Model:         &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+	})
 	require.NoError(t, err)
 	require.NotNil(t, crossSectionResp)
 	require.Len(t, crossSectionResp.Yields, len(locationIds))

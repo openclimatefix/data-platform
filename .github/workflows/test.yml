@@ -8,6 +8,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout repository
@@ -20,8 +23,16 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      - name: Set up Protoc compiler
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+
       - name: Install dependencies
-        run: go mod download
+        run: |
+          go mod download
+          go install tool
+
+      - name: Generate code
+        run: make gen
 
       - name: Check linting
         run: |
@@ -37,6 +48,18 @@ jobs:
         uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2.4
         with:
           paths: "unit-tests.xml"
-          show: "all"
+          output: "test-summary.md"
         if: always()
+
+      - name: Get associated PR
+        id: findpr
+        uses: jwalton/gh-find-current-pr@89ee5799558265a1e0e31fab792ebb4ee91c016b # v1.3.3
+      
+      - name: Write results to PR comment
+        if: success() && steps.findpr.outputs.number
+        uses: marocchino/sticky-pull-request-comment@d2ad0de260ae8b0235ce059e63f2949ba9e05943 # v2.9.3
+        with:
+          number: ${{ steps.findpr.outputs.pr }}
+          header: unit-test
+          path: test-summary.md
 

@@ -29,7 +29,6 @@ func plotHelper(tb testing.TB, filename string) {
 }
 
 func TestPlots(t *testing.T) {
-
 	const rows, cols = 4, 2
 	plots := make([][]*plot.Plot, rows)
 	for j := range rows {
