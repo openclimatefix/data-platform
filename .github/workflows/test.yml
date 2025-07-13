@@ -25,18 +25,19 @@ jobs:
 
       - name: Set up Protoc compiler
         uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-
-      - name: Install dependencies
-        run: go mod download && go install tool
-
-      - name: Generate code
-        run: make gen
+      
+      - name: Check code generation
+        run: go install tool && make gen
 
       - name: Check linting
         run: |
-          make lint >> $GITHUB_STEP_SUMMARY
-          if [ -n "$(cat $GITHUB_STEP_SUMMARY)" ]; then
+          OUTPUT=$(make lint)
+          if [ -n "$OUTPUT" ]; then
+            echo "Linting errors found:"
+            echo "$OUTPUT"
             exit 1
+          else
+            echo "No linting errors found."
           fi
 
       - name: Run unit tests

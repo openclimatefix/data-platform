@@ -29,13 +29,10 @@ jobs:
       - name: Set up Protoc compiler
         uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
 
-      - name: Install dependencies
-        run: go mod download && go install tool
-
       - name: Generate code
-        run: make gen
+        run: go install tool && make gen
 
-      - name: Restore cache if exists
+      - name: Restore PR base branch benchmarks
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: 'bench-main.txt'
@@ -44,11 +41,21 @@ jobs:
 
       - name: Run benchmarks
         id: bench
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: |
-          make bench >> bench-${GITHUB_REF##*/}.txt
-          PAYLOAD=$(cat bench-${GITHUB_REF##*/}.txt)
+          make bench > bench-${BRANCH_NAME}.txt
+          PAYLOAD=$(cat bench-${BRANCH_NAME}.txt)
           echo "result<<EOF"$'\n'"$PAYLOAD"$'\n'EOF >> "$GITHUB_OUTPUT"
-          REF_NAME=${GITHUB_REF##*/} make bench-stat >> bench-diff.txt
+          cat bench-${BRANCH_NAME}.txt
+
+      - name: Compare benchmarks
+        id: bench-diff
+        if: github.event_name == 'pull_request_target'
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+        run: |
+          go tool benchstat bench-main.txt bench-${BRANCH_NAME}.txt >> bench-diff.txt
           PAYLOAD=$(cat bench-diff.txt)
           echo "diff<<EOF"$'\n'"$PAYLOAD"$'\n'EOF >> "$GITHUB_OUTPUT"
 
@@ -59,14 +66,15 @@ jobs:
           header: bench
           message: |
             ### Benchmark Results
-
             <details><summary>Benchmark results</summary>
+
             ```
             ${{ steps.bench.outputs.result }}
             ```
             </details>
 
             <details><summary>Benchmark vs base branch</summary>
+
             ```
             ${{ steps.bench.outputs.diff }}
             ```

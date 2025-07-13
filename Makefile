@@ -24,9 +24,6 @@ lint:
 bench:
 	go test ./...  -bench=. -run=^a -timeout=15m
 
-bench-stat:
-	@test -e bench-main.txt && go tool benchstat bench-main.txt bench-$(REF_NAME).txt || go tool benchstat bench-$(REF_NAME).txt
-
 gen: gen-db gen-proto
 
 gen-db:
