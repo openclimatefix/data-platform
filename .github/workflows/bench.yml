@@ -44,10 +44,10 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: |
-          make bench > bench-${BRANCH_NAME}.txt
-          PAYLOAD=$(cat bench-${BRANCH_NAME}.txt)
+          make bench > bench-${BRANCH_NAME##*/}.txt
+          PAYLOAD=$(cat bench-${BRANCH_NAME##*/}.txt)
           echo "result<<EOF"$'\n'"$PAYLOAD"$'\n'EOF >> "$GITHUB_OUTPUT"
-          cat bench-${BRANCH_NAME}.txt
+          cat bench-${BRANCH_NAME##*/}.txt
 
       - name: Compare benchmarks
         id: bench-diff
@@ -55,7 +55,7 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: |
-          go tool benchstat bench-main.txt bench-${BRANCH_NAME}.txt >> bench-diff.txt
+          go tool benchstat bench-main.txt bench-${BRANCH_NAME##*/}.txt >> bench-diff.txt
           PAYLOAD=$(cat bench-diff.txt)
           echo "diff<<EOF"$'\n'"$PAYLOAD"$'\n'EOF >> "$GITHUB_OUTPUT"
 

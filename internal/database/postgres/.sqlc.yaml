@@ -10,6 +10,7 @@ sql:
         sql_driver: "github.com/jackc/pgx/v5"
         emit_pointers_for_null_types: true
         emit_sql_as_comment: false
+        query_parameter_limit: 0
         emit_methods_with_db_argument: false
         emit_empty_slices: true
         emit_interface: true

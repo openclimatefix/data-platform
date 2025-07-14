@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -107,6 +106,42 @@ type PostgresDataPlatformServerImpl struct {
 	pool *pgxpool.Pool
 }
 
+func (s *PostgresDataPlatformServerImpl) GetLocationsWithin(ctx context.Context, req *pb.GetLocationsWithinRequest) (*pb.GetLocationsWithinResponse, error) {
+	l := log.With().Str("method", "GetLocationsWithin").Logger()
+	l.Debug().Msg("recieved method call")
+
+	// Establish a transaction with the database
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		l.Err(err).Msg("q.pool.Begin()")
+		return nil, status.Errorf(codes.Internal, "Encountered database connection error")
+	}
+	defer tx.Rollback(ctx)
+	querier := db.New(tx)
+
+	lwParams := db.GetLocationIdsWithinParams{LocationID: req.LocationId}
+	dbLocationIds, err := querier.GetLocationIdsWithin(ctx, lwParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetLocationIdsWithin(%+v)", lwParams)
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No locations found within the specified location ID %d", req.LocationId,
+		)
+	}
+
+	locations := make([]*pb.GetLocationsWithinResponse_IdName, len(dbLocationIds))
+	for i := range dbLocationIds {
+		locations[i] = &pb.GetLocationsWithinResponse_IdName{
+			LocationId: dbLocationIds[i].LocationID,
+			Name:       dbLocationIds[i].LocationName,
+		}
+	}
+
+	return &pb.GetLocationsWithinResponse{
+		Locations: locations,
+	}, tx.Commit(ctx)
+}
+
 func (s *PostgresDataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Context, req *pb.GetWeekAverageDeltasRequest) (*pb.GetWeekAverageDeltasResponse, error) {
 	l := log.With().Str("method", "GetWeekAverageDeltas").Logger()
 	l.Debug().Msg("recieved method call")
@@ -147,9 +182,10 @@ func (s *PostgresDataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Contex
 
 	// Get the observer
 	l.Info().Msgf("Queried observer '%s'", req.ObserverName)
-	dbObserver, err := querier.GetObserverByName(ctx, req.ObserverName)
+	obParams := db.GetObserverByNameParams{ObserverName: req.ObserverName}
+	dbObserver, err := querier.GetObserverByName(ctx, obParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserverByName({name: '%s'})", req.ObserverName)
+		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obParams)
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No observer of name '%s' found. Choose an existing observer or create a new one.",
@@ -214,9 +250,10 @@ func (s *PostgresDataPlatformServerImpl) GetObservedTimeseries(ctx context.Conte
 	}
 
 	// Get the observer
-	dbObserver, err := querier.GetObserverByName(ctx, req.ObserverName)
+	obParams := db.GetObserverByNameParams{ObserverName: req.ObserverName}
+	dbObserver, err := querier.GetObserverByName(ctx, obParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserverByName({name: '%s'})", req.ObserverName)
+		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obParams)
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No observer of name '%s' found. Choose an existing observer or create a new one.",
@@ -282,9 +319,10 @@ func (s *PostgresDataPlatformServerImpl) CreateObservations(ctx context.Context,
 	}
 
 	// Get the observer ID
-	dbObserver, err := querier.GetObserverByName(ctx, strings.ToLower(req.ObserverName))
+	obParams := db.GetObserverByNameParams{ObserverName: req.ObserverName}
+	dbObserver, err := querier.GetObserverByName(ctx, obParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserverByName({name: '%s'})", strings.ToLower(req.ObserverName))
+		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obParams)
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No observer of name '%s', found. Choose an existing observer or create a new one.",
@@ -335,9 +373,10 @@ func (s *PostgresDataPlatformServerImpl) CreateObserver(ctx context.Context, req
 
 	querier := db.New(tx)
 
-	dbObserverId, err := querier.CreateObserver(ctx, req.Name)
+	obParams := db.CreateObserverParams{ObserverName: req.Name}
+	dbObserverId, err := querier.CreateObserver(ctx, obParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateObserver({name: %s})", req.Name)
+		l.Err(err).Msgf("querier.CreateObserver(%+v)", obParams)
 		return nil, status.Error(codes.InvalidArgument, "Invalid observer name. Ensure it is not empty and is lowercase")
 	}
 
@@ -358,9 +397,10 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedCrossSection(ctx context.Co
 	querier := db.New(tx)
 
 	// Get the energy source type
-	dbSourceType, err := querier.GetSourceTypeByName(ctx, req.EnergySource.String())
+	sParams := db.GetSourceTypeByNameParams{SourceTypeName: req.EnergySource.String()}
+	dbSourceType, err := querier.GetSourceTypeByName(ctx, sParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceTypeByName({name: '%s'})", req.EnergySource)
+		l.Err(err).Msgf("querier.GetSourceTypeByName(%+v)", sParams)
 		return nil, status.Errorf(codes.NotFound, "Unknown source type '%s'.", req.EnergySource)
 	}
 
@@ -506,9 +546,10 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx contex
 	}
 
 	// Get the observer ID
-	dbObserver, err := querier.GetObserverByName(ctx, req.ObserverName)
+	obParams := db.GetObserverByNameParams{ObserverName: req.ObserverName}
+	dbObserver, err := querier.GetObserverByName(ctx, obParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserverByName({name: '%s'})", req.ObserverName)
+		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obParams)
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No observer of name '%s' found. Choose an existing observer or create a new one.",
@@ -620,12 +661,10 @@ func (s *PostgresDataPlatformServerImpl) GetLatestPredictions(ctx context.Contex
 
 	l.Debug().Msgf("Found forecast with ID %d for location %d", dbForecast.ForecastID, req.LocationId)
 
-	dbValues, err := querier.ListPredictionsForForecast(ctx, dbForecast.ForecastID)
+	psParams := db.ListPredictionsForForecastParams{ForecastID: dbForecast.ForecastID}
+	dbValues, err := querier.ListPredictionsForForecast(ctx, psParams)
 	if err != nil {
-		l.Err(err).Msgf(
-			"querier.GetPredictedGenerationValuesForForecast({forecastID: %d})",
-			dbForecast.ForecastID,
-		)
+		l.Err(err).Msgf("querier.GetPredictedGenerationValuesForForecast(%+v)", psParams)
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No predicted generation values found for forecast %d",
@@ -812,10 +851,11 @@ func (s *PostgresDataPlatformServerImpl) CreateSite(ctx context.Context, req *pb
 	querier := db.New(tx)
 
 	// Get the energy source type
-	dbEnergySource, err := querier.GetSourceTypeByName(ctx, req.EnergySource.String())
+	sParams := db.GetSourceTypeByNameParams{SourceTypeName: req.EnergySource.String()}
+	dbSourceType, err := querier.GetSourceTypeByName(ctx, sParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceTypeByName({name: '%s'})", req.EnergySource)
-		return nil, status.Errorf(codes.NotFound, "Unknown energy source '%s'.", req.EnergySource)
+		l.Err(err).Msgf("querier.GetSourceTypeByName(%+v)", sParams)
+		return nil, status.Errorf(codes.NotFound, "Unknown source type '%s'.", req.EnergySource)
 	}
 
 	// Create a new location as a Site
@@ -846,7 +886,7 @@ func (s *PostgresDataPlatformServerImpl) CreateSite(ctx context.Context, req *pb
 	}
 	params2 := db.CreateLocationSourceParams{
 		LocationID:               dbLocation.LocationID,
-		SourceTypeID:             dbEnergySource.SourceTypeID,
+		SourceTypeID:             dbSourceType.SourceTypeID,
 		Capacity:                 cp,
 		CapacityUnitPrefixFactor: ex,
 		CapacityLimitPercent:     nil, // TODO: Put this on the request object
@@ -862,7 +902,7 @@ func (s *PostgresDataPlatformServerImpl) CreateSite(ctx context.Context, req *pb
 	}
 	l.Debug().Msgf(
 		"Created source of type '%s' for location %d with capacity %dx10^%d W",
-		dbEnergySource.SourceTypeName, dbLocation.LocationID, dbSource.Capacity, dbSource.CapacityUnitPrefixFactor,
+		dbSourceType.SourceTypeName, dbLocation.LocationID, dbSource.Capacity, dbSource.CapacityUnitPrefixFactor,
 	)
 	return &pb.CreateSiteResponse{LocationId: dbLocation.LocationID}, tx.Commit(ctx)
 }
@@ -896,10 +936,11 @@ func (s *PostgresDataPlatformServerImpl) CreateGsp(ctx context.Context, req *pb.
 	}
 
 	// Get the energy source type
-	dbEnergySource, err := querier.GetSourceTypeByName(ctx, req.EnergySource.String())
+	sParams := db.GetSourceTypeByNameParams{SourceTypeName: req.EnergySource.String()}
+	dbSourceType, err := querier.GetSourceTypeByName(ctx, sParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceTypeByName({name: '%s'})", req.EnergySource)
-		return nil, status.Errorf(codes.NotFound, "Unknown energy source '%s'.", req.EnergySource)
+		l.Err(err).Msgf("querier.GetSourceTypeByName(%+v)", sParams)
+		return nil, status.Errorf(codes.NotFound, "Unknown source type '%s'.", req.EnergySource)
 	}
 
 	// Create a source associated with the location
@@ -914,7 +955,7 @@ func (s *PostgresDataPlatformServerImpl) CreateGsp(ctx context.Context, req *pb.
 	}
 	params2 := db.CreateLocationSourceParams{
 		LocationID:               dbLocation.LocationID,
-		SourceTypeID:             dbEnergySource.SourceTypeID,
+		SourceTypeID:             dbSourceType.SourceTypeID,
 		Capacity:                 cp,
 		CapacityUnitPrefixFactor: ex,
 		Metadata:                 metadata,

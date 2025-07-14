@@ -47,6 +47,8 @@ service DataPlatformService {
   // --- Analysis ----------------------------------------------------------------
 
   rpc GetWeekAverageDeltas(GetWeekAverageDeltasRequest) returns (GetWeekAverageDeltasResponse) {}
+
+  rpc GetLocationsWithin(GetLocationsWithinRequest) returns (GetLocationsWithinResponse) {}
 }
 
 

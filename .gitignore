@@ -9,9 +9,9 @@
 *.dylib
 
 # Generated code
-protogen/
-genproto/
-gen/
+protogen
+genproto
+gen
 
 # Test binary, built with `go test -c`
 *.test

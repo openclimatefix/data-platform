@@ -349,3 +349,16 @@ message GetWeekAverageDeltasResponse {
    */
   string init_time = 3;
 }
+
+message GetLocationsWithinRequest {
+  int32 location_id = 1;
+}
+
+message GetLocationsWithinResponse {
+  message IdName {
+    int32 location_id = 1;
+    string name = 2;
+  }
+
+  repeated GetLocationsWithinResponse.IdName locations = 1;
+}

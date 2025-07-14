@@ -671,6 +671,56 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 	require.Len(t, deltaResp.Deltas, 8*60/30) // One per horizon
 }
 
+func TestGetLocationsWithin(t *testing.T) {
+	pgConnString := createPostgresContainer(t)
+	c := setupClient(t, pgConnString)
+
+	// Create a GSP with a bounding box between 0 and 5
+	_, err := c.CreateGsp(t.Context(), &pb.CreateGspRequest{
+		Name:          "GSP_OUTER_BOX",
+		EnergySource:  pb.EnergySource_SOLAR,
+		Geometry:      "POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))",
+		CapacityWatts: 1000,
+		Metadata:      "{\"source\": \"test\"}",
+	})
+	require.NoError(t, err)
+
+	// Create a site within the box
+	lls := []struct {
+		lat float32
+		lon float32
+	}{
+		{0.1, 0.1},
+		{4, 4},
+		{1, 1},
+		{1, 5},
+		{0, 170},
+	}
+	for i, ll := range lls {
+		_, err := c.CreateSite(t.Context(), &pb.CreateSiteRequest{
+			Name:          fmt.Sprintf("SITE-%d", i),
+			EnergySource:  pb.EnergySource_SOLAR,
+			Latlng:        &pb.LatLng{Latitude: ll.lat, Longitude: ll.lon},
+			CapacityWatts: 50,
+			Metadata:      "",
+		})
+		require.NoError(t, err)
+	}
+
+	result, err := c.GetLocationsWithin(t.Context(), &pb.GetLocationsWithinRequest{LocationId: 1})
+	require.NoError(t, err)
+	expected := []*pb.GetLocationsWithinResponse_IdName{
+		{LocationId: 1, Name: "GSP_OUTER_BOX"},
+		{LocationId: 2, Name: "SITE-0"},
+		{LocationId: 3, Name: "SITE-1"},
+		{LocationId: 4, Name: "SITE-2"},
+	}
+	for _, g := range result.Locations {
+		t.Log("Location:", g.Name, "ID:", g.LocationId)
+	}
+	require.Equal(t, expected, result.Locations)
+}
+
 // --- BENCHMARKS ---------------------------------------------------------------------------------
 
 func BenchmarkPostgresClient(b *testing.B) {
