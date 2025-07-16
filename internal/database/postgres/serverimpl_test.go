@@ -92,12 +92,11 @@ func createPostgresContainer(tb testing.TB) string {
 }
 
 func seed(tb testing.TB, pgConnString string, params seedDBParams) (numPgvs int) {
-	seedfiles, _ := filepath.Glob(filepath.Join(".", "*.sql"))
+	seedfiles, _ := filepath.Glob(filepath.Join(".", "testdata", "*.sql"))
 	conn, err := pgx.Connect(tb.Context(), pgConnString)
 	require.NoError(tb, err)
 	defer conn.Close(tb.Context())
 
-	// Seed data if desired
 	for _, f := range seedfiles {
 		sql, err := os.ReadFile(f)
 		require.NoError(tb, err)
@@ -106,8 +105,8 @@ func seed(tb testing.TB, pgConnString string, params seedDBParams) (numPgvs int)
 		err = conn.QueryRow(
 			tb.Context(),
 			fmt.Sprintf(
-				"SELECT seed_db(num_locations=>%d, gv_resolution_mins=>%d, forecast_resolution_mins=>%d, forecast_length_mins=>%d, num_forecasts_per_location=>%d)",
-				params.NumLocations, params.PgvResolutionMins, params.ForecastResolutionMins, params.ForecastLengthHours*60, params.NumForecastsPerLocation,
+				"SELECT seed_db(num_locations=>%d, gv_resolution_mins=>%d, forecast_resolution_mins=>%d, forecast_length_mins=>%d, num_forecasts_per_location=>%d, pivot_time=>'%s'::timestamp)",
+				params.NumLocations, params.PgvResolutionMins, params.ForecastResolutionMins, params.ForecastLengthHours*60, params.NumForecastsPerLocation, params.PivotTime.UTC().Format(time.RFC3339),
 			),
 		).Scan(&numPgvs)
 		require.NoError(tb, err)
@@ -164,6 +163,7 @@ type seedDBParams struct {
 	PgvResolutionMins       int
 	ForecastResolutionMins  int
 	ForecastLengthHours     int
+	PivotTime               time.Time
 }
 
 func (s *seedDBParams) NumPgvsPerForecast() int {
@@ -406,7 +406,7 @@ func TestCreateSolarGSP(t *testing.T) {
 }
 
 func TestGetPredictedCrossSection(t *testing.T) {
-	pivotTime := time.Now().Truncate(time.Minute)
+	pivotTime := time.Date(2025, 1, 5, 12, 0, 0, 0, time.UTC)
 	pgConnString := createPostgresContainer(t)
 	c := setupClient(t, pgConnString)
 	// Create 100 locations with 4 forecasts each
@@ -416,6 +416,7 @@ func TestGetPredictedCrossSection(t *testing.T) {
 		PgvResolutionMins:       30,
 		ForecastResolutionMins:  30,
 		ForecastLengthHours:     1,
+		PivotTime:               pivotTime,
 	})
 	locationIds := make([]int32, 100)
 	for i := range locationIds {
@@ -426,7 +427,7 @@ func TestGetPredictedCrossSection(t *testing.T) {
 		EnergySource:  pb.EnergySource_SOLAR,
 		TimestampUnix: timestamppb.New(pivotTime),
 		LocationIds:   locationIds,
-		Model:         &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+		Model:         &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, crossSectionResp)
@@ -464,6 +465,7 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 }
 
 func TestGetPredictedTimeseries(t *testing.T) {
+	pivotTime := time.Date(2025, 1, 5, 12, 0, 0, 0, time.UTC)
 	pgConnString := createPostgresContainer(t)
 	c := setupClient(t, pgConnString)
 
@@ -476,6 +478,7 @@ func TestGetPredictedTimeseries(t *testing.T) {
 		PgvResolutionMins:       5,
 		ForecastResolutionMins:  30,
 		ForecastLengthHours:     1,
+		PivotTime:               pivotTime,
 	})
 
 	// For each horizon, get the predicted timeseries
@@ -534,8 +537,12 @@ func TestGetPredictedTimeseries(t *testing.T) {
 			resp, err := c.GetPredictedTimeseries(t.Context(), &pb.GetPredictedTimeseriesRequest{
 				LocationId:   1,
 				HorizonMins:  int32(tt.horizonMins),
-				Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+				Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
 				EnergySource: pb.EnergySource_SOLAR,
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUnix: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
+					EndTimestampUnix:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
+				},
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
@@ -563,6 +570,7 @@ func TestGetObservedTimeseries(t *testing.T) {
 		PgvResolutionMins:       5,
 		ForecastResolutionMins:  30,
 		ForecastLengthHours:     8,
+		PivotTime:               pivotTime,
 	})
 
 	tests := []struct {
@@ -595,6 +603,7 @@ func TestGetObservedTimeseries(t *testing.T) {
 }
 
 func TestGetPredictedTimeseriesDeltas(t *testing.T) {
+	pivotTime := time.Date(2025, 7, 5, 12, 0, 0, 0, time.UTC)
 	pgConnString := createPostgresContainer(t)
 	c := setupClient(t, pgConnString)
 	_ = seed(t, pgConnString, seedDBParams{
@@ -604,6 +613,7 @@ func TestGetPredictedTimeseriesDeltas(t *testing.T) {
 		PgvResolutionMins:       5,
 		ForecastResolutionMins:  30,
 		ForecastLengthHours:     1,
+		PivotTime:               pivotTime,
 	})
 
 	tests := []struct {
@@ -631,7 +641,11 @@ func TestGetPredictedTimeseriesDeltas(t *testing.T) {
 				HorizonMins:  int32(tt.horizonMins),
 				EnergySource: pb.EnergySource_SOLAR,
 				ObserverName: "test_observer",
-				Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+				Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUnix: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
+					EndTimestampUnix:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
+				},
 			})
 			require.NoError(t, err)
 
@@ -648,6 +662,7 @@ func TestGetPredictedTimeseriesDeltas(t *testing.T) {
 }
 
 func TestGetWeekAverageDeltas(t *testing.T) {
+	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	pgConnString := createPostgresContainer(t)
 	c := setupClient(t, pgConnString)
 	_ = seed(t, pgConnString, seedDBParams{
@@ -657,14 +672,15 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 		PgvResolutionMins:       30,
 		ForecastResolutionMins:  30,
 		ForecastLengthHours:     8,
+		PivotTime:               pivotTime,
 	})
 
 	deltaResp, err := c.GetWeekAverageDeltas(t.Context(), &pb.GetWeekAverageDeltasRequest{
 		LocationId:   1,
 		EnergySource: pb.EnergySource_SOLAR,
-		Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+		Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
 		ObserverName: "test_observer",
-		PivotTime:    timestamppb.New(time.Now().UTC().Truncate(time.Minute)),
+		PivotTime:    timestamppb.New(pivotTime),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, deltaResp)
@@ -744,7 +760,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 				resp, err := c.GetPredictedTimeseries(b.Context(), &pb.GetPredictedTimeseriesRequest{
 					LocationId:   1,
 					EnergySource: pb.EnergySource_SOLAR,
-					Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+					Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
 				})
 				require.NoError(b, err)
 				require.NotNil(b, resp)
@@ -761,7 +777,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 				crossSectionResp, err := c.GetPredictedCrossSection(b.Context(), &pb.GetPredictedCrossSectionRequest{
 					EnergySource:  pb.EnergySource_SOLAR,
 					LocationIds:   locationIds,
-					Model:         &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+					Model:         &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
 					TimestampUnix: timestamppb.New(pivotTime),
 				})
 				require.NoError(b, err)
@@ -790,7 +806,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 					LocationId:   1,
 					EnergySource: pb.EnergySource_SOLAR,
 					ObserverName: "test_observer",
-					Model:        &pb.Model{ModelName: "test_model", ModelVersion: "v10"},
+					Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
 				})
 				require.NoError(b, err)
 				require.NotNil(b, deltasResp)
