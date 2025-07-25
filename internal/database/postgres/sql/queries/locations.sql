@@ -84,28 +84,24 @@ WHERE ST_Within(
     (SELECT geom FROM loc.locations ll WHERE ll.location_id = $1)
 );
 
-/*- Queries for the location_sources table ---------------------------
--- Get latest active record via the UPPER(sys_period) IS NULL condition
-*/
+/*- Queries for the sources table -------------------------------------*/
 
--- name: GetLocationSource :one
+-- name: GetSource :one
 SELECT
-    ls.record_id,
     ls.capacity,
-    ls.source_type_id,
     ls.capacity_unit_prefix_factor,
     ls.capacity_limit_sip,
+    ls.source_type_id,
     ls.metadata::json AS metadata,
     l.location_name,
     ST_Y(l.centroid)::real AS latitude,
     ST_X(l.centroid)::real AS longitude
-FROM loc.location_sources AS ls
+FROM loc.sources AS ls
 JOIN loc.source_types AS st ON ls.source_type_id = st.source_type_id
 JOIN loc.locations AS l USING (location_id)
 WHERE
     ls.location_id = $1
-    AND st.source_type_name = UPPER(sqlc.arg(source_type_name)::text)
-    AND UPPER(ls.sys_period) IS NULL;
+    AND st.source_type_name = UPPER(sqlc.arg(source_type_name)::text);
 
 -- name: ListLocationsSources :many
 SELECT 
@@ -114,55 +110,50 @@ SELECT
     capacity_unit_prefix_factor,
     capacity_limit_sip,
     metadata
-FROM loc.location_sources
+FROM loc.sources
 WHERE 
     location_id = ANY(sqlc.arg(location_ids)::integer[])
-    AND source_type_id = $1
-    AND UPPER(sys_period) IS NULL;
+    AND source_type_id = $1;
 
--- name: CreateLocationSource :one
-INSERT INTO loc.location_sources (
+-- name: CreateSource :one
+INSERT INTO loc.sources (
     location_id, source_type_id, capacity, capacity_unit_prefix_factor, capacity_limit_sip, metadata
 ) SELECT 
     $1, $2, $3, $4,
     sqlc.narg(capacity_limit_percent)::smallint,
     sqlc.narg(metadata)::json::jsonb
-RETURNING record_id, capacity, capacity_unit_prefix_factor;
+RETURNING source_id, capacity, capacity_unit_prefix_factor;
 
--- name: UpdateLocationSource :exec
-/* UpdateLocationSource modifies an existing location source record.
- * Updates targeting tracked columns (capacity, capacity_unit_prefix_factor, capacity_limit, metadata)
- * create a new record instead of modifying the existing one.
+-- name: UpdateSource :exec
+/* UpdateSource modifies an existing location source record.
+ * Updates targeting tracked columns (capacity, capacity_unit_prefix_factor, capacity_limit).
  * Fields that want to remain unchanged should be set to their current values,
  * as the database cannot know if NULL is intended to be a new value or a flag to ignore the update.
  */
-UPDATE loc.location_sources SET
+UPDATE loc.sources SET
     capacity = $3,
     capacity_unit_prefix_factor = $4,
     capacity_limit_sip = $5,
     metadata = $6
 WHERE 
     location_id = $1
-    AND source_type_id = $2
-    AND UPPER(sys_period) IS NULL;
+    AND source_type_id = $2;
 
--- name: DecomissionLocationSource :exec
-DELETE FROM loc.location_sources
+-- name: DecomissionSource :exec
+DELETE FROM loc.sources
 WHERE 
     location_id = $1
-    AND source_type_id = $2
-    AND UPPER(sys_period) IS NULL;
+    AND source_type_id = $2;
 
--- name: ListLocationSourceHistory :many
-/* ListLocationSourceHistory shows all the historical records for a given location and source type. */
+-- name: ListSourceHistory :many
+/* ListSourceHistory shows all the historical records for a given location and source type. */
 SELECT
     capacity,
     capacity_unit_prefix_factor,
-    LOWER(sys_period) AS valid_from,
-    metadata
-FROM loc.location_sources
+    capacity_limit_sip,
+    LOWER(sys_period) AS valid_from
+FROM loc.sources_history
 WHERE 
-    location_id = $1
-    AND source_type_id = $2
+    source_id = (SELECT source_id FROM loc.sources WHERE location_id = $1 AND source_type_id = $2) 
     ORDER BY LOWER(sys_period) DESC;
 

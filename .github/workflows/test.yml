@@ -3,14 +3,11 @@ name: Unit Test
 on:
   push:
     branches-ignore: ['main']
-    paths-ignore: ['README.md', 'examples/**']
+    paths-ignore: ['README.md', 'examples/**', '/github/workflows/bench.yml', '/github/workflows/build.yml']
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
 
     steps:
       - name: Checkout repository
@@ -49,16 +46,3 @@ jobs:
           paths: "unit-tests.xml"
           output: "test-summary.md"
         if: always()
-
-      - name: Get associated PR
-        id: findpr
-        uses: jwalton/gh-find-current-pr@89ee5799558265a1e0e31fab792ebb4ee91c016b # v1.3.3
-      
-      - name: Write results to PR comment
-        if: success() && steps.findpr.outputs.number
-        uses: marocchino/sticky-pull-request-comment@d2ad0de260ae8b0235ce059e63f2949ba9e05943 # v2.9.3
-        with:
-          number: ${{ steps.findpr.outputs.pr }}
-          header: unit-test
-          path: test-summary.md
-

@@ -1,0 +1,37 @@
+# Workflow to comment benchmark results on a pull request.
+# * It runs after the 'Benchmark' workflow completes successfully, provided the event triggering
+# * that workflow was a pull request. It isperformed seperately from the benchmark workflow to
+# * as it requires elevated permissions and as such is not safe to run on pull request code.
+# * See https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/
+
+name: Comment Benchmark Results
+on:
+  workflow_run:
+    workflows: ['Benchmark']
+    types:
+      - completed
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Get benchmark comment artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: bench-comment
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Write results to PR comment
+        uses: marocchino/sticky-pull-request-comment@d2ad0de260ae8b0235ce059e63f2949ba9e05943 # v2.9.3
+        with:
+          header: bench
+          path: bench-comment.md
+          number: ${{ github.event.workflow_run.pull_requests[0].number }}
+

@@ -1,17 +1,19 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "altair==5.5.0",
 #     "betterproto==2.0.0b7",
 #     "marimo",
 #     "grpclib==0.4.8",
 #     "pandas==2.3.1",
 #     "matplotlib==3.10.3",
+#     "vega-datasets==0.9.0",
 # ]
 # ///
 
 import marimo
 
-__generated_with = "0.14.10"
+__generated_with = "0.14.11"
 app = marimo.App(width="medium")
 
 
@@ -25,7 +27,9 @@ def _():
     import pandas as pd
     import matplotlib.pyplot as plt
     import marimo as mo
-    return Channel, dp, dt, mo, plt
+    import altair as alt
+    from vega_datasets import data
+    return Channel, alt, data, dp, dt, mo, pd, plt
 
 
 @app.cell
@@ -44,8 +48,8 @@ async def _(client, dp, dt):
             minute=0, second=0, microsecond=0, tzinfo=dt.UTC
         ),
         model=dp.Model(
-            model_name="test_model",
-            model_version="v10",
+            model_name="test_model_1",
+            model_version="v1",
         ),
     )
     response = await client.get_latest_predictions(request)
@@ -80,8 +84,8 @@ async def _(client, dp, dt, horizon_slider):
             end_timestamp_unix=dt.datetime.now().replace(tzinfo=dt.UTC),
         ),
         model=dp.Model(
-            model_name="test_model",
-            model_version="v10",
+            model_name="test_model_1",
+            model_version="v1",
         ),
     )
     response2 = await client.get_predicted_timeseries(request2)
@@ -90,11 +94,64 @@ async def _(client, dp, dt, horizon_slider):
 
 
 @app.cell
-def _(plt, response2):
-    xs2 = [p.yield_percent for p in response2.yields]
-    ys2 = [p.timestamp_unix for p in response2.yields]
-    plt.plot(ys2, xs2)
-    plt.show()
+def _(pd, response2):
+    response2df = pd.DataFrame.from_dict(response2.to_dict()["yields"])
+    response2df
+    return (response2df,)
+
+
+@app.cell
+def _(alt, response2df):
+    chart = (
+        alt.Chart(response2df)
+        .mark_line()
+        .encode(
+            y="yieldPercent",
+            x="timestampUnix:T",
+        )
+    )
+    chart
+    return
+
+
+@app.cell
+async def _(client, dp, dt):
+    request3 = dp.GetWeekAverageDeltasRequest(
+        location_id=1,
+        energy_source=dp.EnergySource.SOLAR,
+        pivot_time=dt.datetime(2025, 7, 17, 10, tzinfo=dt.UTC),
+        model=dp.Model(
+            model_name="test_model_1",
+            model_version="v1",
+        ),
+        observer_name="test_observer",
+    )
+    response3 = await client.get_week_average_deltas(request3)
+    response3.deltas
+    return (response3,)
+
+
+@app.cell
+def _(alt, pd, response3):
+    chart3 = (
+        alt.Chart(pd.DataFrame.from_dict(response3.to_pydict()["deltas"]))
+        .mark_point()
+        .encode(
+            y="deltaPercent",
+            x="horizonMins",
+        )
+    )
+    chart3
+    return
+
+
+@app.cell
+def _(alt, data):
+    countries = alt.topo_feature(data.world_110m.url, "countries")
+
+    alt.Chart(countries).mark_geoshape(fill="lightgray", stroke="white").project(
+        "equirectangular"
+    ).properties(width=500, height=300)
     return
 
 

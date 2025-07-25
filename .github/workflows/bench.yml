@@ -1,19 +1,19 @@
+# Workflow to run benchmarking.
+# * Runs on new semantic tags, pushes to main, and pull requests to main.
+
 name: Benchmark
 on:
   push:
     tags: ['v*']
     branches: ['main']
-    paths-ignore: ['README.md', 'examples/**']
-  pull_request_target:
+    paths-ignore: ['README.md', 'examples/**', '/github/workflows/test.yml', '/github/workflows/build.yml']
+  pull_request:
     branches: ['main']
-    paths-ignore: ['README.md', 'examples/**']
+    paths-ignore: ['README.md', 'examples/**', '/github/workflows/test.yml', '/github/workflows/build.yml']
 
 jobs:
   bench:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
 
     steps:
       - name: Checkout repository
@@ -34,6 +34,7 @@ jobs:
 
       - name: Restore PR base branch benchmarks
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      id: cache-base-banch
         with:
           path: 'bench-main.txt'
           # Use base SHA for pull requests to ensure cache is reused
@@ -44,38 +45,47 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: |
-          make bench > bench-${BRANCH_NAME##*/}.txt
-          PAYLOAD=$(cat bench-${BRANCH_NAME##*/}.txt)
-          echo "result<<EOF"$'\n'"$PAYLOAD"$'\n'EOF >> "$GITHUB_OUTPUT"
-          cat bench-${BRANCH_NAME##*/}.txt
+          export FILENAME=bench-${BRANCH_NAME////-}.txt
+	      make bench > $FILENAME
+          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
+          cat $FILENAME
 
       - name: Compare benchmarks
         id: bench-diff
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request' && steps.cache-base-banch.outputs.cache-hit != 'true'
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: |
-          go tool benchstat bench-main.txt bench-${BRANCH_NAME##*/}.txt >> bench-diff.txt
-          PAYLOAD=$(cat bench-diff.txt)
-          echo "diff<<EOF"$'\n'"$PAYLOAD"$'\n'EOF >> "$GITHUB_OUTPUT"
+          go tool benchstat bench-main.txt bench-${BRANCH_NAME////-}.txt >> bench-diff.txt
+          echo "filename=bench-diff.txt" >> "$GITHUB_OUTPUT"
+          cat bench-diff.txt
 
-      - name: Write results to PR comment
-        if: github.event_name == 'pull_request_target'
-        uses: marocchino/sticky-pull-request-comment@d2ad0de260ae8b0235ce059e63f2949ba9e05943 # v2.9.3
+      - name: Write results to markdown file
+        run:
+          echo $"### Benchmark Results\n" > bench-comment.md
+          echo $"<details><summary>Benchmark results</summary>\n" >> bench-comment.md
+          echo $"```" >> bench-comment.md
+          cat ${{ steps.bench.outputs.filename }} >> bench-comment.md
+          echo $"```\n" >> bench-comment.md
+          echo $"</details>\n" >> bench-comment.md
+
+      - name: Write benchmark diff to markdown file
+        if: github.event_name == 'pull_request' && steps.cache-base-banch.outputs.cache-hit != 'true'
+        run:
+          echo $"<details><summary>Benchmark vs base branch</summary>\n" >> bench-comment.md
+          echo $"```" >> bench-comment.md
+          cat ${{ steps.bench-diff.outputs.filename }} >> bench-comment.md
+          echo $"```\n" >> bench-comment.md
+          echo $"</details>\n" >> bench-comment.md
+          
+
+      - name: Upload benchmark results
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          header: bench
-          message: |
-            ### Benchmark Results
-            <details><summary>Benchmark results</summary>
+          name: bench-comment-${{ github.head_ref }}
+          path: bench-comment.md
+          if-no-files-found: fail
+          retention-days: 1
+          overwrite: true
 
-            ```
-            ${{ steps.bench.outputs.result }}
-            ```
-            </details>
-
-            <details><summary>Benchmark vs base branch</summary>
-
-            ```
-            ${{ steps.bench.outputs.diff }}
-            ```
-            </details>

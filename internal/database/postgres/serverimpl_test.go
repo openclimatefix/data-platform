@@ -92,7 +92,7 @@ func createPostgresContainer(tb testing.TB) string {
 }
 
 func seed(tb testing.TB, pgConnString string, params seedDBParams) (numPgvs int) {
-	seedfiles, _ := filepath.Glob(filepath.Join(".", "testdata", "*.sql"))
+	seedfiles, _ := filepath.Glob(filepath.Join(".", "testdata", "seed*.sql"))
 	conn, err := pgx.Connect(tb.Context(), pgConnString)
 	require.NoError(tb, err)
 	defer conn.Close(tb.Context())
@@ -105,8 +105,13 @@ func seed(tb testing.TB, pgConnString string, params seedDBParams) (numPgvs int)
 		err = conn.QueryRow(
 			tb.Context(),
 			fmt.Sprintf(
-				"SELECT seed_db(num_locations=>%d, gv_resolution_mins=>%d, forecast_resolution_mins=>%d, forecast_length_mins=>%d, num_forecasts_per_location=>%d, pivot_time=>'%s'::timestamp)",
-				params.NumLocations, params.PgvResolutionMins, params.ForecastResolutionMins, params.ForecastLengthHours*60, params.NumForecastsPerLocation, params.PivotTime.UTC().Format(time.RFC3339),
+				"SELECT seed_db("+
+					"num_locations=>%d, gv_resolution_mins=>%d, forecast_resolution_mins=>%d,"+
+					"forecast_length_mins=>%d, num_forecasts_per_location=>%d, pivot_time=>'%s'::timestamp"+
+					");",
+				params.NumLocations, params.PgvResolutionMins, params.ForecastResolutionMins,
+				params.ForecastLengthHours*60, params.NumForecastsPerLocation,
+				params.PivotTime.UTC().Format(time.RFC3339),
 			),
 		).Scan(&numPgvs)
 		require.NoError(tb, err)
@@ -597,7 +602,7 @@ func TestGetObservedTimeseries(t *testing.T) {
 				ObserverName: "test_observer",
 			})
 			require.NoError(t, err)
-			require.Equal(t, len(resp.Yields), tt.expectedSize)
+			require.Equal(t, tt.expectedSize, len(resp.Yields))
 		})
 	}
 }
@@ -741,14 +746,14 @@ func TestGetLocationsWithin(t *testing.T) {
 
 func BenchmarkPostgresClient(b *testing.B) {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	pivotTime := time.Now().UTC().Truncate(time.Minute)
+	pivotTime := time.Now().UTC().Truncate(time.Hour)
 
 	tests := []seedDBParams{
-		// {NumLocations: 373, PgvResolutionMins: 30, ForecastResolutionMins: 60, ForecastLengthHours: 8, NumForecastsPerLocation: 10},
-		// {NumLocations: 373, PgvResolutionMins: 5, ForecastResolutionMins: 60, ForecastLengthHours: 16, NumForecastsPerLocation: 48},
-		{NumLocations: 500, PgvResolutionMins: 30, ForecastResolutionMins: 30, ForecastLengthHours: 24, NumForecastsPerLocation: 256},
-		// {NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 76},
-		// {NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 256},
+		// {NumLocations: 373, PgvResolutionMins: 30, ForecastResolutionMins: 60, ForecastLengthHours: 8, NumForecastsPerLocation: 10, PivotTime: pivotTime},
+		// {NumLocations: 373, PgvResolutionMins: 5, ForecastResolutionMins: 60, ForecastLengthHours: 16, NumForecastsPerLocation: 48, PivotTime: pivotTime},
+		{NumLocations: 500, PgvResolutionMins: 30, ForecastResolutionMins: 30, ForecastLengthHours: 24, NumForecastsPerLocation: 256, PivotTime: pivotTime},
+		// {NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 76, PivotTime: pivotTime},
+		// {NumLocations: 10000, PgvResolutionMins: 5, ForecastResolutionMins: 30, ForecastLengthHours: 8, NumForecastsPerLocation: 256, PivotTime: pivotTime},
 	}
 	for _, tt := range tests {
 		pgConnString := createPostgresContainer(b)

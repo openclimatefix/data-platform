@@ -3,8 +3,7 @@ name: Build Containers
 on:
   push:
     branches-ignore: ['main']
-    paths-ignore:
-      - 'README.md'
+    paths-ignore: ['README.md', 'examples/**', '/github/workflows/bench.yml', '/github/workflows/test.yml']
 
 jobs:
   build-container:
