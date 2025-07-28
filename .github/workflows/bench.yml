@@ -26,8 +26,18 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      - name: Export Go env vars
+        id: go-vars
+        run: echo "GOMODCACHE=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Protoc compiler
         uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+
+      - name: Restore cached go tools
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: '{{ steps.go-vars.outputs.GOMODCACHE }}'
+          key: ${{ runner.os }}-go-tools-${{ hashFiles('**/go.sum') }}
 
       - name: Generate code
         run: go install tool && make gen
