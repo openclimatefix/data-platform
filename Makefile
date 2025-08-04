@@ -16,22 +16,26 @@ test:
 lint:
 	@go mod tidy
 	@go tool gofumpt -l -w .
+	@uvx -q sqlfluff fix -q \
+		--disable-progress-bar \
+		--config=internal/database/postgres/sql/.sqlfluff.toml \
+		internal/database/postgres/sql/queries
 
 .PHONY: bench
 bench:
 	@go test ./...  -bench=. -run=^a -timeout=15m
 
 .PHONY: gen
-gen: gen-db gen-proto
+gen: gen.db gen.proto
 
-.PHONY: gen-db
-gen-db:
+.PHONY: gen.db
+gen.db:
 	@echo "Generating internal database code..."
 	@go tool sqlc generate --file internal/database/postgres/.sqlc.yaml
 	@echo " * Success."
 
-.PHONY: gen-proto
-gen-proto:
+.PHONY: gen.proto
+gen.proto:
 	@echo "Generating internal protobuf code..."
 	@rm -rf internal/gen && mkdir -p internal/gen
 	@protoc \
@@ -45,20 +49,19 @@ gen-proto:
 
 # --- EXTERNAL GENERATION TARGETS --------------------------------------------------------------- #
 
-.PHONY: gen-ext
-gen-ext: gen-proto-python gen-proto-openapi gen-proto-typescript
-
-.PHONY: gen-proto-python
-gen-proto-python:
+.PHONY: gen.proto.python
+gen.proto.python:
+	find examples/python-notebook ! -name 'example.py' -type f -exec rm -f {} +
 	rm -rf gen/python && mkdir -p gen/python
 	uvx --from 'betterproto[compiler]==2.0.0b7' protoc \
 		proto/ocf/dp/*.proto \
 		-I=proto \
 		--python_betterproto_opt=typing.310 \
 		--python_betterproto_out=gen/python
+	cp -r gen/python/* examples/python-notebook/
 
-.PHONY: gen-proto-typescript
-gen-proto-typescript:
+.PHONY: gen.proto.typescript
+gen.proto.typescript:
 	@test -s protoc-gen-ts || npm install -g @protobuf-ts/plugin
 	rm -rf gen/typescript && mkdir -p gen/typescript
 	protoc \
@@ -66,8 +69,8 @@ gen-proto-typescript:
 		-I=proto \
 		--ts_out=gen/typescript \
 
-.PHONY: gen-proto-openapi
-gen-proto-openapi:
+.PHONY: gen.proto.openapi
+gen.proto.openapi:
 	rm -rf gen/openapi && mkdir -p gen/openapi
 	@test -s protoc-gen-openapi || go install github.com/googleapis/gnostic/apps/protoc-gen-openapi@latest
 	protoc \
@@ -77,20 +80,15 @@ gen-proto-openapi:
 	npx redocly build-docs gen/openapi.yaml --output gen/index.html
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
-
-.PHONY: run-db
-run-db:
-	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t fcfs-pgdb:local && docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" fcfs-pgdb:local
-
-.PHONY: migrate-db
-migrate-db:
-	goose postgres "postgresql://postgres:postgres@localhost:5400/postgres" -dir ./internal/database/postgres/sql/migrations up
-
-.PHONY: run-api
-run-api:
+.PHONY: run
+run:
 	DATABASE_URL=postgres://postgres:postgres@localhost:5400/postgres DATABASE_TYPE=postgres LOGLEVEL=DEBUG go run cmd/main.go
 
-.PHONY: run-grpc-client
-run-grpc-client:
+.PHONY: run.db
+run.db:
+	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t fcfs-pgdb:local && docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" fcfs-pgdb:local
+
+.PHONY: run.client
+run.client:
 	grpcui -plaintext localhost:50051
 

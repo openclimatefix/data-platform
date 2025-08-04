@@ -31,6 +31,8 @@ service DataPlatformService {
   rpc GetLatestPredictions(GetLatestPredictionsRequest) returns (GetLatestPredictionsResponse) {}
   rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
 
+  rpc GetLocationsWithin(GetLocationsWithinRequest) returns (GetLocationsWithinResponse) {}
+
   // --- Crud ---------------------------------------------------------------------
 
   rpc CreateSite(CreateSiteRequest) returns (CreateSiteResponse) {}
@@ -46,9 +48,13 @@ service DataPlatformService {
 
   // --- Analysis ----------------------------------------------------------------
 
+  /* GetWeekAverageDeltas fetches the average delta at the given init time over the past week.
+   * This is useful for making adjustments based on recent performance.
+   */
   rpc GetWeekAverageDeltas(GetWeekAverageDeltasRequest) returns (GetWeekAverageDeltasResponse) {}
 
-  rpc GetLocationsWithin(GetLocationsWithinRequest) returns (GetLocationsWithinResponse) {}
+  rpc StreamForecastData(StreamForecastDataRequest) returns (stream StreamForecastDataResponse) {}
+
 }
 
 

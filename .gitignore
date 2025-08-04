@@ -12,17 +12,21 @@
 protogen
 genproto
 gen
+examples/python-notebook/*
+!examples/python-notebook/exmaple.py
 
 # Test binary, built with `go test -c`
 *.test
 
 # Code coverage profiles and other test artifacts
 *.out
+*.png
+*.txt
 coverage.*
 *.coverprofile
 profile.cov
-unit-test.xml
-bench-*.txt
+unit-test*.xml
+bench*.txt
 
 # Go workspace file
 go.work

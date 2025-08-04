@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"os"
 	"path/filepath"
@@ -730,7 +731,7 @@ func TestGetLocationsWithin(t *testing.T) {
 
 	result, err := c.GetLocationsWithin(t.Context(), &pb.GetLocationsWithinRequest{LocationId: 1})
 	require.NoError(t, err)
-	expected := []*pb.GetLocationsWithinResponse_IdName{
+	expected := []*pb.GetLocationsWithinResponse_LocationData{
 		{LocationId: 1, Name: "GSP_OUTER_BOX"},
 		{LocationId: 2, Name: "SITE-0"},
 		{LocationId: 3, Name: "SITE-1"},
@@ -742,8 +743,57 @@ func TestGetLocationsWithin(t *testing.T) {
 	require.Equal(t, expected, result.Locations)
 }
 
+func TestCreateForecast(t *testing.T) {
+	pgConnString := createPostgresContainer(t)
+	c := setupClient(t, pgConnString)
+
+	// Create a predictor
+	_, err := c.CreateModel(t.Context(), &pb.CreateModelRequest{
+		Name:    "test_model_1",
+		Version: "v1",
+	})
+	require.NoError(t, err)
+
+	// Create a site to attach the forecast to
+	siteResp, err := c.CreateSite(t.Context(), &pb.CreateSiteRequest{
+		Name:          "TEST SITE",
+		Latlng:        &pb.LatLng{Latitude: 51.5, Longitude: -0.1},
+		CapacityWatts: 1000000,
+		Metadata:      "",
+		EnergySource:  pb.EnergySource_SOLAR,
+	})
+	require.NoError(t, err)
+
+	yields := make([]*pb.CreateForecastRequest_PredictedGenerationValue, 10)
+	for i := range yields {
+		yields[i] = &pb.CreateForecastRequest_PredictedGenerationValue{
+			HorizonMins: int32(i * 30),
+			P50Pct:      float32(50 + i*5),
+			P10Pct:      float32(40 + i*5),
+			P90Pct:      float32(60 + i*5),
+			Metadata:    "{\"source\": \"test\"}",
+		}
+	}
+
+	req := &pb.CreateForecastRequest{
+		Forecast: &pb.CreateForecastRequest_Forecast{
+			LocationId:   siteResp.LocationId,
+			Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
+			EnergySource: pb.EnergySource_SOLAR,
+			InitTimeUtc:  timestamppb.New(time.Now().UTC()),
+		},
+		PredictedGenerationValues: yields,
+	}
+	resp, err := c.CreateForecast(t.Context(), req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+}
+
 // --- BENCHMARKS ---------------------------------------------------------------------------------
 
+// BenchmarkPostgresClient runs benchmarks against the Postgres client.
+// It does not test for the validity of the responses, as these are covered in the unit test cases.
+// Instead it determines how long each RPC takes to complete against a database of a given size.
 func BenchmarkPostgresClient(b *testing.B) {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	pivotTime := time.Now().UTC().Truncate(time.Hour)
@@ -760,6 +810,18 @@ func BenchmarkPostgresClient(b *testing.B) {
 		c := setupClient(b, pgConnString)
 		numPgvs := seed(b, pgConnString, tt)
 
+		// Create some test yields
+		yields := make([]*pb.CreateForecastRequest_PredictedGenerationValue, tt.NumPgvsPerForecast())
+		for i := range yields {
+			yields[i] = &pb.CreateForecastRequest_PredictedGenerationValue{
+				HorizonMins: int32(i * 30),
+				P50Pct:      50,
+				P10Pct:      50,
+				P90Pct:      50,
+				Metadata:    "{\"source\": \"test\"}",
+			}
+		}
+
 		b.Run(fmt.Sprintf("%d/GetPredictedTimeseries", numPgvs), func(b *testing.B) {
 			for b.Loop() {
 				resp, err := c.GetPredictedTimeseries(b.Context(), &pb.GetPredictedTimeseriesRequest{
@@ -768,8 +830,6 @@ func BenchmarkPostgresClient(b *testing.B) {
 					Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
 				})
 				require.NoError(b, err)
-				require.NotNil(b, resp)
-				require.Equal(b, int32(1), resp.LocationId)
 				require.GreaterOrEqual(b, len(resp.Yields), 1)
 			}
 		})
@@ -814,9 +874,24 @@ func BenchmarkPostgresClient(b *testing.B) {
 					Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
 				})
 				require.NoError(b, err)
-				require.NotNil(b, deltasResp)
-				require.Equal(b, int32(1), deltasResp.LocationId)
 				require.GreaterOrEqual(b, len(deltasResp.Deltas), 1)
+			}
+		})
+		b.Run(fmt.Sprintf("%d/CreateForecast", numPgvs), func(b *testing.B) {
+			for b.Loop() {
+				_, err := c.CreateForecast(b.Context(), &pb.CreateForecastRequest{
+					Forecast: &pb.CreateForecastRequest_Forecast{
+						Model:        &pb.Model{ModelName: "test_model_1", ModelVersion: "v1"},
+						LocationId:   1,
+						EnergySource: pb.EnergySource_SOLAR,
+						InitTimeUtc: timestamppb.New(
+							time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).
+								Add(time.Duration(rand.Int64N(2000000)) * time.Minute),
+						),
+					},
+					PredictedGenerationValues: yields,
+				})
+				require.NoError(b, err)
 			}
 		})
 	}

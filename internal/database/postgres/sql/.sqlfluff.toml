@@ -1,0 +1,14 @@
+[sqlfluff]
+dialect = postgres
+max_line_length = 100
+rules = core
+exclude_rules = ST07, AL07, LT08
+processes = 4
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = upper
+
+[sqlfluff:indentation]
+indented_using_on = False
+allow_implicit_indents = True
+

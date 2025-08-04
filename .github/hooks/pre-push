@@ -8,7 +8,7 @@ cd "$REPO_ROOT" || exit 1
 
 UNFORMATTED_FILES=$(make lint)
 if [ -n "$UNFORMATTED_FILES" ]; then
-    echo "ERROR: Linting/fixing reformatted the following files/vendors:"
+    echo "ERROR: Linting/fixing reformatted some files:"
     for file in $UNFORMATTED_FILES; do
         echo "       - $file"
     done

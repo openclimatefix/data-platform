@@ -1,4 +1,4 @@
-# FCFS Data Platform
+# GRPC Data Platform
 
 **Reimagining OCF's Data Platform for Performance and Useability**
 
@@ -23,8 +23,8 @@ generated Python bindings (see [Generating Code](#generating-code)). Then use
 [uvx](https://docs.astral.sh/uv/reference/cli/#uv-tool-run) to run the notebook:
 
 ```bash
-$ make gen-proto-python && cp -r gen/python/* examples/python-notebook/
-$ cd examples/python-notebook && uvx --with="marimo" marimo edit --headless example.py 
+$ make gen.proto.python
+$ uvx marimo edit --headless --sandbox examples/python-notebook/example.py 
 ```
 
 ### Typescript Frontend Client
@@ -87,9 +87,9 @@ updates to clients using the Data Platform.
 ### Server
 
 The Database Schema is mapped to the External Schema by implementing the server interface generated
-from the Data Contract. This is done in `internal/database/serverimpl.go`. It isn't much more than a
-conversion layer, with the business logic shared between the implemented functions and the SQL
-queries.
+from the Data Contract. This is done in `internal/database/<database>/serverimpl.go`. It isn't much
+more than a conversion layer, with the business logic shared between the implemented functions and
+the SQL queries.
 
 
 
@@ -108,7 +108,7 @@ This will fetch the dependencies, and install the git hooks required for develop
 
 > [!Important]
 > Since this project is uses lots of generated code, these hooks are vital to keep this generated
-> code up to date, and as such running `make init` is a vital step towards a smooth development
+> code up to date, and as such running `make init` is a necessary step towards a smooth development
 > experience.
 
 The server can then be run locally using
