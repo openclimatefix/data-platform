@@ -25,7 +25,7 @@ jobs:
       - name: Get benchmark comment artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: bench-comment-$${{ github.event.workflow_run.pull_requests[0].number }}
+          name: bench-comment-${{ github.event.workflow_run.pull_requests[0].number }}
           run-id: ${{ github.event.workflow_run.id }}
 
       - name: Write results to PR comment

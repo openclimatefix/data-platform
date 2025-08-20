@@ -29,7 +29,7 @@ BEGIN
     INSERT INTO loc.locations
       (location_name, location_type_id, geom)
     SELECT
-        'LOCATION-' || i AS location_name,
+        'TESTLOCATION' || i AS location_name,
         (SELECT location_type_id FROM loc.location_types WHERE location_type_name = 'SITE'),
         ST_SetSRID(ST_MakePoint(random() * 360 - 180, random() * 180 - 90), 4326)
     FROM generate_series(0, num_locations - 1) as i;

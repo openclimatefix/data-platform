@@ -5,7 +5,9 @@ syntax = "proto3";
 package ocf.dp;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
 import "buf/validate/validate.proto";
+import "ocf/dp/dp.rules.proto";
 
 option go_package = "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp;dp";
 
@@ -15,18 +17,6 @@ enum EnergySource {
   UNSPECIFIED = 0;
   SOLAR = 1;
   WIND = 2;
-}
-
-message Yield {
-  float yield_percent = 1;
-  google.protobuf.Timestamp timestamp_unix = 2;
-}
-
-message YieldPrediction {
-  google.protobuf.Timestamp timestamp_unix = 1;
-  float yield_percent = 2;
-  float yield_p10_percent = 3;
-  float yield_p90_percent = 4;
 }
 
 /* LatLng represents a WSG84 coordinate pair.
@@ -86,46 +76,51 @@ message TimeWindow {
 // --- Requests and Responses --------------------------------------------------------
 
 message GetPredictedTimeseriesRequest {
-  int32 location_id = 1;
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
 
-  /* The desired minimum difference between the forecast initialisation time,
-   * and each target time in minutes.
-   * A value of 0 gives the most recently predicted values for each target time (default).
-   */
-  int32 horizon_mins = 3;
+  uint32 horizon_mins = 3;
   /* The time window to fetch predicted yields for.
    * If not specified, the default is 48 hours before the current time
    * to 36 hours after the current time.
    */
   TimeWindow time_window = 4;
-  /* The model to fetch predicted yields from.*/
-  Model model = 5[
+  Model model = 5 [
     (buf.validate.field).required = true
   ];
 }
 
 message GetPredictedTimeseriesResponse {
+  message Value {
+    google.protobuf.Timestamp timestamp_unix = 1;
+    float p50_value_percent = 2;
+    float p10_value_percent = 3;
+    float p90_value_percent = 4;
+    uint64 effective_capacity_watts = 5;
+  }
+
   int32 location_id = 1;
-  uint64 capacity_watts = 2;
-  repeated YieldPrediction yields = 3;
+  string location_name = 2;
+  repeated GetPredictedTimeseriesResponse.Value values = 3;
 }
 
 
 message GetPredictedTimeseriesDeltasRequest {
-  int32 location_id = 1;
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
 
-  /* The desired difference between the initialisation time and the target time in minutes.
-   * 0 gives the most recently predicted deltas, and is the default if not specified.
-   */
-  int32 horizon_mins = 3;
-  /* The model to fetch predicted yields from. */
-  Model model = 4;
-  /* The name of the observer to compare predicted yields against.
-   * If not specified, the default observer will be used.
-   */
-  string observer_name = 5;
+  uint32 horizon_mins = 3;
+  Model model = 4 [
+    (buf.validate.field).required = true
+  ];
+  string observer_name = 5 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 100
+  ];
   /* The time window to fetch predicted deltas for.
    * If not specified, the default is 48 hours before the current time
    * to 36 hours after the current time.
@@ -134,20 +129,29 @@ message GetPredictedTimeseriesDeltasRequest {
 }
 
 message GetPredictedTimeseriesDeltasResponse {
-  message YieldDelta {
-    float delta_percent = 1;
-    google.protobuf.Timestamp timestamp_unix = 2;
+  message Value {
+    google.protobuf.Timestamp timestamp_unix = 1;
+    /* The difference between the predicted yield and the observed yield,
+     * expressed as a percentage of the effective capacity.
+     */
+    float delta_percent = 2;
+    uint64 effective_capacity_watts = 3;
   }
 
   int32 location_id = 1;
-  uint64 capacity_watts = 2;
-  repeated YieldDelta deltas = 3;
+  string location_name = 2;
+  repeated GetPredictedTimeseriesDeltasResponse.Value values = 3;
 }
 
 
 message GetObservedTimeseriesRequest {
-  int32 location_id = 1;
-  string observer_name = 2;
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
+  string observer_name = 2 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 100
+  ];
   EnergySource energy_source = 3;
   /* The time window to fetch observed yields for.
    * If not specified, the default is 48 hours before the current time
@@ -157,87 +161,145 @@ message GetObservedTimeseriesRequest {
 }
 
 message GetObservedTimeseriesResponse {
+  message Value {
+    google.protobuf.Timestamp timestamp_unix = 1;
+    float value_percent = 2;
+    uint64 effective_capacity_watts = 3;
+  }
+
   int32 location_id = 1;
-  uint64 capacity_watts = 2;
-  repeated Yield yields = 3;
+  string location_name = 2;
+  repeated Value values = 3;
 }
 
 
 message GetPredictedCrossSectionRequest {
-  repeated int32 location_ids = 1;
+  repeated string location_names = 1 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 1000,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items = {
+      string: {[ocf.dp.valid_location_name]: true}
+    }
+  ];
   EnergySource energy_source = 2;
+  /* The time to fetch predicted yields for.
+   * If not specified, the current time will be used.
+   */
   google.protobuf.Timestamp timestamp_unix = 3;
   /* The model to fetch predicted yields from. */
-  Model model = 4;
+  Model model = 4 [
+    (buf.validate.field).required = true
+  ];
 }
 
 message GetPredictedCrossSectionResponse {
-  message YieldPredictionAtLocation {
+  message Value {
     int32 location_id = 1;
     string location_name = 2;
-    uint64 capacity_watts = 3;
-    float yield_percent = 4;
+    float value_percent = 3;
+    uint64 effective_capacity_watts = 4;
+    /* The predicted power generation at the given time,
+     * expressed as a percentage of the effective capacity.
+     * This is the P50 value, i.e. the median prediction.
+     */
     LatLng latlng = 5;
   }
 
   google.protobuf.Timestamp timestamp_unix = 1;
-  repeated YieldPredictionAtLocation yields = 2;
+  repeated Value values = 2;
 }
 
 
 message GetLatestPredictionsRequest {
-  int32 location_id = 1;
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
   /* The time to search backwards from to find the 'latest' forecast.
    * If not specified, the current time will be used.
    */
   google.protobuf.Timestamp pivot_timestamp_unix = 3;
-  /* The model to fetch the latest forecast from. */
-  Model model = 4;
+  Model model = 4 [
+    (buf.validate.field).required = true
+  ];
 }
 
 message GetLatestPredictionsResponse {
+  message Value {
+    google.protobuf.Timestamp timestamp_unix = 1;
+    float p50_percent = 2;
+    float p10_percent = 3;
+    float p90_percent = 4;
+    uint64 effective_capacity_watts = 5;
+  }
+
   int32 location_id = 1;
-  uint64 capacity_watts = 2;
+  string location_name = 2;
   int64 forecast_id = 3;
-  repeated YieldPrediction yields = 4;
+  repeated GetLatestPredictionsResponse.Value values = 4;
 }
 
 
 message CreateModelRequest {
   string name = 1 [
-    (buf.validate.field).string.min_len = 3
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 100
   ];
   string version = 2 [
-    (buf.validate.field).string.min_len = 1
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 100
   ];
 }
 
 message CreateModelResponse {
   int32 model_id = 1;
+  string model_name = 2;
+  string model_version = 3;
 }
 
 
 message CreateForecastRequest {
   message PredictedGenerationValue {
-    int32 horizon_mins = 1;
-    float p50_pct = 2;
-    float p10_pct = 3;
-    float p90_pct = 4;
-    string metadata = 5;
+    uint32 horizon_mins = 1;
+    float p50_pct = 2 [
+      (buf.validate.field).required = true,
+      (buf.validate.field).float.gte = 0,
+      (buf.validate.field).float.lte = 110
+    ];
+    float p10_pct = 3 [
+      (buf.validate.field).required = true,
+      (buf.validate.field).float.gte = 0,
+      (buf.validate.field).float.lte = 110
+    ];
+    float p90_pct = 4 [
+      (buf.validate.field).required = true,
+      (buf.validate.field).float.gte = 0,
+      (buf.validate.field).float.lte = 110
+    ];
+    optional google.protobuf.Struct metadata = 5;
   }
 
   message Forecast {
     Model model = 1 [
       (buf.validate.field).required = true
     ];
-    int32 location_id = 2;
+    string location_name = 2 [
+      (buf.validate.field).string.(valid_location_name) = true
+    ];
     EnergySource energy_source = 3;
-    google.protobuf.Timestamp init_time_utc = 4;
+    google.protobuf.Timestamp init_time_utc = 4 [
+      (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+    ];
   }
 
-  CreateForecastRequest.Forecast forecast = 1;
-  repeated CreateForecastRequest.PredictedGenerationValue predicted_generation_values = 2;
+  CreateForecastRequest.Forecast forecast = 1 [
+    (buf.validate.field).required = true
+  ];
+  repeated CreateForecastRequest.PredictedGenerationValue predicted_generation_values = 2 [
+    (buf.validate.field).repeated.min_items = 10,
+    (buf.validate.field).repeated.max_items = 5000
+  ];
 }
 
 message CreateForecastResponse {
@@ -246,52 +308,77 @@ message CreateForecastResponse {
 
 
 message CreateSiteRequest {
-  string name = 1;
+  string name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
-  LatLng latlng = 3;
-  uint64 capacity_watts = 4;
-  string metadata = 5;
+  LatLng latlng = 3 [
+    (buf.validate.field).required = true
+  ];
+  uint64 capacity_watts = 4 [
+    (buf.validate.field).required = true
+  ];
+  optional google.protobuf.Struct metadata = 5;
 }
 
 message CreateSiteResponse {
   int32 location_id = 1;
+  string location_name = 2;
+  uint64 capacity_watts = 3;
 }
 
 
 message CreateGspRequest {
-  string name = 1;
+  string name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
-  string geometry = 3;
-  uint64 capacity_watts = 4;
-  string metadata = 5;
+  string geometry = 3 [
+    (buf.validate.field).string.(valid_geometry) = true,
+    (buf.validate.field).string.example = "POLYGON ((-0.127 51.507, -0.127 51.507, -0.127 51.507, -0.127 51.507))"
+  ];
+  uint64 capacity_watts = 4 [
+    (buf.validate.field).required = true
+  ];
+  optional google.protobuf.Struct metadata = 5;
 }
 
 message CreateGspResponse {
   int32 location_id = 1;
+  string location_name = 2;
+  uint64 capacity_watts = 3;
 }
 
 
 message GetLocationRequest {
-  // TODO: Make this location name?
-  int32 location_id = 1;
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
 }
 
 message GetLocationResponse {
   int32 location_id = 1;
-  string name = 2;
+  string location_name = 2;
   /* The characteristic coordinates of the location.
    * For sites, this is simply their point coordinates,
    * whilst for area-based locations, this is their centroid.
    */
   LatLng latlng = 3;
   uint64 capacity_watts = 4;
-  string metadata = 5;
+  google.protobuf.Struct metadata = 5;
 }
 
 
 message GetLocationsAsGeoJSONRequest {
-  repeated int32 location_ids = 1;
+  repeated string location_names = 1 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 1000,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items = {
+      string: {[ocf.dp.valid_location_name]:  true}
+    } 
+  ];
   /* If true, the GeoJSON will not be simplified.
    * Defaults to false if not set to reduce response size.
    */
@@ -304,74 +391,114 @@ message GetLocationsAsGeoJSONResponse {
 
 
 message CreateObservationsRequest {
-  int32 location_id = 1;
+  message Value {
+    google.protobuf.Timestamp timestamp_unix = 1;
+    float value_percent = 2 [
+      (buf.validate.field).required = true,
+      (buf.validate.field).float.gte = 0,
+      (buf.validate.field).float.lte = 110
+    ];
+    uint64 effective_capacity_watts = 3 [
+      (buf.validate.field).required = true
+    ];
+  }
+
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
-  string observer_name = 3;
-  repeated Yield yields = 4;
+  string observer_name = 3 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 100
+  ];
+  repeated CreateObservationsRequest.Value values = 4 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 10000
+  ];
 }
 
 message CreateObservationsResponse {}
 
 
 message CreateObserverRequest {
-  string name = 1;
+  string name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 100
+  ];
 }
 
 message CreateObserverResponse {
   int32 observer_id = 1;
+  string observer_name = 2;
 }
 
 
 message GetWeekAverageDeltasRequest {
-  int32 location_id = 1;
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
   /* The characteristic time to detrmine averages for.
    * The time component specifies the initialization time,
-   * and the date component is to define the end of the seven-day period.
+   * and the date component is to define the end of the seven-day period
+   * over which to average.
    */
-  google.protobuf.Timestamp pivot_time = 3;
+  google.protobuf.Timestamp pivot_time = 3 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+  ];
   Model model = 4 [
     (buf.validate.field).required = true
   ];
-  string observer_name = 5;
+  string observer_name = 5 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 100
+  ];
 }
 
 message GetWeekAverageDeltasResponse {
   message AverageDelta {
-    int32 horizon_mins = 1;
+    uint32 horizon_mins = 1;
     float delta_percent = 2;
+    uint64 effective_capacity_watts = 3;
   }
 
   repeated AverageDelta deltas = 1;
-  uint64 capacity_watts = 2;
   /* The initialisation time that was compared across the week.
    * Formatted as HH:MM, e.g. "12:00"
    */
-  string init_time = 3;
+  string init_time_of_day = 2 [
+    (buf.validate.field).string.pattern = "^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$"
+  ];
 }
 
 message GetLocationsWithinRequest {
-  int32 location_id = 1;
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
 }
 
 message GetLocationsWithinResponse {
   message LocationData {
     int32 location_id = 1;
-    string name = 2;
+    string location_name = 2;
   }
 
   repeated GetLocationsWithinResponse.LocationData locations = 1;
 }
 
 message StreamForecastDataRequest {
-  int32 location_id = 1;
+  string location_name = 1 [
+    (buf.validate.field).string.(valid_location_name) = true
+  ];
   EnergySource energy_source = 2;
   TimeWindow time_window = 3 [
     (buf.validate.field).required = true
   ];
   repeated Model models = 4 [
     (buf.validate.field).required = true,
-    (buf.validate.field).repeated.min_items = 1
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 20
   ];
 }
 
@@ -379,8 +506,9 @@ message StreamForecastDataResponse {
   google.protobuf.Timestamp init_timestamp = 1;
   int32 location_id = 2;
   string model_fullname = 3;
-  int32 horizon_mins = 4;
-  float p10_percent = 5;
+  uint32 horizon_mins = 4;
+  optional float p10_percent = 5;
   float p50_percent = 6;
-  float p90_percent = 7;
+  optional float p90_percent = 7;
 }
+

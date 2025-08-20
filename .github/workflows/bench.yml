@@ -2,14 +2,18 @@
 # * Runs on new semantic tags, pushes to main, and pull requests to main.
 
 name: Benchmark
+
 on:
   push:
     tags: ['v*']
     branches: ['main']
-    paths-ignore: ['README.md', 'examples/**', '/github/workflows/test.yml', '/github/workflows/build.yml']
+    paths-ignore: ['README.md', 'examples/**', '.github/workflows/test.yml', '.github/workflows/build.yml']
   pull_request:
     branches: ['main']
-    paths-ignore: ['README.md', 'examples/**', '/github/workflows/test.yml', '/github/workflows/build.yml']
+    paths-ignore: ['README.md', 'examples/**', '.github/workflows/test.yml', '.github/workflows/build.yml']
+
+env:
+  PROTOC_VERSION: '3.15.8'
 
 jobs:
   bench:
@@ -30,8 +34,19 @@ jobs:
         id: go-vars
         run: echo "GOMODCACHE=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
 
+      - name: Restore cached protoc instance
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: $HOME/.local/bin/protoc
+          key: ${{ runner.os }}-protoc-${{ env.PROTOC_VERSION }}
+
       - name: Set up Protoc compiler
-        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        if:
+          steps.cache-protoc.outputs.cache-hit != 'true'
+        run: |
+          curl -OL https://github.com/google/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
+          unzip protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Restore cached go tools
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -42,52 +57,74 @@ jobs:
       - name: Generate code
         run: go install tool && make gen
 
+      - name: Get benchmark filename for base branch
+        id: base-benchfile
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE_BENCHFILE="${{ github.event.pull_request.base.ref }}"
+          echo "name=bench-${BASE_BENCHFILE////-}.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Get benchmark filename for head branch
+        id: head-benchfile
+        run: |
+          HEAD_BENCHFILE="${{ github.head_ref || github.ref_name }}"
+          echo "name=bench-${HEAD_BENCHFILE////-}.txt" >> "$GITHUB_OUTPUT"
+
       - name: Restore PR base branch benchmarks
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        id: cache-base-banch
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        id: cache-base-bench
+        if: github.event_name == 'pull_request'
         with:
-          path: 'bench-main.txt'
-          # Use base SHA for pull requests to ensure cache is reused
-          key: ${{ runner.os }}-bench-${{ (github.event.pull_request.base.sha != github.event.after) && github.event.pull_request.base.sha || github.event.after }}
+          path: ${{ steps.base-benchfile.outputs.name }}
+          key: ${{ runner.os }}-bench-${{ steps.base-benchfile.outputs.name }}
 
       - name: Run benchmarks
-        id: bench
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: |
-          export FILENAME=bench-${BRANCH_NAME////-}.txt
-          make bench > $FILENAME
-          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
-          cat $FILENAME
+          make bench > ${{ steps.head-benchfile.outputs.name }}
+          cat ${{ steps.head-benchfile.outputs.name }}
+
+      - name: Cache benchmark results
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        if: github.event_name != 'pull_request'
+        with:
+          path: ${{ steps.head-benchfile.outputs.name }}
+          key: ${{ runner.os }}-bench-${{ steps.head-benchfile.outputs.name }}
 
       - name: Compare benchmarks
         id: bench-diff
-        if: github.event_name == 'pull_request' && steps.cache-base-banch.outputs.cache-hit != 'true'
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+        if: github.event_name == 'pull_request' && steps.cache-base-bench.outputs.cache-hit == 'true'
         run: |
-          go tool benchstat bench-main.txt bench-${BRANCH_NAME////-}.txt >> bench-diff.txt
-          echo "filename=bench-diff.txt" >> "$GITHUB_OUTPUT"
+          go tool benchstat ${{ steps.base-benchfile.outputs.name }} ${{ steps.head-benchfile.outputs.name }} >> bench-diff.txt
           cat bench-diff.txt
 
       - name: Write results to markdown file
-        run:
-          echo $"### Benchmark Results\n" > bench-comment.md
-          echo $"<details><summary>Benchmark results</summary>\n" >> bench-comment.md
-          echo $"```" >> bench-comment.md
-          cat ${{ steps.bench.outputs.filename }} >> bench-comment.md
-          echo $"```\n" >> bench-comment.md
-          echo $"</details>\n" >> bench-comment.md
+        env:
+          FILENAME: ${{ steps.head-benchfile.outputs.name }}
+        run: |
+          {
+            echo "### Benchmark Results"
+            echo ""
+            echo "<details><summary>Benchmark results</summary>"
+            echo ""
+            echo '```'
+            cat "$FILENAME"
+            echo '```'
+            echo "</details>"
+          } > bench-comment.md
 
       - name: Write benchmark diff to markdown file
-        if: github.event_name == 'pull_request' && steps.cache-base-banch.outputs.cache-hit != 'true'
-        run:
-          echo $"<details><summary>Benchmark vs base branch</summary>\n" >> bench-comment.md
-          echo $"```" >> bench-comment.md
-          cat ${{ steps.bench-diff.outputs.filename }} >> bench-comment.md
-          echo $"```\n" >> bench-comment.md
-          echo $"</details>\n" >> bench-comment.md
-          
+        if: github.event_name == 'pull_request' && steps.cache-base-bench.outputs.cache-hit == 'true'
+        run: |
+          {
+            echo ""
+            echo "<details><summary>Benchmark vs base branch</summary>\n"
+            echo "```"
+            cat bench-diff.txt
+            echo "```\n"
+            echo "</details>\n"
+          } >> bench-comment.md
 
       - name: Upload benchmark results
         if: github.event_name == 'pull_request'

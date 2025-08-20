@@ -69,7 +69,8 @@ CREATE TABLE loc.locations (
     centroid GEOMETRY(POINT, 4326) GENERATED ALWAYS AS (ST_Centroid(geom)) STORED,
     geom_hash TEXT GENERATED ALWAYS AS (MD5(ST_AsBinary(geom))) STORED,
     PRIMARY KEY (location_id),
-    UNIQUE (location_name, geom_hash)
+    UNIQUE (location_name),
+    UNIQUE (geom_hash)
 );
 -- Required index for efficient spatial-based queries
 CREATE INDEX ON loc.locations USING GIST (geom);
@@ -87,6 +88,7 @@ CREATE INDEX ON loc.locations (location_type_id);
 CREATE TABLE loc.sources (
     source_type_id SMALLINT NOT NULL
         REFERENCES loc.source_types(source_type_id)
+        ON UPDATE CASCADE
         ON DELETE RESTRICT,
     -- Capacity in factors of powers of 10 Watts
     capacity SMALLINT NOT NULL
@@ -101,7 +103,7 @@ CREATE TABLE loc.sources (
     -- Capacity cap, (for instance during curtailment or repair work),
     -- encoded as a smallint percentage (sip) of the capacity; with 0 representing 0%
     -- AND 30000 representing 100% of the capacity. However, since things are mostly
-    -- not limited, NULL indicates no limit, and 30000 is an invalid value.
+    -- not limited, NULL indicates no limit, so 30000 is an invalid value.
     capacity_limit_sip SMALLINT DEFAULT NULL
         CHECK (
             capacity_limit_sip IS NULL
@@ -111,6 +113,7 @@ CREATE TABLE loc.sources (
     source_version INTEGER DEFAULT(1) NOT NULL,
     location_id INTEGER NOT NULL
         REFERENCES loc.locations(location_id)
+        ON UPDATE CASCADE
         ON DELETE CASCADE,
     -- Metadata about the source, e.g. tilt, orientation, etc.
     metadata JSONB DEFAULT NULL

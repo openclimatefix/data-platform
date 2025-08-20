@@ -1,0 +1,31 @@
+syntax = "proto2";
+
+package ocf.dp;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp;dp";
+
+extend buf.validate.StringRules {
+ optional bool valid_location_name = 4457818 [(buf.validate.predefined).cel = {
+   id: "string.valid.locationname",
+   message: "Required field, 2-100 chars long; alphanumeric and underscores only",
+   expression: "this.size() >= 2 && this.size() <= 100 && this.matches(\'^[a-zA-Z0-9_]+$\')"
+ }];
+} 
+
+extend buf.validate.StringRules {
+ optional bool valid_model_name = 4457819 [(buf.validate.predefined).cel = {
+   id: "string.valid.modelname",
+   message: "Required field, 2-100 chars long; alphanumeric, lowercase, hyphens, and periods only",
+   expression: "this.size() >= 2 && this.size() <= 100 && this.matches(\'^[a-z_0-9\\.-]+$\')"
+ }];
+} 
+
+extend buf.validate.StringRules {
+ optional bool valid_geometry = 4457820 [(buf.validate.predefined).cel = {
+   id: "string.valid.geometry",
+   message: "Required field, valid geomeetry in Well-Known Text (WKT) format",
+   expression: "this.size() >= 10" // TODO: Determine proper regex for this
+ }];
+}

@@ -49,9 +49,8 @@ FROM loc.locations AS l
 INNER JOIN loc.location_types AS lt USING (location_type_id)
 WHERE l.location_id = $1;
 
--- name: GetLocationGeoJSONByIds :one
-/* GetLocationGeoJSONByIds returns a GeoJSON FeatureCollection for the given location IDs.
- * The input is an array of location IDs.
+-- name: GetLocationGeoJSON :one
+/* GetLocationGeoJSON returns a GeoJSON FeatureCollection for the given locations.
  * The simplification level can be adjusted via the `simplification_level` argument.
  */
 SELECT
@@ -71,12 +70,11 @@ FROM (
         ST_SIMPLIFYPRESERVETOPOLOGY(l.geom, sqlc.arg(simplification_level)::real) AS geom_simple
     FROM loc.locations AS l
     JOIN loc.location_types AS lt USING (location_type_id)
-    WHERE l.location_id = ANY(sqlc.arg(location_ids)::int [])
+    WHERE l.location_name = ANY(sqlc.arg(location_names)::text [])
 ) AS sl;
 
--- name: GetLocationIdsWithin :many
-/* GetLocationIdsWithin returns all location IDs that are within the geometry of a given location.
- * The input is a location ID.
+-- name: GetLocationsWithin :many
+/* GetLocationIdsWithin returns all locations that are within the geometry of the given location.
  */
 SELECT
     l.location_id,
@@ -89,7 +87,7 @@ INNER JOIN
         l.geom,
         l_outer.geom
     )
-WHERE l_outer.location_id = $1;
+WHERE l_outer.location_name = $1;
 
 /*- Queries for the sources table -------------------------------------*/
 
@@ -99,32 +97,38 @@ SELECT
     s.capacity_unit_prefix_factor,
     s.capacity_limit_sip,
     s.source_type_id,
-    s.metadata::json AS metadata,
-    l.location_name,
-    ST_Y(l.centroid)::real AS latitude,
-    ST_X(l.centroid)::real AS longitude
-FROM loc.sources AS s
-INNER JOIN loc.source_types AS st USING (source_type_id)
-INNER JOIN loc.locations AS l USING (location_id)
-WHERE
-    s.location_id = $1
-    AND st.source_type_name = UPPER(sqlc.arg(source_type_name)::text);
-
--- name: ListLocationsSources :many
-SELECT
+    s.metadata AS metadata_jsonb,
     s.location_id,
     l.location_name,
     ST_X(l.centroid)::real AS longitude,
-    ST_Y(l.centroid)::real AS latitude,
+    ST_Y(l.centroid)::real AS latitude
+FROM loc.sources AS s
+INNER JOIN loc.locations AS l USING (location_id)
+INNER JOIN loc.source_types AS st USING (source_type_id)
+WHERE
+    l.location_name = $1
+    AND st.source_type_name = $2;
+
+-- name: ListSources :many
+/* ListSources returns all sources for a given location name and source type.
+ * If just querying for one source, it will be faster to use GetSource.
+ */
+SELECT
     s.capacity,
     s.capacity_unit_prefix_factor,
     s.capacity_limit_sip,
-    s.metadata
+    s.source_type_id,
+    s.metadata AS metadata_jsonb,
+    s.location_id,
+    l.location_name,
+    ST_X(l.centroid)::real AS longitude,
+    ST_Y(l.centroid)::real AS latitude
 FROM loc.sources AS s
 INNER JOIN loc.locations AS l USING (location_id)
+INNER JOIN loc.source_types AS st USING (source_type_id)
 WHERE
-    s.location_id = ANY(sqlc.arg(location_ids)::integer [])
-    AND s.source_type_id = $1;
+    l.location_name = ANY(sqlc.arg(location_names)::text [])
+    AND st.source_type_name = $1;
 
 -- name: CreateSource :one
 INSERT INTO loc.sources (
@@ -134,8 +138,8 @@ INSERT INTO loc.sources (
     $2,
     $3,
     $4,
-    sqlc.narg(capacity_limit_percent)::smallint,
-    sqlc.narg(metadata)::json::jsonb
+    $5,
+    $6
 RETURNING source_id, capacity, capacity_unit_prefix_factor;
 
 -- name: UpdateSource :exec

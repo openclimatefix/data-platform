@@ -36,8 +36,13 @@ SELECT
     og.location_id,
     og.source_type_id,
     og.observation_time_utc,
-    og.value_sip
+    og.value_sip,
+    COALESCE(
+        sh.capacity_limit_sip::real * sh.capacity / 30000.0, sh.capacity::real
+    )::real AS effective_capacity,
+    sh.capacity_unit_prefix_factor
 FROM obs.observed_generation_values AS og
+JOIN loc.sources AS sh USING (location_id, source_type_id)
 WHERE
     og.location_id = $1
     AND og.source_type_id = $2
