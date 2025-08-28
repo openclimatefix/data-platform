@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -106,11 +107,11 @@ func timeWindowToPgWindow(window *pb.TimeWindow) (start pgtype.Timestamp, end pg
 
 // --- Server Implementation ---------------------------------------------------------------------
 
-type PostgresDataPlatformServerImpl struct {
+type DataPlatformServerImpl struct {
 	pool *pgxpool.Pool
 }
 
-func (s *PostgresDataPlatformServerImpl) StreamForecastData(req *pb.StreamForecastDataRequest, stream grpc.ServerStreamingServer[pb.StreamForecastDataResponse]) error {
+func (s *DataPlatformServerImpl) StreamForecastData(req *pb.StreamForecastDataRequest, stream grpc.ServerStreamingServer[pb.StreamForecastDataResponse]) error {
 	l := log.With().Str("method", "StreamForecastData").Logger()
 
 	// Establish a transaction with the database
@@ -122,23 +123,29 @@ func (s *PostgresDataPlatformServerImpl) StreamForecastData(req *pb.StreamForeca
 	defer tx.Rollback(stream.Context())
 	querier := db.New(tx)
 
-	srcParams := db.GetSourceParams{
-		LocationName:   strings.ToUpper(req.LocationName),
-		SourceTypeName: req.EnergySource.String(),
-	}
-	dbSource, err := querier.GetSource(stream.Context(), srcParams)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", srcParams)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	srcParams := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.TimeWindow.StartTimestampUnix.AsTime(), Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(stream.Context(), srcParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", srcParams)
 		return status.Errorf(
-			codes.NotFound, "No location found for name %s with source type '%s'.",
-			req.LocationName, req.EnergySource,
+			codes.NotFound, "No location found for uuid %s with source type '%s'.",
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
 	forecasts := make([]db.ListForecastsRow, 0)
 	for _, model := range req.Models {
 		fcParams := db.ListForecastsParams{
-			LocationID:       dbSource.LocationID,
+			LocationUuid:     dbSource.LocationUuid,
 			SourceTypeID:     dbSource.SourceTypeID,
 			PredictorName:    model.ModelName,
 			PredictorVersion: model.ModelVersion,
@@ -150,7 +157,7 @@ func (s *PostgresDataPlatformServerImpl) StreamForecastData(req *pb.StreamForeca
 			l.Err(err).Msgf("querier.ListForecasts(%+v)", fcParams)
 			return status.Errorf(
 				codes.NotFound, "No forecasts found for location '%s' and model %s:%s between %s and %s.",
-				req.LocationName, model.ModelName, model.ModelVersion,
+				req.LocationUuid, model.ModelName, model.ModelVersion,
 				req.TimeWindow.StartTimestampUnix.AsTime(), req.TimeWindow.EndTimestampUnix.AsTime(),
 			)
 		}
@@ -158,7 +165,7 @@ func (s *PostgresDataPlatformServerImpl) StreamForecastData(req *pb.StreamForeca
 	}
 
 	for _, forecast := range forecasts {
-		psParams := db.ListPredictionsForForecastParams{ForecastID: forecast.ForecastID}
+		psParams := db.ListPredictionsForForecastParams{ForecastUuid: forecast.ForecastUuid}
 		dbPreds, err := querier.ListPredictionsForForecast(stream.Context(), psParams)
 		if err != nil {
 			l.Err(err).Msgf("querier.ListPredictionsForForecast(%+v)", psParams)
@@ -185,7 +192,7 @@ func (s *PostgresDataPlatformServerImpl) StreamForecastData(req *pb.StreamForeca
 
 			err = stream.Send(&pb.StreamForecastDataResponse{
 				InitTimestamp: timestamppb.New(forecast.InitTimeUtc.Time),
-				LocationId:    forecast.LocationID,
+				LocationUuid:  forecast.LocationUuid.String(),
 				ModelFullname: fmt.Sprintf("%s:%s", forecast.PredictorName, forecast.PredictorVersion),
 				HorizonMins:   uint32(dbPreds[i].HorizonMins),
 				P50Percent:    (float32(dbPreds[i].P50Sip) / 30000.0) * 100.0,
@@ -203,7 +210,7 @@ func (s *PostgresDataPlatformServerImpl) StreamForecastData(req *pb.StreamForeca
 	return nil
 }
 
-func (s *PostgresDataPlatformServerImpl) GetLocationsWithin(ctx context.Context, req *pb.GetLocationsWithinRequest) (*pb.GetLocationsWithinResponse, error) {
+func (s *DataPlatformServerImpl) GetLocationsWithin(ctx context.Context, req *pb.GetLocationsWithinRequest) (*pb.GetLocationsWithinResponse, error) {
 	l := log.With().Str("method", "GetLocationsWithin").Logger()
 
 	// Establish a transaction with the database
@@ -215,20 +222,25 @@ func (s *PostgresDataPlatformServerImpl) GetLocationsWithin(ctx context.Context,
 	defer tx.Rollback(ctx)
 	querier := db.New(tx)
 
-	lwParams := db.GetLocationsWithinParams{LocationName: strings.ToUpper(req.LocationName)}
+	locationUuid, err := uuid.Parse(req.LocationUuid)
+	if err != nil {
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	lwParams := db.GetLocationsWithinParams{LocationUuid: locationUuid}
 	dbLocations, err := querier.GetLocationsWithin(ctx, lwParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetLocationIdsWithin(%+v)", lwParams)
 		return nil, status.Errorf(
 			codes.NotFound,
-			"No locations found within the specified location '%s'", req.LocationName,
+			"No locations found within the specified location '%s'", req.LocationUuid,
 		)
 	}
 
 	locations := make([]*pb.GetLocationsWithinResponse_LocationData, len(dbLocations))
 	for i := range dbLocations {
 		locations[i] = &pb.GetLocationsWithinResponse_LocationData{
-			LocationId:   dbLocations[i].LocationID,
+			LocationUuid: dbLocations[i].LocationUuid.String(),
 			LocationName: strings.ToUpper(dbLocations[i].LocationName),
 		}
 	}
@@ -238,7 +250,7 @@ func (s *PostgresDataPlatformServerImpl) GetLocationsWithin(ctx context.Context,
 	}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Context, req *pb.GetWeekAverageDeltasRequest) (*pb.GetWeekAverageDeltasResponse, error) {
+func (s *DataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Context, req *pb.GetWeekAverageDeltasRequest) (*pb.GetWeekAverageDeltasResponse, error) {
 	l := log.With().Str("method", "GetWeekAverageDeltas").Logger()
 
 	// Establish a transaction with the database
@@ -251,13 +263,22 @@ func (s *PostgresDataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Contex
 	querier := db.New(tx)
 
 	// Get the location and source
-	params := db.GetSourceParams{LocationName: strings.ToUpper(req.LocationName), SourceTypeName: req.EnergySource.String()}
-	dbSource, err := querier.GetSource(ctx, params)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", params)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	params := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.PivotTime.AsTime(), Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(ctx, params)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", params)
 		return nil, status.Errorf(
 			codes.NotFound, "No location source found for name '%s' with source type '%s'.",
-			req.LocationName, req.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
@@ -293,14 +314,14 @@ func (s *PostgresDataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Contex
 		PredictorID:    dbPredictor.PredictorID,
 		ObserverID:     dbObserver.ObserverID,
 		PivotTimestamp: pgtype.Timestamp{Time: req.PivotTime.AsTime(), Valid: true},
-		LocationIds:    []int32{dbSource.LocationID},
+		LocationUuids:  []uuid.UUID{locationUuid},
 	}
 	dbDeltas, err := querier.GetWeekAverageDeltasForLocations(ctx, avgParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetWeekAverageDeltasForLocations(%+v)", avgParams)
 		return nil, status.Errorf(
 			codes.NotFound, "No deltas found for location '%s' with source type '%s' and observer ID %d",
-			req.LocationName, req.EnergySource, dbObserver.ObserverID,
+			req.LocationUuid, req.EnergySource, dbObserver.ObserverID,
 		)
 	}
 
@@ -319,7 +340,7 @@ func (s *PostgresDataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Contex
 	}, nil
 }
 
-func (s *PostgresDataPlatformServerImpl) GetObservedTimeseries(ctx context.Context, req *pb.GetObservedTimeseriesRequest) (*pb.GetObservedTimeseriesResponse, error) {
+func (s *DataPlatformServerImpl) GetObservedTimeseries(ctx context.Context, req *pb.GetObservedTimeseriesRequest) (*pb.GetObservedTimeseriesResponse, error) {
 	l := log.With().Str("method", "GetObservedTimeseries").Logger()
 
 	// Establish a transaction with the database
@@ -332,16 +353,22 @@ func (s *PostgresDataPlatformServerImpl) GetObservedTimeseries(ctx context.Conte
 	querier := db.New(tx)
 
 	// Get the location and source
-	gsParams := db.GetSourceParams{
-		LocationName:   strings.ToUpper(req.LocationName),
-		SourceTypeName: req.EnergySource.String(),
-	}
-	dbSource, err := querier.GetSource(ctx, gsParams)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", gsParams)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	gsParams := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.TimeWindow.StartTimestampUnix.AsTime(), Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(ctx, gsParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", gsParams)
 		return nil, status.Errorf(
 			codes.NotFound, "No location found for ID '%s' with source type '%s'.",
-			req.LocationName, req.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
@@ -363,35 +390,35 @@ func (s *PostgresDataPlatformServerImpl) GetObservedTimeseries(ctx context.Conte
 		l.Err(err).Msgf("timeWindowToPgWindow(%+v)", req.TimeWindow)
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid time window: %v", err)
 	}
-	params2 := db.GetObservationsAsInt16BetweenParams{
-		LocationID:   dbSource.LocationID,
+	goParams := db.GetObservationsBetweenParams{
+		LocationUuid: locationUuid,
 		SourceTypeID: dbSource.SourceTypeID,
 		ObserverID:   dbObserver.ObserverID,
 		StartTimeUtc: start,
 		EndTimeUtc:   end,
 	}
-	dbObs, err := querier.GetObservationsAsInt16Between(ctx, params2)
+	dbObs, err := querier.GetObservationsBetween(ctx, goParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObservationsAsInt16Between(%+v)", params2)
-		return nil, status.Errorf(codes.NotFound, "No observations found for location '%s'", req.LocationName)
+		l.Err(err).Msgf("querier.GetObservationsAsInt16Between(%+v)", goParams)
+		return nil, status.Errorf(codes.NotFound, "No observations found for location '%s'", req.LocationUuid)
 	}
 
 	values := make([]*pb.GetObservedTimeseriesResponse_Value, len(dbObs))
 	for i, obs := range dbObs {
 		values[i] = &pb.GetObservedTimeseriesResponse_Value{
 			ValuePercent:           (float32(obs.ValueSip) / 30000.0) * 100.0,
-			TimestampUnix:          &timestamppb.Timestamp{Seconds: obs.ObservationTimeUtc.Time.Unix()},
+			TimestampUnix:          &timestamppb.Timestamp{Seconds: obs.ObservationTimestampUtc.Time.Unix()},
 			EffectiveCapacityWatts: uint64(float64(obs.EffectiveCapacity) * math.Pow10(int(obs.CapacityUnitPrefixFactor))),
 		}
 	}
 	return &pb.GetObservedTimeseriesResponse{
-		LocationId:   dbSource.LocationID,
+		LocationUuid: dbSource.LocationUuid.String(),
 		LocationName: strings.ToUpper(dbSource.LocationName),
 		Values:       values,
 	}, nil
 }
 
-func (s *PostgresDataPlatformServerImpl) CreateObservations(ctx context.Context, req *pb.CreateObservationsRequest) (*pb.CreateObservationsResponse, error) {
+func (s *DataPlatformServerImpl) CreateObservations(ctx context.Context, req *pb.CreateObservationsRequest) (*pb.CreateObservationsResponse, error) {
 	l := log.With().Str("method", "CreateObservations").Logger()
 
 	// Establish a transaction with the database
@@ -404,13 +431,22 @@ func (s *PostgresDataPlatformServerImpl) CreateObservations(ctx context.Context,
 	querier := db.New(tx)
 
 	// Get the location and source
-	params := db.GetSourceParams{LocationName: strings.ToUpper(req.LocationName), SourceTypeName: req.EnergySource.String()}
-	dbSource, err := querier.GetSource(ctx, params)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", params)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	params := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.Values[0].TimestampUnix.AsTime(), Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(ctx, params)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", params)
 		return nil, status.Errorf(
 			codes.NotFound, "No location found for name '%s' with source type '%s'.",
-			req.LocationName, req.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
@@ -427,12 +463,12 @@ func (s *PostgresDataPlatformServerImpl) CreateObservations(ctx context.Context,
 	}
 
 	// Insert the observations
-	params2 := make([]db.CreateObservationsAsInt16UsingCopyParams, len(req.Values))
+	coParams := make([]db.CreateObservationsParams, len(req.Values))
 	for i, v := range req.Values {
-		params2[i] = db.CreateObservationsAsInt16UsingCopyParams{
-			LocationID: dbSource.LocationID,
-			ObserverID: dbObserver.ObserverID,
-			ObservationTimeUtc: pgtype.Timestamp{
+		coParams[i] = db.CreateObservationsParams{
+			LocationUuid: locationUuid,
+			ObserverID:   dbObserver.ObserverID,
+			ObservationTimestampUtc: pgtype.Timestamp{
 				Time:  v.TimestampUnix.AsTime(),
 				Valid: true,
 			},
@@ -440,7 +476,7 @@ func (s *PostgresDataPlatformServerImpl) CreateObservations(ctx context.Context,
 			ValueSip:     int16((v.ValuePercent / 100.0) * 30000.0),
 		}
 	}
-	count, err := querier.CreateObservationsAsInt16UsingCopy(ctx, params2)
+	count, err := querier.CreateObservations(ctx, coParams)
 	if err != nil {
 		return nil, status.Error(
 			codes.InvalidArgument,
@@ -449,15 +485,15 @@ func (s *PostgresDataPlatformServerImpl) CreateObservations(ctx context.Context,
 	}
 
 	log.Debug().Msgf(
-		"Created %d observations from %s to %s for location %d and observer '%s'",
-		count, params2[0].ObservationTimeUtc.Time, params2[len(params2)-1].ObservationTimeUtc.Time,
-		dbSource.LocationID, req.ObserverName,
+		"Created %d observations from %s to %s for location '%s' and observer '%s'",
+		count, coParams[0].ObservationTimestampUtc.Time, coParams[len(coParams)-1].ObservationTimestampUtc.Time,
+		dbSource.LocationUuid, req.ObserverName,
 	)
 
 	return &pb.CreateObservationsResponse{}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) CreateObserver(ctx context.Context, req *pb.CreateObserverRequest) (*pb.CreateObserverResponse, error) {
+func (s *DataPlatformServerImpl) CreateObserver(ctx context.Context, req *pb.CreateObserverRequest) (*pb.CreateObserverResponse, error) {
 	l := log.With().Str("method", "CreateObserver").Logger()
 	// Establish a transaction with the database
 	tx, err := s.pool.Begin(ctx)
@@ -479,7 +515,7 @@ func (s *PostgresDataPlatformServerImpl) CreateObserver(ctx context.Context, req
 	return &pb.CreateObserverResponse{ObserverId: dbObserverId}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) GetPredictedCrossSection(ctx context.Context, req *pb.GetPredictedCrossSectionRequest) (*pb.GetPredictedCrossSectionResponse, error) {
+func (s *DataPlatformServerImpl) GetPredictedCrossSection(ctx context.Context, req *pb.GetPredictedCrossSectionRequest) (*pb.GetPredictedCrossSectionResponse, error) {
 	l := log.With().Str("method", "GetPredictedCrossSection").Logger()
 
 	// Establish a transaction with the database
@@ -510,35 +546,44 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedCrossSection(ctx context.Co
 	)
 
 	// Get the capacities of the locations
-	params2 := db.ListSourcesParams{
-		SourceTypeName: req.EnergySource.String(),
-		LocationNames:  req.LocationNames,
+	locationUuids := make([]uuid.UUID, len(req.LocationUuids))
+	for i, loc := range req.LocationUuids {
+		locationUuids[i], err = uuid.Parse(loc)
+		if err != nil {
+			l.Err(err).Msgf("uuid.Parse(%s)", loc)
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+		}
 	}
-	dbSources, err := querier.ListSources(ctx, params2)
+	lsParams := db.ListSourcesAtTimestampParams{
+		SourceTypeName: req.EnergySource.String(),
+		LocationUuids:  locationUuids,
+		AtTimestampUtc: pgtype.Timestamp{Time: req.TimestampUnix.AsTime(), Valid: true},
+	}
+	dbSources, err := querier.ListSourcesAtTimestamp(ctx, lsParams)
 	if err != nil || len(dbSources) == 0 {
-		l.Err(err).Msgf("querier.ListLocationsSources(%+v)", params2)
+		l.Err(err).Msgf("querier.ListLocationsSources(%+v)", lsParams)
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No '%s' sources found for the specified locations", req.EnergySource.String(),
 		)
 	}
-	if len(dbSources) != len(req.LocationNames) {
+	if len(dbSources) != len(req.LocationUuids) {
 		l.Warn().Msgf(
 			"Expected %d location sources, but found %d. Some locations may not have associated sources.",
-			len(req.LocationNames), len(dbSources),
+			len(req.LocationUuids), len(dbSources),
 		)
 	}
-	ids := make([]int32, len(dbSources))
+	ids := make([]uuid.UUID, len(dbSources))
 	for i := range dbSources {
-		ids[i] = dbSources[i].LocationID
+		ids[i] = dbSources[i].LocationUuid
 	}
 
 	params3 := db.ListPredictionsAtTimeForLocationsParams{
-		LocationIds:  ids,
-		SourceTypeID: dbSources[0].SourceTypeID,
-		PredictorID:  dbPredictor.PredictorID,
-		Time:         pgtype.Timestamp{Time: req.TimestampUnix.AsTime(), Valid: true},
-		HorizonMins:  0,
+		LocationUuids: ids,
+		SourceTypeID:  dbSources[0].SourceTypeID,
+		PredictorID:   dbPredictor.PredictorID,
+		Time:          pgtype.Timestamp{Time: req.TimestampUnix.AsTime(), Valid: true},
+		HorizonMins:   0,
 	}
 	dbCrossSection, err := querier.ListPredictionsAtTimeForLocations(ctx, params3)
 	if err != nil {
@@ -553,13 +598,13 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedCrossSection(ctx context.Co
 	for _, value := range dbSources {
 		// Find the cross section corresponding to the location with a source
 		idx := slices.IndexFunc(dbCrossSection, func(row db.ListPredictionsAtTimeForLocationsRow) bool {
-			return row.LocationID == value.LocationID
+			return row.LocationUuid == value.LocationUuid
 		})
 		if idx > -1 {
 			values = append(values, &pb.GetPredictedCrossSectionResponse_Value{
 				ValuePercent:           (float32(dbCrossSection[idx].P50Sip) / 30000.0) * 100.0,
 				EffectiveCapacityWatts: uint64(value.Capacity) * uint64(math.Pow10(int(value.CapacityUnitPrefixFactor))),
-				LocationId:             value.LocationID,
+				LocationUuid:           value.LocationUuid.String(),
 				LocationName:           strings.ToUpper(value.LocationName),
 				Latlng: &pb.LatLng{
 					Latitude:  value.Latitude,
@@ -575,7 +620,7 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedCrossSection(ctx context.Co
 	}, nil
 }
 
-func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx context.Context, req *pb.GetPredictedTimeseriesDeltasRequest) (*pb.GetPredictedTimeseriesDeltasResponse, error) {
+func (s *DataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx context.Context, req *pb.GetPredictedTimeseriesDeltasRequest) (*pb.GetPredictedTimeseriesDeltasResponse, error) {
 	l := log.With().Str("method", "GetPredictedTimeseriesDeltas").Logger()
 
 	// Establish a transaction with the database
@@ -588,13 +633,22 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx contex
 	querier := db.New(tx)
 
 	// Get the location and source
-	params := db.GetSourceParams{LocationName: strings.ToUpper(req.LocationName), SourceTypeName: req.EnergySource.String()}
-	dbSource, err := querier.GetSource(ctx, params)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", params)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	params := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.TimeWindow.StartTimestampUnix.AsTime(), Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(ctx, params)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", params)
 		return nil, status.Errorf(
 			codes.NotFound, "No location found for ID '%s' with source type '%s'.",
-			req.LocationName, req.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
@@ -618,21 +672,21 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx contex
 		l.Err(err).Msgf("timeWindowToPgWindow(%+v)", req.TimeWindow)
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid time window: %v", err)
 	}
-	params3 := db.ListPredictionsForLocationParams{
-		LocationID:     dbSource.LocationID,
+	lpParams := db.ListPredictionsForLocationParams{
+		LocationUuid:   dbSource.LocationUuid,
 		SourceTypeID:   dbSource.SourceTypeID,
 		PredictorID:    dbPredictor.PredictorID,
 		HorizonMins:    int32(req.HorizonMins),
 		StartTimestamp: start,
 		EndTimestamp:   end,
 	}
-	dbPredictions, err := querier.ListPredictionsForLocation(ctx, params3)
+	dbPredictions, err := querier.ListPredictionsForLocation(ctx, lpParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetWindowedPredictedGenerationValuesAtHorizon(%+v)", params3)
+		l.Err(err).Msgf("querier.GetWindowedPredictedGenerationValuesAtHorizon(%+v)", lpParams)
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No values found for location '%s' with horizon %d minutes",
-			req.LocationName, req.HorizonMins,
+			req.LocationUuid, req.HorizonMins,
 		)
 	}
 
@@ -648,20 +702,20 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx contex
 		)
 	}
 
-	params4 := db.GetObservationsAsInt16BetweenParams{
-		LocationID:   dbSource.LocationID,
+	goParams := db.GetObservationsBetweenParams{
+		LocationUuid: dbSource.LocationUuid,
 		SourceTypeID: dbSource.SourceTypeID,
 		ObserverID:   dbObserver.ObserverID,
 		StartTimeUtc: dbPredictions[0].TargetTimeUtc,
 		EndTimeUtc:   dbPredictions[len(dbPredictions)-1].TargetTimeUtc,
 	}
-	dbObservations, err := querier.GetObservationsAsInt16Between(ctx, params4)
+	dbObservations, err := querier.GetObservationsBetween(ctx, goParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObservationsAsPercentBetween(%+v)", params4)
+		l.Err(err).Msgf("querier.GetObservationsAsPercentBetween(%+v)", goParams)
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No observations found for location '%s' with source type '%s' and observer '%s' in the specified time range",
-			req.LocationName, req.EnergySource, req.ObserverName,
+			req.LocationUuid, req.EnergySource, req.ObserverName,
 		)
 	}
 
@@ -669,8 +723,8 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx contex
 	for _, yield := range dbPredictions {
 
 		// Find the corresponding observation value. Returns -1 if not found.
-		obsIdx := slices.IndexFunc(dbObservations, func(obs db.GetObservationsAsInt16BetweenRow) bool {
-			return obs.ObservationTimeUtc.Time.Equal(yield.TargetTimeUtc.Time)
+		obsIdx := slices.IndexFunc(dbObservations, func(obs db.GetObservationsBetweenRow) bool {
+			return obs.ObservationTimestampUtc.Time.Equal(yield.TargetTimeUtc.Time)
 		})
 		if obsIdx > -1 {
 			values = append(values, &pb.GetPredictedTimeseriesDeltasResponse_Value{
@@ -682,23 +736,23 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseriesDeltas(ctx contex
 	}
 	if len(values) == 0 {
 		l.Err(fmt.Errorf("no observations correspond to the predicted value timestamps for location '%s' and source type '%s'",
-			req.LocationName, req.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)).Msg("No deltas found")
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No observations correspond to the predicted value timestamps for location '%s' and source type '%s'",
-			req.LocationName, req.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
 	return &pb.GetPredictedTimeseriesDeltasResponse{
-		LocationId:   dbSource.LocationID,
+		LocationUuid: dbSource.LocationUuid.String(),
 		LocationName: strings.ToUpper(dbSource.LocationName),
 		Values:       values,
 	}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) GetLatestPredictions(ctx context.Context, req *pb.GetLatestPredictionsRequest) (*pb.GetLatestPredictionsResponse, error) {
+func (s *DataPlatformServerImpl) GetLatestPredictions(ctx context.Context, req *pb.GetLatestPredictionsRequest) (*pb.GetLatestPredictionsResponse, error) {
 	l := log.With().Str("method", "GetLatestPredictions").Logger()
 
 	currentTime := time.Now().UTC().Truncate(time.Minute)
@@ -713,16 +767,22 @@ func (s *PostgresDataPlatformServerImpl) GetLatestPredictions(ctx context.Contex
 	querier := db.New(tx)
 
 	// Get the location and source
-	gsParams := db.GetSourceParams{
-		LocationName:   strings.ToUpper(req.LocationName),
-		SourceTypeName: req.EnergySource.String(),
-	}
-	dbSource, err := querier.GetSource(ctx, gsParams)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", gsParams)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	gsParams := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: currentTime, Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(ctx, gsParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", gsParams)
 		return nil, status.Errorf(
 			codes.NotFound, "No location found for ID '%s' with source type '%s'.",
-			req.LocationName, req.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
@@ -741,7 +801,7 @@ func (s *PostgresDataPlatformServerImpl) GetLatestPredictions(ctx context.Contex
 	}
 
 	params3 := db.GetLatestForecastAtHorizonSincePivotParams{
-		LocationID:     dbSource.LocationID,
+		LocationUuid:   locationUuid,
 		PredictorID:    dbPredictor.PredictorID,
 		SourceTypeID:   dbSource.SourceTypeID,
 		HorizonMins:    0,
@@ -750,22 +810,22 @@ func (s *PostgresDataPlatformServerImpl) GetLatestPredictions(ctx context.Contex
 	dbForecast, err := querier.GetLatestForecastAtHorizonSincePivot(ctx, params3)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetLatestForecastAtHorizon(%+v)", params3)
-		return nil, status.Errorf(codes.NotFound, "No forecast found for location '%s'", req.LocationName)
+		return nil, status.Errorf(codes.NotFound, "No forecast found for location '%s'", req.LocationUuid)
 	}
 
-	l.Debug().Msgf("Found forecast with ID %d for location '%s'", dbForecast.ForecastID, req.LocationName)
+	l.Debug().Msgf("Found forecast with ID '%s' for location '%s'", dbForecast.ForecastUuid, req.LocationUuid)
 
-	psParams := db.ListPredictionsForForecastParams{ForecastID: dbForecast.ForecastID}
+	psParams := db.ListPredictionsForForecastParams{ForecastUuid: dbForecast.ForecastUuid}
 	dbValues, err := querier.ListPredictionsForForecast(ctx, psParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetPredictedGenerationValuesForForecast(%+v)", psParams)
 		return nil, status.Errorf(
 			codes.NotFound,
-			"No predicted generation values found for forecast %d",
-			dbForecast.ForecastID,
+			"No predicted generation values found for forecast %s",
+			dbForecast.ForecastUuid,
 		)
 	}
-	l.Debug().Msgf("Found %d predicted generation values for forecast %d", len(dbValues), dbForecast.ForecastID)
+	l.Debug().Msgf("Found %d predicted generation values for forecast %d", len(dbValues), dbForecast.ForecastUuid)
 
 	values := make([]*pb.GetLatestPredictionsResponse_Value, len(dbValues))
 	for i, value := range dbValues {
@@ -794,13 +854,13 @@ func (s *PostgresDataPlatformServerImpl) GetLatestPredictions(ctx context.Contex
 	}
 
 	return &pb.GetLatestPredictionsResponse{
-		LocationId:   dbSource.LocationID,
+		LocationUuid: dbSource.LocationUuid.String(),
 		LocationName: strings.ToUpper(dbSource.LocationName),
 		Values:       values,
 	}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) GetLocation(ctx context.Context, req *pb.GetLocationRequest) (*pb.GetLocationResponse, error) {
+func (s *DataPlatformServerImpl) GetLocation(ctx context.Context, req *pb.GetLocationRequest) (*pb.GetLocationResponse, error) {
 	l := log.With().Str("method", "GetLocation").Logger()
 
 	// Establish a transaction with the database
@@ -813,31 +873,44 @@ func (s *PostgresDataPlatformServerImpl) GetLocation(ctx context.Context, req *p
 	querier := db.New(tx)
 
 	// Get the location and source
-	params := db.GetSourceParams{LocationName: strings.ToUpper(req.LocationName), SourceTypeName: req.EnergySource.String()}
-	dbSource, err := querier.GetSource(ctx, params)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", params)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	params := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(ctx, params)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", params)
 		return nil, status.Errorf(
-			codes.NotFound, "No location found for name '%s' with source type '%s'.",
-			req.LocationName, req.EnergySource,
+			codes.NotFound, "No location source found for name '%s' with source type '%s'. Ensure the location has an associated source and it is not decomissioned.",
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
 	var metadataMap map[string]any
-	err = json.Unmarshal(dbSource.MetadataJsonb, &metadataMap)
-	if err != nil {
-		l.Err(err).Msgf("json.Unmarshal(%s)", dbSource.MetadataJsonb)
-		return nil, status.Errorf(codes.Internal, "Failed to parse metadata for location '%s'", req.LocationName)
+	if dbSource.MetadataJsonb == nil {
+		metadataMap = map[string]any{}
+	} else {
+		err = json.Unmarshal(dbSource.MetadataJsonb, &metadataMap)
+		if err != nil {
+			l.Err(err).Msgf("json.Unmarshal(%s)", dbSource.MetadataJsonb)
+			return nil, status.Errorf(codes.Internal, "Failed to parse metadata for location '%s'", req.LocationUuid)
+		}
 	}
 
 	metadata, err := structpb.NewStruct(metadataMap)
 	if err != nil {
 		l.Err(err).Msgf("structpb.NewStruct(%+v)", metadataMap)
-		return nil, status.Errorf(codes.Internal, "Failed to convert metadata for location '%s'", req.LocationName)
+		return nil, status.Errorf(codes.Internal, "Failed to convert metadata for location '%s'", req.LocationUuid)
 	}
 
 	return &pb.GetLocationResponse{
-		LocationId:   dbSource.LocationID,
+		LocationUuid: dbSource.LocationUuid.String(),
 		LocationName: strings.ToUpper(dbSource.LocationName),
 		Latlng: &pb.LatLng{
 			Latitude:  dbSource.Latitude,
@@ -848,7 +921,7 @@ func (s *PostgresDataPlatformServerImpl) GetLocation(ctx context.Context, req *p
 	}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) CreateForecast(ctx context.Context, req *pb.CreateForecastRequest) (*pb.CreateForecastResponse, error) {
+func (s *DataPlatformServerImpl) CreateForecast(ctx context.Context, req *pb.CreateForecastRequest) (*pb.CreateForecastResponse, error) {
 	l := log.With().Str("method", "CreateForecast").Logger()
 
 	if len(req.PredictedGenerationValues) == 0 {
@@ -865,22 +938,33 @@ func (s *PostgresDataPlatformServerImpl) CreateForecast(ctx context.Context, req
 	querier := db.New(tx)
 
 	// Get the location and source
-	params := db.GetSourceParams{LocationName: strings.ToUpper(req.Forecast.LocationName), SourceTypeName: req.Forecast.EnergySource.String()}
-	dbSource, err := querier.GetSource(ctx, params)
+	locationUuid, err := uuid.Parse(req.Forecast.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", params)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.Forecast.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	gsParams := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.Forecast.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.Forecast.InitTimeUtc.AsTime(), Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(ctx, gsParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", gsParams)
 		return nil, status.Errorf(
-			codes.NotFound, "No location found for name '%s' with source type '%s'.",
-			req.Forecast.LocationName, req.Forecast.EnergySource,
+			codes.NotFound, "No location found for id '%s' with source type '%s'.",
+			req.Forecast.LocationUuid, req.Forecast.EnergySource,
 		)
 	}
+	resolution_mins := req.PredictedGenerationValues[1].HorizonMins - req.PredictedGenerationValues[0].HorizonMins // TODO: Check they are all the same
 
 	// Create a new forecast
 	params2 := db.CreateForecastParams{
-		LocationID:       dbSource.LocationID,
-		SourceTypeID:     dbSource.SourceTypeID,
-		PredictorName:    req.Forecast.Model.ModelName,
-		PredictorVersion: req.Forecast.Model.ModelVersion,
+		LocationUuid:        locationUuid,
+		SourceTypeID:        dbSource.SourceTypeID,
+		PredictorName:       req.Forecast.Model.ModelName,
+		PredictorVersion:    req.Forecast.Model.ModelVersion,
+		ValueResolutionMins: int16(resolution_mins),
 		InitTimeUtc: pgtype.Timestamp{
 			Time:  req.Forecast.InitTimeUtc.AsTime(),
 			Valid: true,
@@ -891,10 +975,10 @@ func (s *PostgresDataPlatformServerImpl) CreateForecast(ctx context.Context, req
 		l.Err(err).Msgf("querier.CreateForecast(%+v)", params2)
 		return nil, status.Error(codes.InvalidArgument, "Invalid forecast")
 	}
-	l.Debug().Msgf("Created forecast with ID %d and init time %s", dbForecast.ForecastID, dbForecast.InitTimeUtc.Time)
+	l.Debug().Msgf("Created forecast with ID '%s' and init time %s", dbForecast.ForecastUuid, dbForecast.InitTimeUtc.Time)
 
 	// Create the forecast data
-	paramsList := make([]db.CreatePredictionsAsInt16UsingCopyParams, len(req.PredictedGenerationValues))
+	paramsList := make([]db.CreatePredictedValuesParams, len(req.PredictedGenerationValues))
 	for i, value := range req.PredictedGenerationValues {
 		p10sip := int16((value.P10Pct / 100.0) * 30000.0)
 		p90sip := int16((value.P90Pct / 100.0) * 30000.0)
@@ -904,10 +988,10 @@ func (s *PostgresDataPlatformServerImpl) CreateForecast(ctx context.Context, req
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid metadata for predicted generation value at horizon %d mins", value.HorizonMins)
 		}
 
-		paramsList[i] = db.CreatePredictionsAsInt16UsingCopyParams{
-			HorizonMins: int16(value.HorizonMins),
-			P50Sip:      int16((value.P50Pct / 100.0) * 30000.0),
-			ForecastID:  dbForecast.ForecastID,
+		paramsList[i] = db.CreatePredictedValuesParams{
+			HorizonMins:  int16(value.HorizonMins),
+			P50Sip:       int16((value.P50Pct / 100.0) * 30000.0),
+			ForecastUuid: dbForecast.ForecastUuid,
 			TargetTimeUtc: pgtype.Timestamp{
 				Time: req.Forecast.InitTimeUtc.AsTime().Add(
 					time.Duration(value.HorizonMins) * time.Minute,
@@ -921,7 +1005,7 @@ func (s *PostgresDataPlatformServerImpl) CreateForecast(ctx context.Context, req
 		}
 	}
 
-	count, err := querier.CreatePredictionsAsInt16UsingCopy(ctx, paramsList)
+	count, err := querier.CreatePredictedValues(ctx, paramsList)
 	if err != nil || count < int64(len(req.PredictedGenerationValues)) {
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid predicted generation values")
 	}
@@ -929,7 +1013,7 @@ func (s *PostgresDataPlatformServerImpl) CreateForecast(ctx context.Context, req
 	return &pb.CreateForecastResponse{}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) CreateModel(ctx context.Context, req *pb.CreateModelRequest) (*pb.CreateModelResponse, error) {
+func (s *DataPlatformServerImpl) CreateModel(ctx context.Context, req *pb.CreateModelRequest) (*pb.CreateModelResponse, error) {
 	l := log.With().Str("method", "CreateModel").Logger()
 
 	// Establish a transaction with the database
@@ -956,7 +1040,7 @@ func (s *PostgresDataPlatformServerImpl) CreateModel(ctx context.Context, req *p
 	return &pb.CreateModelResponse{ModelId: modelID}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) CreateSite(ctx context.Context, req *pb.CreateSiteRequest) (*pb.CreateSiteResponse, error) {
+func (s *DataPlatformServerImpl) CreateSite(ctx context.Context, req *pb.CreateSiteRequest) (*pb.CreateSiteResponse, error) {
 	l := log.With().Str("method", "CreateSite").Logger()
 
 	// Establish a transaction with the database
@@ -990,7 +1074,7 @@ func (s *PostgresDataPlatformServerImpl) CreateSite(ctx context.Context, req *pb
 			"Invalid Site. Ensure name is not empty and uppercase, and that coordinates are valid WGS84.",
 		)
 	}
-	l.Debug().Msgf("Created location '%s' of type 'site' with ID %d", dbLocation.LocationName, dbLocation.LocationID)
+	l.Debug().Msgf("Created location '%s' of type 'site' with ID %s", dbLocation.LocationName, dbLocation.LocationUuid)
 
 	// Create a source associated with the location
 	cp, ex, err := capacityToValueMultiplier(uint64(req.CapacityWatts))
@@ -998,45 +1082,47 @@ func (s *PostgresDataPlatformServerImpl) CreateSite(ctx context.Context, req *pb
 		l.Err(err).Msgf("capacityKwToValueMultiplier(%d)", req.CapacityWatts)
 		return nil, status.Error(codes.InvalidArgument, "Invalid capacity. Ensure capacity is non-negative.")
 	}
-	var metadata []byte
-	if len(req.Metadata.Fields) == 0 {
-		metadata = nil
-	} else {
-		metadata, err = req.Metadata.MarshalJSON()
-		if err != nil {
-			l.Err(err).Msgf("req.Metadata.MarshalJSON()")
-			return nil, status.Error(codes.InvalidArgument, "Invalid metadata. Ensure metadata is a valid JSON object.")
-		}
+	metadata, err := req.Metadata.MarshalJSON()
+	if err != nil {
+		l.Err(err).Msgf("req.Metadata.MarshalJSON()")
+		return nil, status.Error(codes.InvalidArgument, "Invalid metadata. Ensure metadata is a valid JSON object.")
 	}
 
-	params2 := db.CreateSourceParams{
-		LocationID:               dbLocation.LocationID,
+	csParams := db.CreateSourceEntryParams{
+		LocationUuid:             dbLocation.LocationUuid,
 		SourceTypeID:             dbSourceType.SourceTypeID,
 		Capacity:                 cp,
 		CapacityUnitPrefixFactor: ex,
 		CapacityLimitSip:         nil, // TODO: Put on request
 		Metadata:                 metadata,
+		ValidFromUtc:             pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
 	}
-	dbSource, err := querier.CreateSource(ctx, params2)
+	dbSource, err := querier.CreateSourceEntry(ctx, csParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateSource(%+v)", params2)
+		l.Err(err).Msgf("querier.CreateSource(%+v)", csParams)
 		return nil, status.Error(
 			codes.InvalidArgument,
 			"Invalid site. Ensure metadata is NULL or a non-empty JSON object, and capacity is non-negative.",
 		)
 	}
 	l.Debug().Msgf(
-		"Created source of type '%s' for location %d with capacity %dx10^%d W",
-		dbSourceType.SourceTypeName, dbLocation.LocationID, dbSource.Capacity, dbSource.CapacityUnitPrefixFactor,
+		"Created source of type '%s' for location '%s' with capacity %dx10^%d W",
+		dbSourceType.SourceTypeName, dbLocation.LocationUuid, dbSource.Capacity, dbSource.CapacityUnitPrefixFactor,
 	)
+	err = querier.UpdateSourcesMaterializedView(ctx)
+	if err != nil {
+		l.Err(err).Msg("querier.UpdateSourcesMaterializedView()")
+		return nil, status.Error(codes.Internal, "Failed to update sources materialized view")
+	}
+
 	return &pb.CreateSiteResponse{
-		LocationId:    dbLocation.LocationID,
+		LocationUuid:  dbLocation.LocationUuid.String(),
 		LocationName:  strings.ToUpper(dbLocation.LocationName),
 		CapacityWatts: uint64(dbSource.Capacity) * uint64(math.Pow10(int(dbSource.CapacityUnitPrefixFactor))),
 	}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) CreateGsp(ctx context.Context, req *pb.CreateGspRequest) (*pb.CreateGspResponse, error) {
+func (s *DataPlatformServerImpl) CreateGsp(ctx context.Context, req *pb.CreateGspRequest) (*pb.CreateGspResponse, error) {
 	l := log.With().Str("method", "CreateGsp").Logger()
 
 	// Establish a transaction with the database
@@ -1077,20 +1163,20 @@ func (s *PostgresDataPlatformServerImpl) CreateGsp(ctx context.Context, req *pb.
 		l.Err(err).Msgf("req.Metadata.MarshalJSON()")
 		return nil, status.Error(codes.InvalidArgument, "Invalid metadata. Ensure metadata is a valid JSON object.")
 	}
-
 	cp, ex, err := capacityToValueMultiplier(req.CapacityWatts)
 	if err != nil {
 		l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.CapacityWatts)
 		return nil, status.Error(codes.InvalidArgument, "Invalid capacity. Ensure capacity is non-negative.")
 	}
-	params2 := db.CreateSourceParams{
-		LocationID:               dbLocation.LocationID,
+	csParams := db.CreateSourceEntryParams{
+		LocationUuid:             dbLocation.LocationUuid,
 		SourceTypeID:             dbSourceType.SourceTypeID,
 		Capacity:                 cp,
 		CapacityUnitPrefixFactor: ex,
 		Metadata:                 metadata,
+		ValidFromUtc:             pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
 	}
-	dbSource, err := querier.CreateSource(ctx, params2)
+	dbSource, err := querier.CreateSourceEntry(ctx, csParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.CreateSource(%+v)", params)
 		return nil, status.Error(
@@ -1099,18 +1185,23 @@ func (s *PostgresDataPlatformServerImpl) CreateGsp(ctx context.Context, req *pb.
 	}
 
 	l.Debug().Msgf(
-		"Created source of type '%s' for location %d with capacity %dx10^%d W",
-		req.EnergySource, dbLocation.LocationID, dbSource.Capacity, dbSource.CapacityUnitPrefixFactor,
+		"Created source of type '%s' for location '%s' with capacity %dx10^%d W",
+		req.EnergySource, dbLocation.LocationUuid, dbSource.Capacity, dbSource.CapacityUnitPrefixFactor,
 	)
+	err = querier.UpdateSourcesMaterializedView(ctx)
+	if err != nil {
+		l.Err(err).Msg("querier.UpdateSourcesMaterializedView()")
+		return nil, status.Error(codes.Internal, "Failed to update sources materialized view")
+	}
 
 	return &pb.CreateGspResponse{
-		LocationId:    dbLocation.LocationID,
+		LocationUuid:  dbLocation.LocationUuid.String(),
 		LocationName:  strings.ToUpper(dbLocation.LocationName),
 		CapacityWatts: uint64(dbSource.Capacity) * uint64(math.Pow10(int(dbSource.CapacityUnitPrefixFactor))),
 	}, tx.Commit(ctx)
 }
 
-func (s *PostgresDataPlatformServerImpl) GetLocationsAsGeoJSON(ctx context.Context, req *pb.GetLocationsAsGeoJSONRequest) (*pb.GetLocationsAsGeoJSONResponse, error) {
+func (s *DataPlatformServerImpl) GetLocationsAsGeoJSON(ctx context.Context, req *pb.GetLocationsAsGeoJSONRequest) (*pb.GetLocationsAsGeoJSONResponse, error) {
 	l := log.With().Str("method", "GetLocationsAsGeoJSON").Logger()
 
 	// Establish a transaction with the database
@@ -1129,9 +1220,17 @@ func (s *PostgresDataPlatformServerImpl) GetLocationsAsGeoJSON(ctx context.Conte
 	} else {
 		simplificationLevel = 0.5
 	}
+	locationUuids := make([]uuid.UUID, len(req.LocationUuids))
+	for i, id := range req.LocationUuids {
+		locationUuids[i], err = uuid.Parse(id)
+		if err != nil {
+			l.Err(err).Msgf("uuid.Parse(%s)", id)
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+		}
+	}
 	params := db.GetLocationGeoJSONParams{
 		SimplificationLevel: simplificationLevel,
-		LocationNames:       req.LocationNames,
+		LocationUuids:       locationUuids,
 	}
 	geojson, err := querier.GetLocationGeoJSON(ctx, params)
 	if err != nil {
@@ -1143,7 +1242,7 @@ func (s *PostgresDataPlatformServerImpl) GetLocationsAsGeoJSON(ctx context.Conte
 }
 
 // GetPredictedTimeseries implements proto.QuartzAPIServer.
-func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseries(ctx context.Context, req *pb.GetPredictedTimeseriesRequest) (*pb.GetPredictedTimeseriesResponse, error) {
+func (s *DataPlatformServerImpl) GetPredictedTimeseries(ctx context.Context, req *pb.GetPredictedTimeseriesRequest) (*pb.GetPredictedTimeseriesResponse, error) {
 	l := log.With().Str("method", "GetPredictedTimeseries").Logger()
 
 	// Establish a transaction with the database
@@ -1156,13 +1255,22 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseries(ctx context.Cont
 	querier := db.New(tx)
 
 	// Get the location and source
-	glParams := db.GetSourceParams{LocationName: strings.ToUpper(req.LocationName), SourceTypeName: req.EnergySource.String()}
-	dbSource, err := querier.GetSource(ctx, glParams)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSource(%+v)", glParams)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+	gsParams := db.GetSourceAtTimestampParams{
+		LocationUuid:   locationUuid,
+		SourceTypeName: req.EnergySource.String(),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.TimeWindow.StartTimestampUnix.AsTime(), Valid: true},
+	}
+	dbSource, err := querier.GetSourceAtTimestamp(ctx, gsParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", gsParams)
 		return nil, status.Errorf(
 			codes.NotFound, "No location found for name '%s' with source type '%s'.",
-			req.LocationName, req.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
@@ -1183,7 +1291,7 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseries(ctx context.Cont
 	// Get the predictions for the given location source
 	start, end, err := timeWindowToPgWindow(req.TimeWindow)
 	lpParams := db.ListPredictionsForLocationParams{
-		LocationID:     dbSource.LocationID,
+		LocationUuid:   dbSource.LocationUuid,
 		PredictorID:    dbPredictor.PredictorID,
 		SourceTypeID:   dbSource.SourceTypeID,
 		HorizonMins:    int32(req.HorizonMins),
@@ -1196,12 +1304,12 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseries(ctx context.Cont
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No values found for location '%s' with horizon %d minutes",
-			req.LocationName, req.HorizonMins,
+			req.LocationUuid, req.HorizonMins,
 		)
 	}
 	l.Debug().Msgf(
 		"Found %d values for location '%s' with horizon %d minutes",
-		len(dbValues), req.LocationName, req.HorizonMins,
+		len(dbValues), req.LocationUuid, req.HorizonMins,
 	)
 
 	values := make([]*pb.GetPredictedTimeseriesResponse_Value, len(dbValues))
@@ -1231,7 +1339,7 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseries(ctx context.Cont
 	}
 
 	return &pb.GetPredictedTimeseriesResponse{
-		LocationId:   dbSource.LocationID,
+		LocationUuid: dbSource.LocationUuid.String(),
 		LocationName: strings.ToUpper(dbSource.LocationName),
 		Values:       values,
 	}, tx.Commit(ctx)
@@ -1239,7 +1347,7 @@ func (s *PostgresDataPlatformServerImpl) GetPredictedTimeseries(ctx context.Cont
 
 // NewPostgresDataPlatformServerImpl creates a new instance of the PostgresDataPlatformServer
 // connecting to - and migrating - the postgres database at the provided connection URL.
-func NewPostgresDataPlatformServerImpl(connString string) *PostgresDataPlatformServerImpl {
+func NewPostgresDataPlatformServerImpl(connString string) *DataPlatformServerImpl {
 	pool, err := pgxpool.New(
 		context.Background(), connString,
 	)
@@ -1261,7 +1369,7 @@ func NewPostgresDataPlatformServerImpl(connString string) *PostgresDataPlatformS
 		log.Fatal().Msgf("Unable to close database connection: %v", err)
 	}
 
-	return &PostgresDataPlatformServerImpl{pool: pool}
+	return &DataPlatformServerImpl{pool: pool}
 }
 
-var _ pb.DataPlatformServiceServer = (*PostgresDataPlatformServerImpl)(nil)
+var _ pb.DataPlatformServiceServer = (*DataPlatformServerImpl)(nil)

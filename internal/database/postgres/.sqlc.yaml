@@ -14,4 +14,9 @@ sql:
         emit_methods_with_db_argument: false
         emit_empty_slices: true
         emit_interface: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
 

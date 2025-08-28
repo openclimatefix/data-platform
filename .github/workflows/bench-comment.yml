@@ -1,7 +1,7 @@
 # Workflow to comment benchmark results on a pull request.
 # * It runs after the 'Benchmark' workflow completes successfully, provided the event triggering
-# * that workflow was a pull request. It isperformed seperately from the benchmark workflow to
-# * as it requires elevated permissions and as such is not safe to run on pull request code.
+# * that workflow was a pull request. It is performed seperately from the benchmark workflow as
+# * it requires elevated permissions and as such is not safe to run on pull request code.
 # * See https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/
 
 name: Comment Benchmark Results
@@ -27,6 +27,7 @@ jobs:
         with:
           name: bench-comment-${{ github.event.workflow_run.pull_requests[0].number }}
           run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Write results to PR comment
         uses: marocchino/sticky-pull-request-comment@d2ad0de260ae8b0235ce059e63f2949ba9e05943 # v2.9.3

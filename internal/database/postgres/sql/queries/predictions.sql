@@ -30,20 +30,11 @@ INNER JOIN desired_version ON true
 WHERE p.predictor_name = $1
     AND p.predictor_version = desired_version.value;
 
--- name: ListPredictors :many
-SELECT
-    predictor_id,
-    predictor_name,
-    predictor_version,
-    created_at_utc
-FROM pred.predictors
-ORDER BY created_at_utc DESC;
-
 /* --- Forecasts ------------------------------------------------------------------------------ */
 
 -- name: CreateForecast :one
 INSERT INTO pred.forecasts (
-    location_id, source_type_id, predictor_id, init_time_utc
+    location_uuid, source_type_id, predictor_id, init_time_utc, value_resolution_mins
 ) VALUES (
     $1,
     $2,
@@ -51,25 +42,26 @@ INSERT INTO pred.forecasts (
         SELECT predictor_id FROM pred.predictors
         WHERE predictor_name = $3 AND predictor_version = $4
     ),
-    $5
-) RETURNING forecast_id, init_time_utc, source_type_id, location_id, predictor_id;
+    $5,
+    $6
+) RETURNING forecast_uuid, init_time_utc, source_type_id, location_uuid, predictor_id;
 
--- name: CreateForecastsUsingCopy :batchone
-/* CreateForecastsUsingBatch inserts a new forecasts as a batch process. */
+-- name: CreateForecasts :batchone
+/* CreateForecasts inserts forecasts as a batch process, returning each newly created entry. */
 INSERT INTO pred.forecasts (
-    location_id, source_type_id, predictor_id, init_time_utc
+    location_uuid, source_type_id, predictor_id, init_time_utc
 ) VALUES (
     $1, $2, $3, $4
 ) RETURNING *;
 
--- name: CreatePredictionsAsInt16UsingCopy :copyfrom
-/* CreatePredictionsAsInt16UsingCopy inserts predicted generation values using
+-- name: CreatePredictedValues :copyfrom
+/* CreatePredictedValues inserts predicted generation values using
  * postgres COPY protocol, making it the fastest way to perform large inserts of predictions.
  * Input p-values are expected as smallint percentages (sip) of capacity,
  * with 0 representing 0% and 30000 representing 100% of capacity.
  */
 INSERT INTO pred.predicted_generation_values (
-    horizon_mins, p10_sip, p50_sip, p90_sip, forecast_id, target_time_utc, metadata
+    horizon_mins, p10_sip, p50_sip, p90_sip, forecast_uuid, target_time_utc, metadata
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
 );
@@ -80,13 +72,13 @@ INSERT INTO pred.predicted_generation_values (
  * minus the specified horizon are considered.
  */
 SELECT
-    f.forecast_id,
+    f.forecast_uuid,
     f.init_time_utc,
     f.source_type_id,
-    f.location_id,
+    f.location_uuid,
     f.predictor_id
 FROM pred.forecasts AS f
-WHERE f.location_id = $1
+WHERE f.location_uuid = $1
     AND f.source_type_id = $2
     AND f.predictor_id = $3
     AND f.init_time_utc
@@ -98,13 +90,13 @@ ORDER BY f.init_time_utc DESC LIMIT 1;
  * between the input times. It does not return forecast values.
  */
 SELECT
-    f.forecast_id,
+    f.forecast_uuid,
     f.init_time_utc,
-    f.location_id,
+    f.location_uuid,
     sqlc.arg(predictor_name)::text AS predictor_name,
     sqlc.arg(predictor_version)::text AS predictor_version
 FROM pred.forecasts AS f
-WHERE f.location_id = $1
+WHERE f.location_uuid = $1
     AND f.source_type_id = $2
     AND f.predictor_id = (
         SELECT predictor_id FROM pred.predictors AS p
@@ -128,7 +120,7 @@ SELECT
     pg.target_time_utc,
     pg.metadata
 FROM pred.predicted_generation_values AS pg
-WHERE pg.forecast_id = $1;
+WHERE pg.forecast_uuid = $1;
 
 -- name: ListPredictionsForLocation :many
 /* ListPredictionsForLocation retrieves predicted generation values as a timeseries.
@@ -139,9 +131,9 @@ WHERE pg.forecast_id = $1;
  */
 WITH relevant_forecasts AS (
     /* Get all the forecasts that fall within the time window for the given location, source, and predictor */
-    SELECT f.forecast_id
+    SELECT f.forecast_uuid
     FROM pred.forecasts AS f
-    WHERE f.location_id = $1
+    WHERE f.location_uuid = $1
         AND f.source_type_id = $2
         AND f.predictor_id = $3
         AND f.init_time_utc BETWEEN
@@ -160,7 +152,7 @@ filtered_predictions AS (
         pg.target_time_utc,
         pg.metadata
     FROM pred.predicted_generation_values pg
-    INNER JOIN relevant_forecasts USING (forecast_id)
+    INNER JOIN relevant_forecasts USING (forecast_uuid)
     WHERE pg.target_time_utc BETWEEN
         sqlc.arg(start_timestamp)::timestamp
         - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
@@ -194,12 +186,12 @@ ORDER BY rp.target_time_utc ASC;
  */
 WITH relevant_forecasts AS (
     SELECT
-        f.forecast_id,
-        f.location_id,
+        f.forecast_uuid,
+        f.location_uuid,
         f.init_time_utc,
-        ROW_NUMBER() OVER (PARTITION BY f.location_id ORDER BY f.init_time_utc DESC) AS rn
+        ROW_NUMBER() OVER (PARTITION BY f.location_uuid ORDER BY f.init_time_utc DESC) AS rn
     FROM pred.forecasts AS f
-    WHERE f.location_id = ANY(sqlc.arg(location_ids)::integer [])
+    WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::uuid [])
         AND f.source_type_id = $1
         AND f.predictor_id = $2
         AND f.init_time_utc
@@ -207,14 +199,14 @@ WITH relevant_forecasts AS (
 ),
 latest_relevant_forecasts AS (
     SELECT
-        rf.forecast_id,
-        rf.location_id,
+        rf.forecast_uuid,
+        rf.location_uuid,
         rf.init_time_utc
     FROM relevant_forecasts AS rf
     WHERE rf.rn = 1
 )
 SELECT
-    rf.location_id,
+    rf.location_uuid,
     pg.horizon_mins,
     pg.p10_sip,
     pg.p50_sip,
@@ -222,7 +214,7 @@ SELECT
     pg.target_time_utc,
     pg.metadata
 FROM pred.predicted_generation_values AS pg
-INNER JOIN latest_relevant_forecasts AS rf USING (forecast_id)
+INNER JOIN latest_relevant_forecasts AS rf USING (forecast_uuid)
 WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::integer;
 
 -- name: GetWeekAverageDeltasForLocations :many
@@ -243,46 +235,46 @@ WITH desired_init_times AS (
 ),
 relevant_forecasts AS (
     SELECT
-        f.forecast_id,
+        f.forecast_uuid,
         f.init_time_utc,
         f.source_type_id,
-        f.location_id,
+        f.location_uuid,
         f.predictor_id
     FROM pred.forecasts AS f
     INNER JOIN desired_init_times dit ON f.init_time_utc = dit.init_time_utc
-    WHERE f.location_id = ANY(sqlc.arg(location_ids)::integer [])
+    WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::uuid [])
         AND f.source_type_id = $1
         AND f.predictor_id = $2
 ),
 relevant_predicted_values AS (
     SELECT
-        rf.location_id,
-        rf.forecast_id,
+        rf.location_uuid,
+        rf.forecast_uuid,
         rf.source_type_id,
         pg.target_time_utc,
         pg.horizon_mins,
         pg.p50_sip
     FROM relevant_forecasts AS rf
-    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_id)
+    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
 ),
 deltas AS (
     SELECT
-        rv.location_id,
+        rv.location_uuid,
         rv.source_type_id,
-        rv.forecast_id,
+        rv.forecast_uuid,
         rv.target_time_utc,
         rv.horizon_mins,
         rv.p50_sip - og.value_sip AS delta_sip
     FROM relevant_predicted_values AS rv
-    LEFT JOIN obs.observed_generation_values AS og USING (location_id, source_type_id)
+    LEFT JOIN obs.observed_generation_values AS og USING (location_uuid, source_type_id)
     WHERE
         og.observer_id = $3
-        AND og.observation_time_utc = rv.target_time_utc
+        AND og.observation_timestamp_utc = rv.target_time_utc
 )
 SELECT
-    d.location_id,
+    d.location_uuid,
     d.horizon_mins,
     AVG(d.delta_sip) AS avg_delta_sip
 FROM deltas AS d
-GROUP BY d.location_id, d.horizon_mins
-ORDER BY d.location_id, d.horizon_mins;
+GROUP BY d.location_uuid, d.horizon_mins
+ORDER BY d.location_uuid, d.horizon_mins;

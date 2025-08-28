@@ -39,18 +39,42 @@ CREATE TABLE obs.observed_generation_values (
         CHECK ( value_sip >= 0 ),
     source_type_id SMALLINT NOT NULL
         REFERENCES loc.source_types(source_type_id)
+        ON UPDATE CASCADE
         ON DELETE RESTRICT,
     observer_id INTEGER NOT NULL
         REFERENCES obs.observers(observer_id)
+        ON UPDATE CASCADE
         ON DELETE CASCADE,
-    location_id INTEGER NOT NULL
-        REFERENCES loc.locations(location_id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
-    observation_time_utc TIMESTAMP NOT NULL,
-        CHECK ( observation_time_utc <= CURRENT_TIMESTAMP + make_interval(days => 31) ),
-    PRIMARY KEY (location_id, source_type_id, observer_id, observation_time_utc)
+    observation_timestamp_utc TIMESTAMP NOT NULL
+        CHECK ( observation_timestamp_utc <= CURRENT_TIMESTAMP + make_interval(days => 31) ),
+    location_uuid UUID NOT NULL
+        REFERENCES loc.locations(location_uuid)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    PRIMARY KEY (location_uuid, source_type_id, observer_id, observation_timestamp_utc)
+)
+-- Native partitioning. Note that unique indexes will only work if they include
+-- the partition key.
+PARTITION BY RANGE (observation_timestamp_utc);
+
+-- Manage partitions with pg_partman
+SELECT partman.create_parent(
+    p_parent_table => 'obs.observed_generation_values',
+    p_control => 'observation_timestamp_utc',
+    p_type => 'range',
+    p_interval => '1 week',
+    p_automatic_maintenance => 'on',
+    p_jobmon => false,
+    p_premake => 7
 );
+UPDATE partman.part_config
+SET retention = '1 month',
+    -- Detacth as opposed to dropping partitions
+    retention_keep_table = true,
+    retention_keep_index = false,
+    -- Retain the detatched partitions so they can be processed
+    infinite_time_partitions = true
+WHERE parent_table = 'obs.observed_generation_values';
 
 -- +goose Down
 DROP SCHEMA obs CASCADE;

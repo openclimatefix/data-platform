@@ -29,6 +29,7 @@ service DataPlatformService {
   rpc GetObservedTimeseries(GetObservedTimeseriesRequest) returns (GetObservedTimeseriesResponse) {}
 
   rpc GetLatestPredictions(GetLatestPredictionsRequest) returns (GetLatestPredictionsResponse) {}
+
   rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
 
   rpc GetLocationsWithin(GetLocationsWithinRequest) returns (GetLocationsWithinResponse) {}

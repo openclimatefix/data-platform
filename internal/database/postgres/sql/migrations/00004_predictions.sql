@@ -15,8 +15,8 @@ CREATE SCHEMA pred;
 /*- Tables ----------------------------------------------------------------------------------*/
 
 /*
- * A predictor is a source that generates predicted generation values. This is usually an ML model,
- * but could also be an analytical process. Each predictor's name and version number uniquely
+ * A forecaster is a source that generates forecast values. This is usually an ML model,
+ * but could also be an analytical process. Each forecaster's name and version number uniquely
  * identifies it.
  */
 CREATE TABLE pred.predictors (
@@ -38,32 +38,35 @@ CREATE TABLE pred.predictors (
 );
 
 /*
- * Forecasts refer to the generation predictions created by a specific version of a predictor for a
- * specific location. A forecast is created at an initialization time, and contains a timeseries of
- * predicted generation values. There can only be one forecast per location per initialization time
- * per predictor; reruns should replace old values.
+ * Forecasts refer to the set of forecast values, created by a specific version of a forecaster,
+ * for a specific location, with some initialization time. Each forecast contains a timeseries of
+ * forecast values. There can only be one forecast per location per initialization time per
+ * forecaster; reruns should replace old values.
  */
 CREATE TABLE pred.forecasts (
     -- Type of energy source
     source_type_id SMALLINT NOT NULL
         REFERENCES loc.source_types(source_type_id)
+        ON UPDATE CASCADE
         ON DELETE RESTRICT,
-    forecast_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    location_id INTEGER NOT NULL
-        REFERENCES loc.locations(location_id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
-    predictor_id INTEGER NOT NULL
-        REFERENCES pred.predictors(predictor_id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    value_resolution_mins SMALLINT NOT NULL
+        CHECK (value_resolution_mins > 0 AND value_resolution_mins <= 60),
     init_time_utc TIMESTAMP NOT NULL
         CHECK (
             init_time_utc >= '2000-01-01 00:00:00'::timestamp
             AND init_time_utc < CURRENT_TIMESTAMP + make_interval(days => 30)
         ),
-    PRIMARY KEY (forecast_id),
-    UNIQUE (location_id, source_type_id, predictor_id, init_time_utc)
+    predictor_id INTEGER NOT NULL
+        REFERENCES pred.predictors(predictor_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    location_uuid UUID NOT NULL
+        REFERENCES loc.locations(location_uuid)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    forecast_uuid UUID DEFAULT uuidv7() NOT NULL,
+    PRIMARY KEY (forecast_uuid),
+    UNIQUE (location_uuid, source_type_id, predictor_id, init_time_utc)
 );
 
 /*
@@ -88,15 +91,15 @@ CREATE TABLE pred.predicted_generation_values (
         CHECK (p10_sip IS NULL or p10_sip >= 0),
     p90_sip SMALLINT DEFAULT NULL
         CHECK (p90_sip IS NULL or p90_sip >= 0),
-    forecast_id INTEGER NOT NULL
-        REFERENCES pred.forecasts(forecast_id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
     -- Time that the predicted generation value corresponds to
     target_time_utc TIMESTAMP NOT NULL,
     metadata JSONB DEFAULT NULL
         CHECK (metadata IS NULL OR metadata != '{}'),
-    PRIMARY KEY (forecast_id, target_time_utc, horizon_mins)
+    forecast_uuid UUID NOT NULL
+        REFERENCES pred.forecasts(forecast_uuid)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    PRIMARY KEY (forecast_uuid, target_time_utc, horizon_mins)
 )
 -- Native partitioning. Note that unique indexes will only work if they include
 -- the partition key.
@@ -119,8 +122,7 @@ SET retention = '1 month',
     retention_keep_index = false,
     -- Retain the detatched partitions so they can be processed
     infinite_time_partitions = true
-WHERE parent_table = 'public.predicted_generation_values';
-
+WHERE parent_table = 'pred.predicted_generation_values';
 
 -- +goose Down
 DROP SCHEMA pred CASCADE;

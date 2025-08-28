@@ -51,7 +51,7 @@ INSERT INTO loc.location_types (location_type_name) VALUES ('SITE'), ('GSP'), ('
 
 -- Table to store spatial data for locations
 CREATE TABLE loc.locations (
-    location_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    location_uuid UUID DEFAULT uuidv7() NOT NULL,
     location_name TEXT NOT NULL
         CHECK ( LENGTH(location_name) > 0 AND location_name = UPPER(location_name) ),
     geom GEOMETRY(GEOMETRY, 4326) NOT NULL
@@ -68,9 +68,8 @@ CREATE TABLE loc.locations (
         ON DELETE RESTRICT,
     centroid GEOMETRY(POINT, 4326) GENERATED ALWAYS AS (ST_Centroid(geom)) STORED,
     geom_hash TEXT GENERATED ALWAYS AS (MD5(ST_AsBinary(geom))) STORED,
-    PRIMARY KEY (location_id),
-    UNIQUE (location_name),
-    UNIQUE (geom_hash)
+    PRIMARY KEY (location_uuid),
+    UNIQUE (location_name, geom_hash)
 );
 -- Required index for efficient spatial-based queries
 CREATE INDEX ON loc.locations USING GIST (geom);
@@ -80,12 +79,12 @@ CREATE INDEX ON loc.locations (ST_GeometryType(geom));
 CREATE INDEX ON loc.locations (location_type_id);
 
 /*
- * Table to store the current generation capability of locations.
+ * Table to store the temporal generation capability of locations.
  * Each location can have multiple sources of generation (solar, wind, etc),
- * and each source can change over time. This is handled via a temporal range
- * for each record and a trigger to update records when the source is modified.
+ * and each source can change over time. For speed of writing, this is handled
+ * via a simple valid-from timestamp field.
  */
-CREATE TABLE loc.sources (
+CREATE TABLE loc.sources_history (
     source_type_id SMALLINT NOT NULL
         REFERENCES loc.source_types(source_type_id)
         ON UPDATE CASCADE
@@ -109,45 +108,39 @@ CREATE TABLE loc.sources (
             capacity_limit_sip IS NULL
             OR (capacity_limit_sip >= 0 AND capacity_limit_sip < 30000)
         ),
-    source_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    source_version INTEGER DEFAULT(1) NOT NULL,
-    location_id INTEGER NOT NULL
-        REFERENCES loc.locations(location_id)
+    valid_from_utc TIMESTAMP DEFAULT NOW() NOT NULL,
+    location_uuid UUID NOT NULL
+        REFERENCES loc.locations(location_uuid)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
     -- Metadata about the source, e.g. tilt, orientation, etc.
     metadata JSONB DEFAULT NULL
         CHECK ( metadata IS NULL OR metadata <> '{}'::jsonb ), -- Null is cheaper
-    -- Period over which the record is valid (used for history table)
-    sys_period TSRANGE NOT NULL
-        DEFAULT TSRANGE(NOW()::TIMESTAMP, NULL, '[)')
-        CHECK ( sys_period <> 'empty'::tsrange ),
-    -- Each location can only have one source of each type
-    UNIQUE (location_id, source_type_id),
-    PRIMARY KEY (source_id)
+    PRIMARY KEY (location_uuid, source_type_id, valid_from_utc)
 );
 
-/* Table to store the historic generation capability of locations.
- * Only the rows in this table will have their history tracked when updates are made to the main
- * table, so columns are dropped that have no need for a historical log.
+/*
+ * Materialized view to store the state of sources over time with a system period.
+ * This allows for quicker reads of the state of sources at a given time.
  */
-CREATE TABLE loc.sources_history (
-    LIKE loc.sources INCLUDING CONSTRAINTS INCLUDING DEFAULTS,
-    PRIMARY KEY (source_id, source_version)
-);
-ALTER TABLE loc.sources_history
-    DROP COLUMN location_id,
-    DROP COLUMN metadata,
-    DROP COLUMN source_type_id;
-
-CREATE TRIGGER source_history_trigger
-    BEFORE INSERT OR UPDATE OR DELETE ON loc.sources
-    FOR EACH ROW EXECUTE PROCEDURE versioning(
-        'sys_period', 'loc.sources_history',
-        true, true, -- Mitigate conflicts, ignore unchanged
-        true, false, -- Include latest value in history, disable migration mode
-        true, 'source_version' -- Increment version
-    );
+CREATE MATERIALIZED VIEW loc.sources_mv AS
+SELECT
+    location_uuid,
+    source_type_id,
+    capacity,
+    capacity_unit_prefix_factor,
+    capacity_limit_sip,
+    TSRANGE(
+        valid_from_utc,
+        LEAD(valid_from_utc, 1) OVER (
+            PARTITION BY location_uuid, source_type_id
+            ORDER BY valid_from_utc)
+        ) AS sys_period,
+    metadata
+FROM loc.sources_history;
+-- Prevent overlapping records. Required for concurrent refreshes.
+CREATE UNIQUE INDEX ON loc.sources_mv (location_uuid, source_type_id, sys_period);
+CREATE INDEX ON loc.sources_mv USING GIST (sys_period);
 
 -- +goose Down
 DROP SCHEMA loc CASCADE;

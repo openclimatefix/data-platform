@@ -76,17 +76,15 @@ message TimeWindow {
 // --- Requests and Responses --------------------------------------------------------
 
 message GetPredictedTimeseriesRequest {
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
   EnergySource energy_source = 2;
 
   uint32 horizon_mins = 3;
-  /* The time window to fetch predicted yields for.
-   * If not specified, the default is 48 hours before the current time
-   * to 36 hours after the current time.
-   */
-  TimeWindow time_window = 4;
+  TimeWindow time_window = 4 [
+    (buf.validate.field).required = true
+  ];
   Model model = 5 [
     (buf.validate.field).required = true
   ];
@@ -101,15 +99,15 @@ message GetPredictedTimeseriesResponse {
     uint64 effective_capacity_watts = 5;
   }
 
-  int32 location_id = 1;
+  string location_uuid = 1;
   string location_name = 2;
   repeated GetPredictedTimeseriesResponse.Value values = 3;
 }
 
 
 message GetPredictedTimeseriesDeltasRequest {
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
   EnergySource energy_source = 2;
 
@@ -121,11 +119,9 @@ message GetPredictedTimeseriesDeltasRequest {
     (buf.validate.field).string.min_len = 2,
     (buf.validate.field).string.max_len = 100
   ];
-  /* The time window to fetch predicted deltas for.
-   * If not specified, the default is 48 hours before the current time
-   * to 36 hours after the current time.
-   */
-  TimeWindow time_window = 6;
+  TimeWindow time_window = 6 [
+    (buf.validate.field).required = true
+  ];
 }
 
 message GetPredictedTimeseriesDeltasResponse {
@@ -138,15 +134,15 @@ message GetPredictedTimeseriesDeltasResponse {
     uint64 effective_capacity_watts = 3;
   }
 
-  int32 location_id = 1;
+  string location_uuid = 1;
   string location_name = 2;
   repeated GetPredictedTimeseriesDeltasResponse.Value values = 3;
 }
 
 
 message GetObservedTimeseriesRequest {
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
   string observer_name = 2 [
     (buf.validate.field).string.min_len = 2,
@@ -157,7 +153,9 @@ message GetObservedTimeseriesRequest {
    * If not specified, the default is 48 hours before the current time
    * to 36 hours after the current time.
    */
-  TimeWindow time_window = 4;
+  TimeWindow time_window = 4 [
+    (buf.validate.field).required = true
+  ];
 }
 
 message GetObservedTimeseriesResponse {
@@ -167,19 +165,19 @@ message GetObservedTimeseriesResponse {
     uint64 effective_capacity_watts = 3;
   }
 
-  int32 location_id = 1;
+  string location_uuid = 1;
   string location_name = 2;
   repeated Value values = 3;
 }
 
 
 message GetPredictedCrossSectionRequest {
-  repeated string location_names = 1 [
+  repeated string location_uuids = 1 [
     (buf.validate.field).repeated.min_items = 1,
     (buf.validate.field).repeated.max_items = 1000,
     (buf.validate.field).repeated.unique = true,
     (buf.validate.field).repeated.items = {
-      string: {[ocf.dp.valid_location_name]: true}
+      string: {uuid: true}
     }
   ];
   EnergySource energy_source = 2;
@@ -195,7 +193,7 @@ message GetPredictedCrossSectionRequest {
 
 message GetPredictedCrossSectionResponse {
   message Value {
-    int32 location_id = 1;
+    string location_uuid = 1;
     string location_name = 2;
     float value_percent = 3;
     uint64 effective_capacity_watts = 4;
@@ -212,8 +210,8 @@ message GetPredictedCrossSectionResponse {
 
 
 message GetLatestPredictionsRequest {
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
   EnergySource energy_source = 2;
   /* The time to search backwards from to find the 'latest' forecast.
@@ -234,7 +232,7 @@ message GetLatestPredictionsResponse {
     uint64 effective_capacity_watts = 5;
   }
 
-  int32 location_id = 1;
+  string location_uuid = 1;
   string location_name = 2;
   int64 forecast_id = 3;
   repeated GetLatestPredictionsResponse.Value values = 4;
@@ -284,8 +282,8 @@ message CreateForecastRequest {
     Model model = 1 [
       (buf.validate.field).required = true
     ];
-    string location_name = 2 [
-      (buf.validate.field).string.(valid_location_name) = true
+    string location_uuid = 2 [
+      (buf.validate.field).string.uuid = true
     ];
     EnergySource energy_source = 3;
     google.protobuf.Timestamp init_time_utc = 4 [
@@ -322,7 +320,7 @@ message CreateSiteRequest {
 }
 
 message CreateSiteResponse {
-  int32 location_id = 1;
+  string location_uuid = 1;
   string location_name = 2;
   uint64 capacity_watts = 3;
 }
@@ -344,21 +342,21 @@ message CreateGspRequest {
 }
 
 message CreateGspResponse {
-  int32 location_id = 1;
+  string location_uuid = 1;
   string location_name = 2;
   uint64 capacity_watts = 3;
 }
 
 
 message GetLocationRequest {
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
   EnergySource energy_source = 2;
 }
 
 message GetLocationResponse {
-  int32 location_id = 1;
+  string location_uuid = 1;
   string location_name = 2;
   /* The characteristic coordinates of the location.
    * For sites, this is simply their point coordinates,
@@ -371,12 +369,12 @@ message GetLocationResponse {
 
 
 message GetLocationsAsGeoJSONRequest {
-  repeated string location_names = 1 [
+  repeated string location_uuids = 1 [
     (buf.validate.field).repeated.min_items = 1,
     (buf.validate.field).repeated.max_items = 1000,
     (buf.validate.field).repeated.unique = true,
     (buf.validate.field).repeated.items = {
-      string: {[ocf.dp.valid_location_name]:  true}
+      string: {uuid:  true}
     } 
   ];
   /* If true, the GeoJSON will not be simplified.
@@ -403,8 +401,8 @@ message CreateObservationsRequest {
     ];
   }
 
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
   EnergySource energy_source = 2;
   string observer_name = 3 [
@@ -434,8 +432,8 @@ message CreateObserverResponse {
 
 
 message GetWeekAverageDeltasRequest {
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
   EnergySource energy_source = 2;
   /* The characteristic time to detrmine averages for.
@@ -473,14 +471,14 @@ message GetWeekAverageDeltasResponse {
 }
 
 message GetLocationsWithinRequest {
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
 }
 
 message GetLocationsWithinResponse {
   message LocationData {
-    int32 location_id = 1;
+    string location_uuid = 1;
     string location_name = 2;
   }
 
@@ -488,8 +486,8 @@ message GetLocationsWithinResponse {
 }
 
 message StreamForecastDataRequest {
-  string location_name = 1 [
-    (buf.validate.field).string.(valid_location_name) = true
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
   ];
   EnergySource energy_source = 2;
   TimeWindow time_window = 3 [
@@ -504,7 +502,7 @@ message StreamForecastDataRequest {
 
 message StreamForecastDataResponse {
   google.protobuf.Timestamp init_timestamp = 1;
-  int32 location_id = 2;
+  string location_uuid = 2;
   string model_fullname = 3;
   uint32 horizon_mins = 4;
   optional float p10_percent = 5;

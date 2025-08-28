@@ -23,7 +23,7 @@ lint:
 
 .PHONY: bench
 bench:
-	@go test ./...  -bench=. -run=^a -timeout=15m
+	@go test ./...  -bench=. -run=^a -timeout=30m
 
 .PHONY: gen
 gen: gen.db gen.proto
