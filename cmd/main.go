@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	dbdy "github.com/devsjc/fcfs/dp/internal/database/dummy"
 	dbpg "github.com/devsjc/fcfs/dp/internal/database/postgres"
 	pb "github.com/devsjc/fcfs/dp/internal/gen/ocf/dp"
 )
@@ -31,26 +32,26 @@ func main() {
 	}
 	zerolog.SetGlobalLevel(logLevel)
 
+	// Choose the server implementation based on the environment
 	databaseUrl := os.Getenv("DATABASE_URL")
 	var dpServerImpl pb.DataPlatformServiceServer
 	if slices.Contains([]string{"", "dummy", "fake"}, strings.ToLower(databaseUrl)) {
-		log.Info().Msg("Running in test mode with fake data")
-		log.Fatal().Msg("Not yet implemented!")
+		log.Warn().Msg("Running in test mode with fake data. Not for production use")
+		dpServerImpl = dbdy.NewDummyDataPlatformServerImpl()
 	} else if strings.HasPrefix(databaseUrl, "postgres") && strings.Contains(databaseUrl, "://") {
-		log.Debug().Str("type", "postgresql").Msg("Connecting to database backend")
+		log.Info().Str("type", "postgresql").Msg("Connecting to database backend")
 		dpServerImpl = dbpg.NewPostgresDataPlatformServerImpl(databaseUrl)
 	} else {
 		log.Fatal().Str("url", databaseUrl).Msg("Unsupported DATABASE_URL format")
 	}
 
+	// Create the GRPC server
+	// * Add an interceptor for request validation
 	log.Info().Int("port", 50051).Msg("Starting GRPC server")
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to listen")
 	}
-
-	// Create the GRPC server
-	// * Add an interceptor for request validation
 	validator, err := protovalidate.New()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create validator")

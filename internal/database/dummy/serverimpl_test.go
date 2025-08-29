@@ -1,18 +1,62 @@
 package dummy
 
 import (
-	"os"
+	// "os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/vg"
-	"gonum.org/v1/plot/vg/draw"
-	"gonum.org/v1/plot/vg/vgimg"
+	// "gonum.org/v1/plot"
+	// "gonum.org/v1/plot/plotter"
+	// "gonum.org/v1/plot/vg"
+	// "gonum.org/v1/plot/vg/draw"
+	// "gonum.org/v1/plot/vg/vgimg"
 )
 
+func TestDetermineIrradience(t *testing.T) {
+	t.Parallel()
+	// Test the function with a known date and location
+	date := time.Date(2019, time.January, 1, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		date     time.Time
+		lngLat   lnglat
+		expected SolarData
+	}{
+		{
+			"Equator has expected solar properties",
+			date,
+			lnglat{5, 0},
+			SolarData{
+				sunriseTimeTst: date.Truncate(24 * time.Hour).Add(6 * time.Hour),
+				sunsetTimeTst:  date.Truncate(24 * time.Hour).Add(18 * time.Hour),
+				daylengthHours: 12,
+			},
+		},
+		{
+			"Equator is invarient of longitude and date",
+			date.AddDate(3452, 15, 242),
+			lnglat{60, 0},
+			SolarData{
+				sunriseTimeTst: date.AddDate(3452, 15, 242).Truncate(24 * time.Hour).Add(6 * time.Hour),
+				sunsetTimeTst:  date.AddDate(3452, 15, 242).Truncate(24 * time.Hour).Add(18 * time.Hour),
+				daylengthHours: 12,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sd := determineIrradiance(tt.date, tt.lngLat)
+			require.Equal(t, tt.expected.sunriseTimeTst, sd.sunriseTimeTst)
+			require.Equal(t, tt.expected.sunsetTimeTst, sd.sunsetTimeTst)
+			require.Equal(t, tt.expected.daylengthHours, sd.daylengthHours)
+		})
+	}
+}
+
+/*
 func plotHelper(tb testing.TB, filename string) {
 	tb.Helper()
 	p := plot.New()
@@ -136,46 +180,4 @@ func TestPlots(t *testing.T) {
 	_, err = png.WriteTo(w)
 	require.NoError(t, err)
 }
-
-func TestDetermineIrradience(t *testing.T) {
-	t.Parallel()
-	// Test the function with a known date and location
-	date := time.Date(2019, time.January, 1, 12, 0, 0, 0, time.UTC)
-
-	tests := []struct {
-		name     string
-		date     time.Time
-		lngLat   lnglat
-		expected SolarData
-	}{
-		{
-			"Equator has expected solar properties",
-			date,
-			lnglat{5, 0},
-			SolarData{
-				sunriseTimeTst: date.Truncate(24 * time.Hour).Add(6 * time.Hour),
-				sunsetTimeTst:  date.Truncate(24 * time.Hour).Add(18 * time.Hour),
-				daylengthHours: 12,
-			},
-		},
-		{
-			"Equator is invarient of longitude and date",
-			date.AddDate(3452, 15, 242),
-			lnglat{60, 0},
-			SolarData{
-				sunriseTimeTst: date.AddDate(3452, 15, 242).Truncate(24 * time.Hour).Add(6 * time.Hour),
-				sunsetTimeTst:  date.AddDate(3452, 15, 242).Truncate(24 * time.Hour).Add(18 * time.Hour),
-				daylengthHours: 12,
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sd := determineIrradience(tt.date, tt.lngLat)
-			require.Equal(t, tt.expected.sunriseTimeTst, sd.sunriseTimeTst)
-			require.Equal(t, tt.expected.sunsetTimeTst, sd.sunsetTimeTst)
-			require.Equal(t, tt.expected.daylengthHours, sd.daylengthHours)
-		})
-	}
-}
+*/

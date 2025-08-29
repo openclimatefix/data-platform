@@ -82,11 +82,12 @@ gen.proto.openapi:
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
 .PHONY: run
 run:
-	DATABASE_URL=postgres://postgres:postgres@localhost:5400/postgres DATABASE_TYPE=postgres LOGLEVEL=DEBUG go run cmd/main.go
+	DATABASE_URL=${DATABASE_URL} LOGLEVEL=DEBUG go run cmd/main.go
 
 .PHONY: run.db
 run.db:
-	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t fcfs-pgdb:local && docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" fcfs-pgdb:local
+	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t fcfs-pgdb:local
+	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" fcfs-pgdb:local
 
 .PHONY: run.client
 run.client:

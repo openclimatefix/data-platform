@@ -10,17 +10,31 @@
 package dummy
 
 import (
+	"context"
+	"fmt"
 	"math"
+	"math/rand/v2"
 	"time"
+
+	pb "github.com/devsjc/fcfs/dp/internal/gen/ocf/dp"
+	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const (
-	step = time.Duration(5 * time.Minute)
-)
+// --- Reuseable Functions for route logic --------------------------------------------------------
 
 type lnglat struct {
 	lonDegs float64
 	latDegs float64
+}
+
+func randomUkLngLat() lnglat {
+	return lnglat{
+		lonDegs: rand.Float64()*5 - 3,
+		latDegs: rand.Float64()*5 + 50,
+	}
 }
 
 func (l lnglat) lonRads() float64 {
@@ -45,21 +59,27 @@ type SolarData struct {
 	// and positive in the afternoon.
 	hourAngleRadians float64
 	// declinationRadians is the solar declination angle in radians.
-	declinationRadians               float64
-	zenithRadians                    float64
-	azimuthRadians                   float64
-	extraterrestrialIrradianceNormal float64
-	extraterrestrialIrradiance       float64
-	sunriseTimeTst                   time.Time
-	sunsetTimeTst                    time.Time
-	sunriseTimeMst                   time.Time
-	sunsetTimeMst                    time.Time
-	sunriseTimeUtc                   time.Time
-	sunsetTimeUtc                    time.Time
-	daylengthHours                   float64
+	declinationRadians            float64
+	zenithRadians                 float64
+	azimuthRadians                float64
+	extraterrestrialIrradianceMax float64
+	extraterrestrialIrradiance    float64
+	sunriseTimeTst                time.Time
+	sunsetTimeTst                 time.Time
+	sunriseTimeMst                time.Time
+	sunsetTimeMst                 time.Time
+	sunriseTimeUtc                time.Time
+	sunsetTimeUtc                 time.Time
+	daylengthHours                float64
 }
 
-func determineIrradience(t time.Time, p lnglat) SolarData {
+func (sd SolarData) normalizedIrradiance() float64 {
+	return sd.extraterrestrialIrradiance / sd.extraterrestrialIrradianceMax
+}
+
+// determineIrradiance calculates various solar parameters for the given time and location,
+// according to the geometries of the earth-sun system at the given input time.
+func determineIrradiance(t time.Time, p lnglat) SolarData {
 	sd := SolarData{timeUtc: t}
 	yearDay := float64(t.YearDay()) + float64(t.Hour())/24.0 + float64(t.Minute())/1440.0
 
@@ -134,7 +154,7 @@ func determineIrradience(t time.Time, p lnglat) SolarData {
 	case -1*math.Tan(p.latRads())*math.Tan(sd.declinationRadians) <= -1:
 		sunsetHourAngle = math.Pi
 	default:
-		// There is actually an error in my edition of the book here,
+		// There is actually an error in my edition of the book here, so far as I can tell:
 		// it should be acos, but the book has cos printed.
 		sunsetHourAngle = math.Acos(-1 * math.Tan(p.latRads()) * math.Tan(sd.declinationRadians))
 	}
@@ -154,18 +174,23 @@ func determineIrradience(t time.Time, p lnglat) SolarData {
 	// at the top of the atmosphere for a given True Solar Time.
 	//
 	// It is calculated via the solar constant E_TSI - the annual average solar irradiance
-	// at the top of the atmosphere. This is modulated according to the eccentricity of the earth's orbit
-	// on the given day and the solar zenithal angle at the given time. [2](section 3.2).
+	// at the top of the atmosphere. This is then modulated according to the eccentricity of the
+	// earth's orbit on the given day to determine E_0N; which itself is subsequently modulated
+	// to take into account the solar zenithal angle at the given time to determine the irradiance.
+	// [2](section 3.2).
 	ε := 0.03344 * math.Cos(sd.angleDayRadians-0.049)
 	E_TSI := 1361.0
 	E_0N := E_TSI * (1 + ε)
-	sd.extraterrestrialIrradianceNormal = E_0N
+	sd.extraterrestrialIrradianceMax = E_0N
 	sd.extraterrestrialIrradiance = max(E_0N*math.Cos(sd.zenithRadians), 0.0)
 
 	return sd
 }
 
+// cloudCoverFactor returns a value between 0.0 and 1.0 representing the cloud cover at the given
+// time and location.
 func cloudCoverFactor(t time.Time, p lnglat) float64 {
+	// TODO: Implement a more realistic cloud cover model.
 	// Handy blog on fake clouds https://nullprogram.com/blog/2007/11/20/
 
 	// 1. Generate FBM noise.
@@ -175,9 +200,230 @@ func cloudCoverFactor(t time.Time, p lnglat) float64 {
 	return 0.5
 }
 
-// / getWindow returns the start and end of the window for the timeseries data.
-func getWindow() (time.Time, time.Time) {
-	windowStart := time.Now().UTC().Add(-time.Hour * 48).Truncate(time.Hour * 24)
-	windowEnd := time.Now().UTC().Add(time.Hour * 48).Truncate(time.Hour * 24)
-	return windowStart, windowEnd
+// --- Server Implementation ----------------------------------------------------------------------
+
+type DataPlatformServerImpl struct{}
+
+func NewDummyDataPlatformServerImpl() *DataPlatformServerImpl {
+	return &DataPlatformServerImpl{}
 }
+
+// --- Server Method Implementations -------------------------------------------------------------
+
+// CreateForecast implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) CreateForecast(ctx context.Context, req *pb.CreateForecastRequest) (*pb.CreateForecastResponse, error) {
+	return &pb.CreateForecastResponse{
+		ForecastId: 1,
+	}, nil
+}
+
+// CreateForecaster implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) CreateForecaster(ctx context.Context, req *pb.CreateForecasterRequest) (*pb.CreateForecasterResponse, error) {
+	return &pb.CreateForecasterResponse{
+		Forecaster: &pb.Forecaster{
+			ForecasterName:    req.Name,
+			ForecasterVersion: req.Version,
+		},
+	}, nil
+}
+
+// CreateLocation implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) CreateLocation(ctx context.Context, req *pb.CreateLocationRequest) (*pb.CreateLocationResponse, error) {
+	return &pb.CreateLocationResponse{
+		LocationUuid:  uuid.New().String(),
+		LocationName:  req.LocationName,
+		CapacityWatts: req.CapacityWatts,
+	}, nil
+}
+
+// CreateObservations implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) CreateObservations(ctx context.Context, req *pb.CreateObservationsRequest) (*pb.CreateObservationsResponse, error) {
+	return &pb.CreateObservationsResponse{}, nil
+}
+
+// CreateObserver implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) CreateObserver(ctx context.Context, req *pb.CreateObserverRequest) (*pb.CreateObserverResponse, error) {
+	return &pb.CreateObserverResponse{
+		ObserverId:   0,
+		ObserverName: req.Name,
+	}, nil
+}
+
+// GetForecastAsTimeseries implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) GetForecastAsTimeseries(ctx context.Context, req *pb.GetForecastAsTimeseriesRequest) (*pb.GetForecastAsTimeseriesResponse, error) {
+	var values []*pb.GetForecastAsTimeseriesResponse_Value
+	t := req.TimeWindow.StartTimestampUtc.AsTime()
+	for req.TimeWindow.EndTimestampUtc.AsTime().Sub(t) > 0 {
+		sd := determineIrradiance(t, randomUkLngLat())
+		values = append(values, &pb.GetForecastAsTimeseriesResponse_Value{
+			TimestampUtc:           timestamppb.New(t),
+			P50ValuePercent:        float32(sd.normalizedIrradiance()) * 100,
+			P10ValuePercent:        float32(sd.normalizedIrradiance()) * 95,
+			P90ValuePercent:        float32(sd.normalizedIrradiance()) * 105,
+			EffectiveCapacityWatts: 150e6,
+		})
+		t = t.Add(30 * time.Minute)
+	}
+
+	return &pb.GetForecastAsTimeseriesResponse{
+		LocationUuid: req.LocationUuid,
+		LocationName: "DummyLocation",
+		Values:       values,
+	}, nil
+}
+
+// GetForecastAtTimestamp implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) GetForecastAtTimestamp(ctx context.Context, req *pb.GetForecastAtTimestampRequest) (*pb.GetForecastAtTimestampResponse, error) {
+	values := make([]*pb.GetForecastAtTimestampResponse_Value, len(req.LocationUuids))
+	for i := range values {
+		ll := randomUkLngLat()
+		sd := determineIrradiance(req.TimestampUtc.AsTime(), ll)
+		values[i] = &pb.GetForecastAtTimestampResponse_Value{
+			LocationUuid:           req.LocationUuids[i],
+			LocationName:           fmt.Sprintf("DummyLocation%d", i),
+			Latlng:                 &pb.LatLng{Latitude: float32(ll.latDegs), Longitude: float32(ll.lonDegs)},
+			ValuePercent:           float32(sd.normalizedIrradiance()) * 100,
+			EffectiveCapacityWatts: 150e6,
+		}
+	}
+	return &pb.GetForecastAtTimestampResponse{
+		TimestampUtc: req.TimestampUtc,
+		Values:       values,
+	}, nil
+}
+
+// GetLatestForecasts implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) GetLatestForecasts(context.Context, *pb.GetLatestForecastsRequest) (*pb.GetLatestForecastsResponse, error) {
+	panic("unimplemented")
+}
+
+// GetLocation implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) GetLocation(ctx context.Context, req *pb.GetLocationRequest) (*pb.GetLocationResponse, error) {
+	var geometryWkb []byte
+	if req.IncludeGeometry {
+		geometryWkb = []byte("POLYGON((30 10, 40 40, 20 40, 10 20, 30 10))")
+	}
+	ll := randomUkLngLat()
+
+	return &pb.GetLocationResponse{
+		LocationUuid:  req.LocationUuid,
+		LocationName:  "DummyLocation",
+		Latlng:        &pb.LatLng{Latitude: float32(ll.latDegs), Longitude: float32(ll.lonDegs)},
+		CapacityWatts: 1280e3,
+		Metadata:      &structpb.Struct{},
+		GeometryWkb:   geometryWkb,
+	}, nil
+}
+
+// GetLocationsAsGeoJSON implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) GetLocationsAsGeoJSON(context.Context, *pb.GetLocationsAsGeoJSONRequest) (*pb.GetLocationsAsGeoJSONResponse, error) {
+	panic("unimplemented")
+}
+
+// GetLocationsWithin implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) GetLocationsWithin(ctx context.Context, req *pb.GetLocationsWithinRequest) (*pb.GetLocationsWithinResponse, error) {
+	locations := make([]*pb.GetLocationsWithinResponse_LocationData, 5)
+	for i := range locations {
+		locations[i] = &pb.GetLocationsWithinResponse_LocationData{
+			LocationUuid: uuid.New().String(),
+			LocationName: fmt.Sprintf("DummyLocation%d", i),
+		}
+	}
+
+	return &pb.GetLocationsWithinResponse{
+		Locations: locations,
+	}, nil
+}
+
+// GetObservationsAsTimeseries implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) GetObservationsAsTimeseries(ctx context.Context, req *pb.GetObservationsAsTimeseriesRequest) (*pb.GetObservationsAsTimeseriesResponse, error) {
+	values := make([]*pb.GetObservationsAsTimeseriesResponse_Value, 96)
+	location := lnglat{lonDegs: rand.Float64()*360 - 180, latDegs: rand.Float64()*180 - 90}
+	for i := range values {
+		t := req.TimeWindow.StartTimestampUtc.AsTime().Add(time.Duration(i) * 30 * time.Minute)
+		sd := determineIrradiance(t, location)
+		values[i] = &pb.GetObservationsAsTimeseriesResponse_Value{
+			TimestampUtc:           timestamppb.New(t),
+			ValuePercent:           float32(sd.normalizedIrradiance()) * 100,
+			EffectiveCapacityWatts: 150e6,
+		}
+	}
+
+	return &pb.GetObservationsAsTimeseriesResponse{
+		LocationUuid: req.LocationUuid,
+		LocationName: "DummyLocation",
+		Values:       values,
+	}, nil
+}
+
+// GetWeekAverageDeltas implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) GetWeekAverageDeltas(ctx context.Context, req *pb.GetWeekAverageDeltasRequest) (*pb.GetWeekAverageDeltasResponse, error) {
+	values := make([]*pb.GetWeekAverageDeltasResponse_AverageDelta, 96)
+	for i := range values {
+		values[i] = &pb.GetWeekAverageDeltasResponse_AverageDelta{
+			HorizonMins:            uint32(i * 30),
+			DeltaPercent:           rand.Float32()*10 - 5,
+			EffectiveCapacityWatts: 1000e3,
+		}
+	}
+
+	return &pb.GetWeekAverageDeltasResponse{
+		Deltas:        values,
+		InitTimeOfDay: req.PivotTime.AsTime().Format("15:04"),
+	}, nil
+}
+
+// StreamForecastData implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) StreamForecastData(req *pb.StreamForecastDataRequest, stream grpc.ServerStreamingServer[pb.StreamForecastDataResponse]) error {
+	var initializationTimestamps []time.Time
+	t := req.TimeWindow.StartTimestampUtc.AsTime()
+	for t.Sub(req.TimeWindow.EndTimestampUtc.AsTime()) < 0 {
+		initializationTimestamps = append(initializationTimestamps, t)
+		t = t.Add(1 * time.Hour)
+	}
+	horizons := make([]int, 96)
+	for i := range horizons {
+		horizons[i] = 30 * i
+	}
+
+	for _, it := range initializationTimestamps {
+		for _, fc := range req.Forecasters {
+			for _, h := range horizons {
+				tt := it.Add(time.Duration(h) * time.Minute)
+				sd := determineIrradiance(tt, randomUkLngLat())
+				var p90 *float32
+				var p10 *float32
+				p90val := float32(sd.normalizedIrradiance()) * 105
+				p10val := float32(sd.normalizedIrradiance()) * 95
+				p90 = &p90val
+				p10 = &p10val
+				err := stream.Send(&pb.StreamForecastDataResponse{
+					InitTimestamp:      timestamppb.New(it),
+					LocationUuid:       req.LocationUuid,
+					ForecasterFullname: fmt.Sprintf("%s:%s", fc.ForecasterName, fc.ForecasterVersion),
+					HorizonMins:        uint32(h),
+					P50Percent:         float32(sd.normalizedIrradiance()) * 100,
+					P10Percent:         p10,
+					P90Percent:         p90,
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// UpdateForecaster implements dp.DataPlatformServiceServer.
+func (d *DataPlatformServerImpl) UpdateForecaster(ctx context.Context, req *pb.UpdateForecasterRequest) (*pb.UpdateForecasterResponse, error) {
+	return &pb.UpdateForecasterResponse{
+		Forecaster: &pb.Forecaster{
+			ForecasterName:    req.Name,
+			ForecasterVersion: req.NewVersion,
+		},
+	}, nil
+}
+
+// Compile-time check to ensure the interface is implemented fully
+var _ pb.DataPlatformServiceServer = (*DataPlatformServerImpl)(nil)

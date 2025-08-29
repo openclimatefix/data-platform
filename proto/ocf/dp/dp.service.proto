@@ -10,50 +10,52 @@ service DataPlatformService {
 
   // --- QuartzUI ----------------------------------------------------------------
 
-  /* GetPredictedTimeseries fetches a horizontal slice of predicted data:
-   * i.e. many points in time at a single location.
+  /* GetForecastTimeseries fetches a horizontal slice of predicted data: many points in time for a
+   * single location. Since individually created forecasts can have overlapping time ranges,
+   * identically-timestamped values are discarded, excepting the one with the lowest allowable lead
+   * time.
    */
-  rpc GetPredictedTimeseries(GetPredictedTimeseriesRequest) returns (GetPredictedTimeseriesResponse) {}
-  /* GetPredictedTimeseriesDeltas fetches a horizontal slice of data:
-   * i.e. many points in time at a single location.
-   * The deltas represent the difference between the predicted and observed value at each time.
+  rpc GetForecastAsTimeseries(GetForecastAsTimeseriesRequest) returns (GetForecastAsTimeseriesResponse) {}
+  /* GetForecastAtTimestamp fetches a vertical slice of predicted data i.e. many locations at a
+   * single point in time. This is handy for display on a map, for instance.
    */
-  rpc GetPredictedTimeseriesDeltas(GetPredictedTimeseriesDeltasRequest) returns (GetPredictedTimeseriesDeltasResponse) {}
-  /* GetPredictedCrossSection fetches a vertical slice of predicted data:
-   * i.e. many locations at a single point in time.
+  rpc GetForecastAtTimestamp(GetForecastAtTimestampRequest) returns (GetForecastAtTimestampResponse) {}
+  /* GetObservationsAsTimeseries fetches a horizontal slice of observed data: many points in time for a
+   * single location.
    */
-  rpc GetPredictedCrossSection(GetPredictedCrossSectionRequest) returns (GetPredictedCrossSectionResponse) {}
-  /* GetObservedTimeseries fetches a horizontal slice of observed data:
-   * i.e. many points in time at a single location.
+  rpc GetObservationsAsTimeseries(GetObservationsAsTimeseriesRequest) returns (GetObservationsAsTimeseriesResponse) {}
+  /* GetLocationsWithin fetches all the locations contained within a given location.
    */
-  rpc GetObservedTimeseries(GetObservedTimeseriesRequest) returns (GetObservedTimeseriesResponse) {}
-
-  rpc GetLatestPredictions(GetLatestPredictionsRequest) returns (GetLatestPredictionsResponse) {}
-
-  rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
-
   rpc GetLocationsWithin(GetLocationsWithinRequest) returns (GetLocationsWithinResponse) {}
 
   // --- Crud ---------------------------------------------------------------------
 
-  rpc CreateSite(CreateSiteRequest) returns (CreateSiteResponse) {}
-  rpc CreateGsp(CreateGspRequest) returns (CreateGspResponse) {}
-
   rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
+  rpc CreateLocation(CreateLocationRequest) returns (CreateLocationResponse) {}
 
-  rpc CreateModel(CreateModelRequest) returns (CreateModelResponse) {}
+  rpc CreateForecaster(CreateForecasterRequest) returns (CreateForecasterResponse) {}
+  rpc UpdateForecaster(UpdateForecasterRequest) returns (UpdateForecasterResponse) {}
+
   rpc CreateForecast(CreateForecastRequest) returns (CreateForecastResponse) {}
+  rpc GetLatestForecasts(GetLatestForecastsRequest) returns (GetLatestForecastsResponse) {}
 
   rpc CreateObserver(CreateObserverRequest) returns (CreateObserverResponse) {}
   rpc CreateObservations(CreateObservationsRequest) returns (CreateObservationsResponse) {}
 
   // --- Analysis ----------------------------------------------------------------
 
+  /* GetLocationsAsGeoJSON fetches a given set of locations as GeoJSON, suitable for display on a
+   * map or for integration with GIS software.
+   */
+  rpc GetLocationsAsGeoJSON(GetLocationsAsGeoJSONRequest) returns (GetLocationsAsGeoJSONResponse) {}
   /* GetWeekAverageDeltas fetches the average delta at the given init time over the past week.
    * This is useful for making adjustments based on recent performance.
    */
   rpc GetWeekAverageDeltas(GetWeekAverageDeltasRequest) returns (GetWeekAverageDeltasResponse) {}
 
+  /* StreamForecastData streams forecast data for a given location, forecasters, and time range.
+   * Useful for analytics and performance monitoring.
+   */
   rpc StreamForecastData(StreamForecastDataRequest) returns (stream StreamForecastDataResponse) {}
 
 }

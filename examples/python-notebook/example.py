@@ -14,7 +14,7 @@
 
 import marimo
 
-__generated_with = "0.14.16"
+__generated_with = "0.15.1"
 app = marimo.App(width="medium")
 
 
@@ -31,79 +31,27 @@ def _():
     import marimo as mo
     import altair as alt
     from vega_datasets import data
-    return Channel, alt, betterproto, data, dp, dt, mo, pd
+    import uuid
+    return Channel, alt, betterproto, data, dp, dt, mo, pd, uuid
 
 
 @app.cell
 def _(mo):
-    mo.md(r"""## Connecting to the data platform""")
+    mo.md(
+        r"""
+    ## Connecting to the data platform
+
+    The data platform's generated code includes a stub that is used to initialize a client.
+    """
+    )
     return
 
 
 @app.cell
-def _(Channel, dp, dt):
+def _(Channel, dp):
     channel = Channel(host="localhost", port=50051)
     client = dp.DataPlatformServiceStub(channel)
-    pivot_timestamp = dt.datetime.now().replace(
-        minute=0, hour=0, second=0, microsecond=0, tzinfo=dt.UTC
-    )
-    return channel, client, pivot_timestamp
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""## Get the latest forecast values for a location and model""")
-    return
-
-
-@app.cell
-async def _(client, dp, pivot_timestamp):
-    request = dp.GetLatestPredictionsRequest(
-        location_id=1,
-        energy_source=dp.EnergySource.SOLAR,
-        pivot_timestamp_unix=pivot_timestamp,
-        model=dp.Model(
-            model_name="test_model_1",
-            model_version="v1",
-        ),
-    )
-    response = await client.get_latest_predictions(request)
-    response
-    return (response,)
-
-
-@app.cell
-def _(betterproto, pd, response):
-    response_df = pd.DataFrame.from_dict(
-        response.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["yields"]
-    )
-    response_df
-    return (response_df,)
-
-
-@app.cell
-def _(alt, response_df):
-    line = (
-        alt.Chart(response_df)
-        .mark_line()
-        .encode(
-            y="yield_percent",
-            x="timestamp_unix:T",
-        )
-    )
-    band = (
-        alt.Chart(response_df)
-        .mark_errorband(extent="ci")
-        .encode(
-            y="yield_p10_percent",
-            y2="yield_p90_percent",
-            x="timestamp_unix:T",
-        )
-    )
-
-    chart1 = line + band
-    chart1
-    return
+    return channel, client
 
 
 @app.cell
@@ -120,61 +68,105 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    horizon_slider = mo.ui.slider(start=0, stop=120, step=30, label="Horizon (mins)")
+    horizon_slider = mo.ui.slider(start=0, stop=300, step=30, label="Horizon (mins)")
     horizon_slider
     return (horizon_slider,)
 
 
 @app.cell
-async def _(client, dp, dt, horizon_slider, pivot_timestamp):
-    request2 = dp.GetPredictedTimeseriesRequest(
-        location_id=1,
+def _(mo):
+    month_slider = mo.ui.slider(start=0, stop=9, step=1, label="Lookback (months)")
+    month_slider
+    return (month_slider,)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""Note that timestamps should be converted to UTC before calling any RPCs!""")
+    return
+
+
+@app.cell
+def _(dt, month_slider):
+    pivot_timestamp = (
+        dt.datetime.now().replace(minute=0, second=0, microsecond=0)
+        - dt.timedelta(weeks=month_slider.value * 4)
+    ).astimezone(dt.UTC)
+    pivot_timestamp
+    return (pivot_timestamp,)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""First, create the request object with the dataclasses improted from the library code.""")
+    return
+
+
+@app.cell
+async def _(client, dp, dt, horizon_slider, pivot_timestamp, uuid):
+    gf_request = dp.GetForecastAsTimeseriesRequest(
         energy_source=dp.EnergySource.SOLAR,
+        forecaster=dp.Forecaster(forecaster_name="test_forecaster_1", forecaster_version="v1"),
         horizon_mins=horizon_slider.value,
+        location_uuid=str(uuid.uuid4()),
         time_window=dp.TimeWindow(
-            start_timestamp_unix=pivot_timestamp - dt.timedelta(hours=48),
-            end_timestamp_unix=pivot_timestamp,
-        ),
-        model=dp.Model(
-            model_name="test_model_1",
-            model_version="v1",
+            start_timestamp_utc=pivot_timestamp - dt.timedelta(hours=48),
+            end_timestamp_utc=pivot_timestamp + dt.timedelta(hours=36),
         ),
     )
-    response2 = await client.get_predicted_timeseries(request2)
-    response2
-    return (response2,)
+    gf_response = await client.get_forecast_as_timeseries(gf_request)
+    gf_response
+    return (gf_response,)
 
 
 @app.cell
-def _(betterproto, pd, response2):
-    response2_df = pd.DataFrame.from_dict(
-        response2.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["yields"]
-    )
-    response2_df
-    return (response2_df,)
+def _(mo):
+    mo.md(r"""The response can be easily transformed into a dataframe:""")
+    return
 
 
 @app.cell
-def _(alt, response2_df):
-    line2 = (
-        alt.Chart(response2_df)
+def _(betterproto, gf_response, pd):
+    gfdf = pd.DataFrame.from_dict(
+        gf_response.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["values"]
+    )
+    gfdf
+    return (gfdf,)
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        r"""
+    And the dataframe is trivial to plot.
+
+    Try changing the horizon and lookback and see the effect on the graph.
+    """
+    )
+    return
+
+
+@app.cell
+def _(alt, gfdf):
+    gf_p50_line = (
+        alt.Chart(gfdf)
         .mark_line()
         .encode(
-            y="yield_percent",
-            x="timestamp_unix:T",
+            y="p50_value_percent",
+            x="timestamp_utc:T",
         )
     )
-    band2 = (
-        alt.Chart(response2_df)
+    gf_band = (
+        alt.Chart(gfdf)
         .mark_errorband(extent="ci")
         .encode(
-            y="yield_p10_percent",
-            y2="yield_p90_percent",
-            x="timestamp_unix:T",
+            y="p10_value_percent",
+            y2="p90_value_percent",
+            x="timestamp_utc:T",
         )
     )
-    chart2 = line2 + band2
-    chart2
+    gf_chart = gf_band + gf_p50_line
+    gf_chart
     return
 
 
@@ -191,36 +183,36 @@ def _(mo):
 
 
 @app.cell
-async def _(client, dp, pivot_timestamp):
-    request3 = dp.GetWeekAverageDeltasRequest(
-        location_id=1,
+async def _(client, dp, pivot_timestamp, uuid):
+    gd_request = dp.GetWeekAverageDeltasRequest(
+        location_uuid=str(uuid.uuid4()),
         energy_source=dp.EnergySource.SOLAR,
         pivot_time=pivot_timestamp,
-        model=dp.Model(
-            model_name="test_model_1",
-            model_version="v1",
+        forecaster=dp.Forecaster(
+            forecaster_name="test_forecaster_1",
+            forecaster_version="v1",
         ),
         observer_name="test_observer",
     )
-    response3 = await client.get_week_average_deltas(request3)
-    response3
-    return (response3,)
+    gd_response = await client.get_week_average_deltas(gd_request)
+    gd_response
+    return (gd_response,)
 
 
 @app.cell
-def _(alt, betterproto, pd, response3):
-    response3_df = pd.DataFrame.from_dict(
-        response3.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["deltas"],
+def _(alt, betterproto, gd_response, pd):
+    gddf = pd.DataFrame.from_dict(
+        gd_response.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["deltas"],
     )
-    chart3 = (
-        alt.Chart(response3_df)
+    gd_chart = (
+        alt.Chart(gddf)
         .mark_point()
         .encode(
             y="delta_percent",
             x="horizon_mins",
         )
     )
-    chart3
+    gd_chart
     return
 
 
@@ -237,26 +229,28 @@ def _(mo):
 
 
 @app.cell
-async def _(client, dp, pivot_timestamp):
-    request4 = dp.GetPredictedCrossSectionRequest(
-        location_ids=list(range(11)),
+async def _(client, dp, pivot_timestamp, uuid):
+    gm_request = dp.GetForecastAtTimestampRequest(
+        location_uuids=[str(uuid.uuid4()) for i in range(10)],
         energy_source=dp.EnergySource.SOLAR,
-        model=dp.Model(
-            model_name="test_model_1",
-            model_version="v1",
+        forecaster=dp.Forecaster(
+            forecaster_name="test_forecaster_1",
+            forecaster_version="v1",
         ),
-        timestamp_unix=pivot_timestamp,
+        timestamp_utc=pivot_timestamp,
     )
-    response4 = await client.get_predicted_cross_section(request4)
-    response4
-    return (response4,)
+    gm_response = await client.get_forecast_at_timestamp(gm_request)
+    gm_response
+    return (gm_response,)
 
 
 @app.cell
-def _(betterproto, pd, response4):
-    response4_df = (
+def _(betterproto, gm_response, pd):
+    gmdf = (
         pd.DataFrame.from_dict(
-            response4.to_pydict(include_default_values=True, casing=betterproto.Casing.SNAKE)["yields"],
+            gm_response.to_pydict(include_default_values=True, casing=betterproto.Casing.SNAKE)[
+                "values"
+            ],
         )
         .assign(
             latitude=lambda d: pd.json_normalize(d["latlng"])["latitude"],
@@ -264,12 +258,12 @@ def _(betterproto, pd, response4):
         )
         .drop(columns="latlng")
     )
-    response4_df
-    return (response4_df,)
+    gmdf
+    return (gmdf,)
 
 
 @app.cell
-def _(alt, data, response4_df):
+def _(alt, data, gmdf):
     countries = alt.topo_feature(data.world_110m.url, "countries")
 
     projection = (
@@ -279,17 +273,17 @@ def _(alt, data, response4_df):
         .properties(width=500, height=300)
     )
     points = (
-        alt.Chart(response4_df)
+        alt.Chart(gmdf)
         .mark_point()
         .encode(
-            size="capacity_watts",
+            size="value_percent",
             longitude="longitude:Q",
             latitude="latitude:Q",
-            tooltip=["location_id", "location_name", "capacity_watts"],
+            tooltip=["location_uuid", "location_name", "effective_capacity_watts"],
         )
     )
-    chart4 = projection + points
-    chart4
+    gm_chart = projection + points
+    gm_chart
     return
 
 
@@ -306,28 +300,28 @@ def _(mo):
 
 
 @app.cell
-async def _(betterproto, client, dp, dt, pivot_timestamp):
-    request5 = dp.StreamForecastDataRequest(
-        location_id=1,
+async def _(betterproto, client, dp, dt, pivot_timestamp, uuid):
+    sd_request = dp.StreamForecastDataRequest(
+        location_uuid=str(uuid.uuid4()),
         energy_source=dp.EnergySource.SOLAR,
         time_window=dp.TimeWindow(
-            start_timestamp_unix=pivot_timestamp - dt.timedelta(days=7),
-            end_timestamp_unix=pivot_timestamp,
+            start_timestamp_utc=pivot_timestamp - dt.timedelta(days=7),
+            end_timestamp_utc=pivot_timestamp,
         ),
-        models=[
-            dp.Model(
-                model_name="test_model_1",
-                model_version="v1",
+        forecasters=[
+            dp.Forecaster(
+                forecaster_name="test_model_1",
+                forecaster_version="v1",
             ),
-            dp.Model(
-                model_name="test_model_2",
-                model_version="v1",
+            dp.Forecaster(
+                forecaster_name="test_model_2",
+                forecaster_version="v1",
             ),
         ],
     )
 
     forecasts = []
-    async for chunk in client.stream_forecast_data(request5):
+    async for chunk in client.stream_forecast_data(sd_request):
         forecasts.append(chunk.to_dict(casing=betterproto.Casing.SNAKE))
     return (forecasts,)
 
@@ -335,7 +329,7 @@ async def _(betterproto, client, dp, dt, pivot_timestamp):
 @app.cell
 def _(forecasts, pd):
     pd.DataFrame.from_dict(forecasts).set_index(
-        ["init_timestamp", "location_id", "model_fullname", "horizon_mins"]
+        ["init_timestamp", "location_uuid", "forecaster_fullname", "horizon_mins"]
     ).to_xarray()
     return
 
