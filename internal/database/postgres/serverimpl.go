@@ -27,8 +27,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	db "github.com/openclimatefix/data-platform/dp/internal/database/postgres/gen"
-	pb "github.com/openclimatefix/data-platform/dp/internal/gen/ocf/dp"
+	db "github.com/openclimatefix/data-platform/internal/database/postgres/gen"
+	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 
 	"github.com/rs/zerolog/log"
 )

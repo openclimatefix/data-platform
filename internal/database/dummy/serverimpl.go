@@ -16,8 +16,8 @@ import (
 	"math/rand/v2"
 	"time"
 
-	pb "github.com/openclimatefix/data-platform/dp/internal/gen/ocf/dp"
 	"github.com/google/uuid"
+	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"

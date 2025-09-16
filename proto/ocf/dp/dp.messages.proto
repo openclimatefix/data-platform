@@ -9,7 +9,7 @@ import "google/protobuf/struct.proto";
 import "buf/validate/validate.proto";
 import "ocf/dp/dp.rules.proto";
 
-option go_package = "github.com/openclimatefix/data-platform/dp/internal/protogen/ocf/dp;dp";
+option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
 
 // --- Common message types ----------------------------------------------------------------------
 
