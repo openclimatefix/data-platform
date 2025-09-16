@@ -16,8 +16,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - folder: examples/typescript-frontend
-            image: ghcr.io/openclimatefix/data-platform-frontend
           - folder: .
             image: ghcr.io/openclimatefix/data-platform-api
           - folder: internal/database/postgres/infra
