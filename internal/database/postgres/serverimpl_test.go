@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"buf.build/go/protovalidate"
-	pb "github.com/openclimatefix/dataplatform/dp/internal/gen/ocf/dp"
+	pb "github.com/openclimatefix/data-platform/dp/internal/gen/ocf/dp"
 	"github.com/google/uuid"
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	"github.com/jackc/pgx/v5"
