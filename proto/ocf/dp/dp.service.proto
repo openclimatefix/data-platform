@@ -4,7 +4,7 @@ package ocf.dp;
 
 import "ocf/dp/dp.messages.proto";
 
-option go_package = "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp;dp";
+option go_package = "github.com/opencliamtefix/data-platform/dp/internal/protogen/ocf/dp;dp";
 
 service DataPlatformService {
 

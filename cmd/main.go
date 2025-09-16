@@ -19,9 +19,9 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	dbdy "github.com/devsjc/fcfs/dp/internal/database/dummy"
-	dbpg "github.com/devsjc/fcfs/dp/internal/database/postgres"
-	pb "github.com/devsjc/fcfs/dp/internal/gen/ocf/dp"
+	dbdy "github.com/openclimatefix/data-platform/dp/internal/database/dummy"
+	dbpg "github.com/openclimatefix/data-platform/dp/internal/database/postgres"
+	pb "github.com/openclimatefix/data-platform/dp/internal/gen/ocf/dp"
 )
 
 func main() {
