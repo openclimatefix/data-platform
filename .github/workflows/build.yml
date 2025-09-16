@@ -17,11 +17,11 @@ jobs:
       matrix:
         include:
           - folder: examples/typescript-frontend
-            image: ghcr.io/openclimatefix/data-platfrom-frontend
+            image: ghcr.io/openclimatefix/data-platform-frontend
           - folder: .
-            image: ghcr.io/openclimatefix/data-platfrom-api
+            image: ghcr.io/openclimatefix/data-platform-api
           - folder: internal/database/postgres/infra
-            image: ghcr.io/openclimatefix/data-platfrom-pgdb
+            image: ghcr.io/openclimatefix/data-platform-pgdb
 
     steps:
       - name: Checkout repository
