@@ -1,4 +1,4 @@
-module github.com/devsjc/fcfs/dp
+module github.com/openclimatefix/data-platform/dp
 
 go 1.24.0
 
