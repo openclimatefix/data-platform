@@ -16,12 +16,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - folder: examples/typescript-frontend
-            image: ghcr.io/devsjc/fcfs-frontend
           - folder: .
-            image: ghcr.io/devsjc/fcfs-api
+            image: ghcr.io/openclimatefix/data-platform-api
           - folder: internal/database/postgres/infra
-            image: ghcr.io/devsjc/fcfs-pgdb
+            image: ghcr.io/openclimatefix/data-platform-pgdb
 
     steps:
       - name: Checkout repository
