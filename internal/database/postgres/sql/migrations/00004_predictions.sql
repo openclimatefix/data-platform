@@ -21,18 +21,18 @@ CREATE SCHEMA pred;
  */
 CREATE TABLE pred.predictors (
     predictor_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    predictor_name TEXT NOT NULL
-        CHECK (
-            LENGTH(predictor_name) > 0 AND LENGTH(predictor_name) < 64
-            AND predictor_name = LOWER(predictor_name)
-        ),
-    predictor_version TEXT NOT NULL
-        CHECK (
-            LENGTH(predictor_version) > 0 AND LENGTH(predictor_version) < 64
-            AND predictor_version = LOWER(predictor_version)
-        ),
-    created_at_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        CHECK (created_at_utc <= CURRENT_TIMESTAMP),
+    predictor_name TEXT NOT NULL,
+    CONSTRAINT predictor_name_format_check CHECK (
+        LENGTH(predictor_name) > 0 AND LENGTH(predictor_name) < 64
+        AND predictor_name = LOWER(predictor_name)
+    ),
+    predictor_version TEXT NOT NULL,
+    CONSTRAINT predictor_version_format_check CHECK (
+        LENGTH(predictor_version) > 0 AND LENGTH(predictor_version) < 64
+        AND predictor_version = LOWER(predictor_version)
+    ),
+    created_at_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT created_at_utc_nonfuture_check CHECK (created_at_utc <= CURRENT_TIMESTAMP),
     PRIMARY KEY (predictor_id),
     UNIQUE (predictor_name, predictor_version)
 );
@@ -49,13 +49,15 @@ CREATE TABLE pred.forecasts (
         REFERENCES loc.source_types(source_type_id)
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
-    value_resolution_mins SMALLINT NOT NULL
-        CHECK (value_resolution_mins > 0 AND value_resolution_mins <= 60),
-    init_time_utc TIMESTAMP NOT NULL
-        CHECK (
-            init_time_utc >= '2000-01-01 00:00:00'::timestamp
-            AND init_time_utc < CURRENT_TIMESTAMP + make_interval(days => 30)
-        ),
+    value_resolution_mins SMALLINT NOT NULL,
+    CONSTRAINT value_resolution_mins_size_check CHECK (
+        value_resolution_mins > 0 AND value_resolution_mins <= 60
+    ),
+    init_time_utc TIMESTAMP NOT NULL,
+    CONSTRAINT init_time_utc_recency_check CHECK (
+        init_time_utc >= '2000-01-01 00:00:00'::timestamp
+        AND init_time_utc < CURRENT_TIMESTAMP + make_interval(days => 30)
+    ),
     predictor_id INTEGER NOT NULL
         REFERENCES pred.predictors(predictor_id)
         ON UPDATE CASCADE
@@ -70,28 +72,32 @@ CREATE TABLE pred.forecasts (
 );
 
 /*
- * Table to store predicted generation values. Predicted generation values are the output of a
- * forecast model. There can only be one predicted generation per forecast per horizon. This table
- * gets very large very quickly, so to save space, data is stored as smallints where possible, and
- * the columns are ordered to allow for efficient bit-packing.
+ * Table to store predicted generation values.
+ * Predicted generation values are the output of a forecast model. There can only be one predicted
+ * generation per forecast per horizon. This table gets very large very quickly, so to save space,
+ * data is stored as smallints where possible, and the columns are ordered to allow for efficient
+ * bit-packing.
+ *
+ * The pXX columns are for predicted generation confidence level values, as a percentage of
+ * capacity represented by a smallint percentage (sip). Since it isn't impossible to predict a
+ * little over capacity, 30000 represents 100% of capacity intead of the max smallint value (32767).
+ * This is to allow for a little bit of leeway in the predictions.
+ *
+ * The horizon_mins column stores the number of minutes difference between the target_time_utc and
+ * the initialization time of the forecast. It is a more useful index for the kinds of query we
+ * care about, and enables determination of the init_time anyway.
+ * The table has native partitioning that can then be managed by pg_partman. Note that unique
+ * indexes will only work if they include the partition key.
  */
 CREATE TABLE pred.predicted_generation_values (
-    -- Could have the init_time_utc here to denormalise, but it is encoded in
-    -- the horizon value anyway, which is itself a more useful index 
-    horizon_mins SMALLINT NOT NULL
-        CHECK (horizon_mins >= 0),
-    -- Predicted generation confidence level values, as a percentage of capacity
-    -- represented by a smallint percentage (sip). Since it isn't impossible to
-    -- predict a little over capacity, 30000 represents 100% of capacity
-    -- intead of the max smallint value (32767). This is to allow for a
-    -- little bit of leeway in the predictions.
-    p50_sip SMALLINT NOT NULL
-        CHECK (p50_sip >= 0),
-    p10_sip SMALLINT DEFAULT NULL
-        CHECK (p10_sip IS NULL or p10_sip >= 0),
+    horizon_mins SMALLINT NOT NULL,
+    CONSTRAINT horizon_mins_nonnegative_check CHECK (horizon_mins >= 0),
+    p50_sip SMALLINT NOT NULL,
+    CONSTRAINT p50_sip_nonnegative_check CHECK (p50_sip >= 0),
+    p10_sip SMALLINT DEFAULT NULL,
+    CONSTRAINT p10_sip_nonnegative_check CHECK (p10_sip IS NULL or p10_sip >= 0),
     p90_sip SMALLINT DEFAULT NULL
         CHECK (p90_sip IS NULL or p90_sip >= 0),
-    -- Time that the predicted generation value corresponds to
     target_time_utc TIMESTAMP NOT NULL,
     metadata JSONB DEFAULT NULL
         CHECK (metadata IS NULL OR metadata != '{}'),
@@ -101,11 +107,14 @@ CREATE TABLE pred.predicted_generation_values (
         ON UPDATE CASCADE,
     PRIMARY KEY (forecast_uuid, target_time_utc, horizon_mins)
 )
--- Native partitioning. Note that unique indexes will only work if they include
--- the partition key.
 PARTITION BY RANGE (target_time_utc);
 
--- Manage partitions with pg_partman
+/*
+ * Manage partitions with pg_partman.
+ * Highlights:
+ * - `retention_keep_table = true`: detach old partitions instead of dropping them
+ * - `infinite_time_partitions = true`: retain detached partitions indefinitely for processing
+ */
 SELECT partman.create_parent(
     p_parent_table => 'pred.predicted_generation_values',
     p_control => 'target_time_utc',
@@ -117,10 +126,8 @@ SELECT partman.create_parent(
 );
 UPDATE partman.part_config
 SET retention = '1 month',
-    -- Detacth as opposed to dropping partitions
     retention_keep_table = true,
     retention_keep_index = false,
-    -- Retain the detatched partitions so they can be processed
     infinite_time_partitions = true
 WHERE parent_table = 'pred.predicted_generation_values';
 

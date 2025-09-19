@@ -9,7 +9,7 @@ import "google/protobuf/struct.proto";
 import "buf/validate/validate.proto";
 import "ocf/dp/dp.rules.proto";
 
-option go_package = "github.com/devsjc/fcfs/dp/internal/protogen/ocf/dp;dp";
+option go_package = "github.com/devsjc/fcfs/internal/protogen/ocf/dp;dp";
 
 // --- Common message types ----------------------------------------------------------------------
 
@@ -94,6 +94,10 @@ message GetForecastAsTimeseriesRequest {
   Forecaster forecaster = 5 [
     (buf.validate.field).required = true
   ];
+  string user_role = 6 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
+  ];
 }
 
 message GetForecastAsTimeseriesResponse {
@@ -122,6 +126,10 @@ message GetObservationsAsTimeseriesRequest {
   EnergySource energy_source = 3;
   TimeWindow time_window = 4 [
     (buf.validate.field).required = true
+  ];
+  string user_role = 5 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
   ];
 }
 
@@ -155,6 +163,10 @@ message GetForecastAtTimestampRequest {
   Forecaster forecaster = 4 [
     (buf.validate.field).required = true
   ];
+  string user_role = 5 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
+  ];
 }
 
 message GetForecastAtTimestampResponse {
@@ -185,6 +197,10 @@ message GetLatestForecastsRequest {
    * If not specified, the current time will be used.
    */
   google.protobuf.Timestamp pivot_timestamp_utc = 3;
+  string user_role = 4 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
+  ];
 }
 
 message GetLatestForecastsResponse {
@@ -292,6 +308,10 @@ message CreateLocationRequest {
   ];
   LocationType location_type = 5;
   optional google.protobuf.Struct metadata = 6;
+  string user_role = 7 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
+  ];
 }
 
 message CreateLocationResponse {
@@ -307,6 +327,10 @@ message GetLocationRequest {
   ];
   EnergySource energy_source = 2;
   bool include_geometry = 3;
+  string user_role = 4 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
+  ];
 }
 
 message GetLocationResponse {
@@ -363,6 +387,10 @@ message CreateObservationsRequest {
   repeated CreateObservationsRequest.Value values = 4 [
     (buf.validate.field).repeated.min_items = 1,
     (buf.validate.field).repeated.max_items = 10000
+  ];
+  string user_role = 5 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
   ];
 }
 
@@ -421,19 +449,24 @@ message GetWeekAverageDeltasResponse {
   ];
 }
 
-message GetLocationsWithinRequest {
-  string location_uuid = 1 [
+message ListLocationsRequest {
+  EnergySource energy_source = 1;
+  optional string enclosing_location_uuid = 2 [
     (buf.validate.field).string.uuid = true
+  ];
+  string user_role = 3 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
   ];
 }
 
-message GetLocationsWithinResponse {
+message ListLocationsResponse {
   message LocationData {
     string location_uuid = 1;
     string location_name = 2;
   }
 
-  repeated GetLocationsWithinResponse.LocationData locations = 1;
+  repeated ListLocationsResponse.LocationData locations = 1;
 }
 
 message StreamForecastDataRequest {
@@ -461,3 +494,18 @@ message StreamForecastDataResponse {
   optional float p90_percent = 7;
 }
 
+message AddLocationPolicyRequest {
+  repeated string location_uuids = 1 [
+    (buf.validate.field).string.uuid = true
+  ];
+  string user_role = 2 [
+    (buf.validate.field).string.min_len = 3,
+    (buf.validate.field).string.max_len = 64
+  ];
+  string scope = 3 [
+    (buf.validate.field).string.in = "OWNER",
+    (buf.validate.field).string.in = "VIEWER"
+  ];
+}
+
+message AddLocationPolicyResponse {}

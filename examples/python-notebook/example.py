@@ -14,7 +14,7 @@
 
 import marimo
 
-__generated_with = "0.15.1"
+__generated_with = "0.16.0"
 app = marimo.App(width="medium")
 
 
@@ -113,6 +113,7 @@ async def _(client, dp, dt, horizon_slider, pivot_timestamp, uuid):
             start_timestamp_utc=pivot_timestamp - dt.timedelta(hours=48),
             end_timestamp_utc=pivot_timestamp + dt.timedelta(hours=36),
         ),
+        user_role="TEST_OWNER",
     )
     gf_response = await client.get_forecast_as_timeseries(gf_request)
     gf_response
@@ -238,6 +239,7 @@ async def _(client, dp, pivot_timestamp, uuid):
             forecaster_version="v1",
         ),
         timestamp_utc=pivot_timestamp,
+        user_role="TEST_OWNER",
     )
     gm_response = await client.get_forecast_at_timestamp(gm_request)
     gm_response
@@ -343,11 +345,6 @@ def _(mo):
 @app.cell
 def _(channel):
     channel.close()
-    return
-
-
-@app.cell
-def _():
     return
 
 

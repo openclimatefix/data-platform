@@ -14,8 +14,12 @@ test:
 
 .PHONY: lint
 lint:
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
 	@go mod tidy
-	@go tool gofumpt -l -w .
+	@golangci-lint run \
+	   --show-stats=false --fix
+	@gofmt -l . # Lists files that are likely to be changed by the next command
+	@golangci-lint fmt
 	@uvx -q sqlfluff fix -q \
 		--disable-progress-bar \
 		--config=internal/database/postgres/sql/.sqlfluff.toml \
@@ -80,16 +84,19 @@ gen.proto.openapi:
 	npx redocly build-docs gen/openapi.yaml --output gen/index.html
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
-.PHONY: run
+.PHONY: run # Run the Data Platform GRPC API
 run:
 	DATABASE_URL=${DATABASE_URL} LOGLEVEL=DEBUG go run cmd/main.go
 
-.PHONY: run.db
+.PHONY: run.db # Run an instance of Postgres with the required extensions
 run.db:
 	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t fcfs-pgdb:local
 	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" fcfs-pgdb:local
 
-.PHONY: run.client
+.PHONY: run.client # Run a GRPC client to inspect the API
 run.client:
 	grpcui -plaintext localhost:50051
 
+.PHONY: run.notebook # Run a python notebook to inspect the API
+run.notebook: gen.proto.python
+	uvx marimo edit --headless --sandbox examples/python-notebook/example.py

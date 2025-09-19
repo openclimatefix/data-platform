@@ -27,6 +27,12 @@ $ make gen.proto.python
 $ uvx marimo edit --headless --sandbox examples/python-notebook/example.py 
 ```
 
+For ease, the above process is wrapped in a Makefile target:
+
+```bash
+$ make run.notebook
+```
+
 ### Typescript Frontend Client
 
 TODO!
@@ -111,11 +117,22 @@ This will fetch the dependencies, and install the git hooks required for develop
 > code up to date, and as such running `make init` is a necessary step towards a smooth development
 > experience.
 
-The server can then be run locally using
+### Running the API Server
+
+The server can br run locally with no database connection via a fake database implementation:
 
 ```bash
-$ go run cmd/main.go
+$ DATABASE_URL=fake go run cmd/main.go
 ```
+
+This will start the Data Platform API GRPC's server on `localhost:50051`. The RPCs can then be
+investigated using a tool such as [grpcurl](https://github.com/fullstorydev/grpcurl) or 
+[grpcui](https://fullstorydev/grpcui). In this testing mode, the data returned by the server is
+entirely generated and has little bearing on the request objects themselves.
+
+To connect to a real PostgresSQL database and have retention in the platform data, there is an
+example Docker compose file in `examples/docker-compose.yml`. This runs the Data Platform API
+server in a container, backed by Postgres, and includes a GRPC UI for testing.
 
 ### Testing
 

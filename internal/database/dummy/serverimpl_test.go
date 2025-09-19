@@ -1,16 +1,11 @@
 package dummy
 
 import (
-	// "os"
+	// "os".
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	// "gonum.org/v1/plot"
-	// "gonum.org/v1/plot/plotter"
-	// "gonum.org/v1/plot/vg"
-	// "gonum.org/v1/plot/vg/draw"
-	// "gonum.org/v1/plot/vg/vgimg"
 )
 
 func TestDetermineIrradience(t *testing.T) {
@@ -39,8 +34,12 @@ func TestDetermineIrradience(t *testing.T) {
 			date.AddDate(3452, 15, 242),
 			lnglat{60, 0},
 			SolarData{
-				sunriseTimeTst: date.AddDate(3452, 15, 242).Truncate(24 * time.Hour).Add(6 * time.Hour),
-				sunsetTimeTst:  date.AddDate(3452, 15, 242).Truncate(24 * time.Hour).Add(18 * time.Hour),
+				sunriseTimeTst: date.AddDate(3452, 15, 242).
+					Truncate(24 * time.Hour).
+					Add(6 * time.Hour),
+				sunsetTimeTst: date.AddDate(3452, 15, 242).
+					Truncate(24 * time.Hour).
+					Add(18 * time.Hour),
 				daylengthHours: 12,
 			},
 		},
@@ -68,7 +67,7 @@ func plotHelper(tb testing.TB, filename string) {
 
 	tb.Cleanup(func() {})
 
-	err := p.Save(40*vg.Centimeter, 20*vg.Centimeter, filename)
+	err := p.Save(40*vg.Centimetre, 20*vg.Centimetre, filename)
 	require.NoError(tb, err)
 }
 

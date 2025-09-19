@@ -38,6 +38,13 @@ BEGIN
 
     FOR loc_id IN SELECT location_uuid FROM loc.locations LOOP
 
+        -- Create location policies for the locations
+        INSERT INTO iam.location_policies
+            (role_id, service_account, location_uuid)
+        VALUES
+            (1, 'TEST_OWNER', loc_id),
+            (2, 'TEST_VIEWER', loc_id);
+
         INSERT INTO loc.sources_history
             (location_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc)
         SELECT

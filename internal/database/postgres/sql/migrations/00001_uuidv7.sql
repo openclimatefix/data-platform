@@ -57,6 +57,5 @@ COMMENT ON FUNCTION uuidv7_boundary(timestamptz) IS
 'Generate a non-random uuidv7 with the given timestamp (first 48 bits) and all random bits to 0. As the smallest possible uuidv7 for that timestamp, it may be used as a boundary for partitions.';
 
 -- +goose Down
-DROP FUNCTION versioning;
 DROP FUNCTION uuidv7_extract_timestamp;
 DROP FUNCTION uuidv7_boundary;
