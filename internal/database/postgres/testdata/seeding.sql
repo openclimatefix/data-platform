@@ -16,8 +16,8 @@ DECLARE
     num_pgvs_per_forecast INTEGER := forecast_length_mins / gv_resolution_mins;
     earliest_forecast_offset_mins INTEGER := num_forecasts_per_location * forecast_resolution_mins;
 BEGIN
-    -- Insert predictors
-    INSERT INTO pred.predictors (predictor_name, predictor_version)
+    -- Insert forecasters
+    INSERT INTO pred.forecasters (forecaster_name, forecaster_version)
     SELECT
         'test_model_' || i,
         'v1'
@@ -56,9 +56,9 @@ BEGIN
         FROM generate_series(1, 5) AS i;
 
         -- Insert forecasts for each location and model
-        FOR p_id IN SELECT predictor_id FROM pred.predictors LOOP
+        FOR p_id IN SELECT forecaster_id FROM pred.forecasters LOOP
             INSERT INTO pred.forecasts
-                (source_type_id, location_uuid, predictor_id, init_time_utc, value_resolution_mins)
+                (source_type_id, location_uuid, forecaster_id, init_time_utc, value_resolution_mins)
             SELECT
                 (SELECT source_type_id FROM loc.source_types WHERE source_type_name = 'SOLAR'),
                 loc_id,

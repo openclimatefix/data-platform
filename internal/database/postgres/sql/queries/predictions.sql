@@ -1,55 +1,55 @@
-/* --- Predictor ------------------------------------------------------------------------------ */
+/* --- Forecaster ------------------------------------------------------------------------------ */
 
--- name: CreatePredictor :one
-INSERT INTO pred.predictors (predictor_name, predictor_version) VALUES (
+-- name: CreateForecaster :one
+INSERT INTO pred.forecasters (forecaster_name, forecaster_version) VALUES (
     $1, $2
-) RETURNING predictor_id;
+) RETURNING forecaster_id;
 
--- name: GetPredictorElseLatest :one
-/* GetPredictor retrieves a predictor by its name and version.
+-- name: GetForecasterElseLatest :one
+/* GetForecaster retrieves a forecaster by its name and version.
  * If no version is provided (empty string), it defaults to the latest version
- * for the given predictor name.
+ * for the given forecaster name.
 */
 WITH desired_version AS (
     SELECT
-        COALESCE(NULLIF(sqlc.arg(predictor_version)::text, ''), (
-            SELECT predictor_version
-            FROM pred.predictors
-            WHERE predictor_name = $1
+        COALESCE(NULLIF(sqlc.arg(forecaster_version)::text, ''), (
+            SELECT forecaster_version
+            FROM pred.forecasters
+            WHERE forecaster_name = $1
             ORDER BY created_at_utc DESC
             LIMIT 1
         )) AS value
 )
 SELECT
-    p.predictor_id,
-    p.predictor_name,
-    p.predictor_version,
+    p.forecaster_id,
+    p.forecaster_name,
+    p.forecaster_version,
     p.created_at_utc
-FROM pred.predictors AS p
+FROM pred.forecasters AS p
 INNER JOIN desired_version ON true
-WHERE p.predictor_name = $1
-    AND p.predictor_version = desired_version.value;
+WHERE p.forecaster_name = $1
+    AND p.forecaster_version = desired_version.value;
 
 /* --- Forecasts ------------------------------------------------------------------------------ */
 
 -- name: CreateForecast :one
 INSERT INTO pred.forecasts (
-    location_uuid, source_type_id, predictor_id, init_time_utc, value_resolution_mins
+    location_uuid, source_type_id, forecaster_id, init_time_utc, value_resolution_mins
 ) VALUES (
     $1,
     $2,
     (
-        SELECT predictor_id FROM pred.predictors
-        WHERE predictor_name = $3 AND predictor_version = $4
+        SELECT forecaster_id FROM pred.forecasters
+        WHERE forecaster_name = $3 AND forecaster_version = $4
     ),
     $5,
     $6
-) RETURNING forecast_uuid, init_time_utc, source_type_id, location_uuid, predictor_id;
+) RETURNING forecast_uuid, init_time_utc, source_type_id, location_uuid, forecaster_id;
 
 -- name: CreateForecasts :batchone
 /* CreateForecasts inserts forecasts as a batch process, returning each newly created entry. */
 INSERT INTO pred.forecasts (
-    location_uuid, source_type_id, predictor_id, init_time_utc
+    location_uuid, source_type_id, forecaster_id, init_time_utc
 ) VALUES (
     $1, $2, $3, $4
 ) RETURNING *;
@@ -68,7 +68,7 @@ INSERT INTO pred.predicted_generation_values (
 
 -- name: GetLatestForecastAtHorizonSincePivot :one
 /* GetLatestForecastAtHorizonSincePivot retrieves the latest forecast for a given location,
- * source type, and predictor. Only forecasts that are older than the pivot time
+ * source type, and forecaster. Only forecasts that are older than the pivot time
  * minus the specified horizon are considered.
  */
 SELECT
@@ -76,32 +76,32 @@ SELECT
     f.init_time_utc,
     f.source_type_id,
     f.location_uuid,
-    f.predictor_id
+    f.forecaster_id
 FROM pred.forecasts AS f
 WHERE f.location_uuid = $1
     AND f.source_type_id = $2
-    AND f.predictor_id = $3
+    AND f.forecaster_id = $3
     AND f.init_time_utc
     <= sqlc.arg(pivot_timestamp)::timestamp - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
 ORDER BY f.init_time_utc DESC LIMIT 1;
 
 -- name: ListForecasts :many
-/* ListForecasts retrieves all the forecasts for a given location, source type, and predictor
+/* ListForecasts retrieves all the forecasts for a given location, source type, and forecaster
  * between the input times. It does not return forecast values.
  */
 SELECT
     f.forecast_uuid,
     f.init_time_utc,
     f.location_uuid,
-    sqlc.arg(predictor_name)::text AS predictor_name,
-    sqlc.arg(predictor_version)::text AS predictor_version
+    sqlc.arg(forecaster_name)::text AS forecaster_name,
+    sqlc.arg(forecaster_version)::text AS forecaster_version
 FROM pred.forecasts AS f
 WHERE f.location_uuid = $1
     AND f.source_type_id = $2
-    AND f.predictor_id = (
-        SELECT predictor_id FROM pred.predictors AS p
-        WHERE p.predictor_name = sqlc.arg(predictor_name)::text
-            AND p.predictor_version = sqlc.arg(predictor_version)::text
+    AND f.forecaster_id = (
+        SELECT forecaster_id FROM pred.forecasters AS p
+        WHERE p.forecaster_name = sqlc.arg(forecaster_name)::text
+            AND p.forecaster_version = sqlc.arg(forecaster_version)::text
     )
     AND f.init_time_utc BETWEEN
     sqlc.arg(start_timestamp)::timestamp
@@ -130,12 +130,12 @@ WHERE pg.forecast_uuid = $1;
  * with 0 representing 0% and 30000 representing 100% of capacity.
  */
 WITH relevant_forecasts AS (
-    /* Get all the forecasts that fall within the time window for the given location, source, and predictor */
+    /* Get all the forecasts that fall within the time window for the given location, source, and forecaster */
     SELECT f.forecast_uuid
     FROM pred.forecasts AS f
     WHERE f.location_uuid = $1
         AND f.source_type_id = $2
-        AND f.predictor_id = $3
+        AND f.forecaster_id = $3
         AND f.init_time_utc BETWEEN
         sqlc.arg(start_timestamp)::timestamp
         - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
@@ -193,7 +193,7 @@ WITH relevant_forecasts AS (
     FROM pred.forecasts AS f
     WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::uuid [])
         AND f.source_type_id = $1
-        AND f.predictor_id = $2
+        AND f.forecaster_id = $2
         AND f.init_time_utc
         <= sqlc.arg(time)::timestamp - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
 ),
@@ -219,7 +219,7 @@ WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::integer;
 
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed generation values
- * for a given source type, predictor, and observer, across a week of forecasts made with the same init time.
+ * for a given source type, forecaster, and observer, across a week of forecasts made with the same init time.
  * The pivot timestamp is used to determine the week and init time of interest.
  * The results are grouped by location and horizon.
  */
@@ -239,12 +239,12 @@ relevant_forecasts AS (
         f.init_time_utc,
         f.source_type_id,
         f.location_uuid,
-        f.predictor_id
+        f.forecaster_id
     FROM pred.forecasts AS f
     INNER JOIN desired_init_times dit ON f.init_time_utc = dit.init_time_utc
     WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::uuid [])
         AND f.source_type_id = $1
-        AND f.predictor_id = $2
+        AND f.forecaster_id = $2
 ),
 relevant_predicted_values AS (
     SELECT

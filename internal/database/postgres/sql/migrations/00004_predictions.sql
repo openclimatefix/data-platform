@@ -19,22 +19,22 @@ CREATE SCHEMA pred;
  * but could also be an analytical process. Each forecaster's name and version number uniquely
  * identifies it.
  */
-CREATE TABLE pred.predictors (
-    predictor_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    predictor_name TEXT NOT NULL,
-    CONSTRAINT predictor_name_format_check CHECK (
-        LENGTH(predictor_name) > 0 AND LENGTH(predictor_name) < 64
-        AND predictor_name = LOWER(predictor_name)
+CREATE TABLE pred.forecasters (
+    forecaster_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    forecaster_name TEXT NOT NULL,
+    CONSTRAINT forecaster_name_format_check CHECK (
+        LENGTH(forecaster_name) > 0 AND LENGTH(forecaster_name) < 64
+        AND forecaster_name = LOWER(forecaster_name)
     ),
-    predictor_version TEXT NOT NULL,
-    CONSTRAINT predictor_version_format_check CHECK (
-        LENGTH(predictor_version) > 0 AND LENGTH(predictor_version) < 64
-        AND predictor_version = LOWER(predictor_version)
+    forecaster_version TEXT NOT NULL,
+    CONSTRAINT forecaster_version_format_check CHECK (
+        LENGTH(forecaster_version) > 0 AND LENGTH(forecaster_version) < 64
+        AND forecaster_version = LOWER(forecaster_version)
     ),
     created_at_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT created_at_utc_nonfuture_check CHECK (created_at_utc <= CURRENT_TIMESTAMP),
-    PRIMARY KEY (predictor_id),
-    UNIQUE (predictor_name, predictor_version)
+    PRIMARY KEY (forecaster_id),
+    UNIQUE (forecaster_name, forecaster_version)
 );
 
 /*
@@ -58,8 +58,8 @@ CREATE TABLE pred.forecasts (
         init_time_utc >= '2000-01-01 00:00:00'::timestamp
         AND init_time_utc < CURRENT_TIMESTAMP + make_interval(days => 30)
     ),
-    predictor_id INTEGER NOT NULL
-        REFERENCES pred.predictors(predictor_id)
+    forecaster_id INTEGER NOT NULL
+        REFERENCES pred.forecasters(forecaster_id)
         ON UPDATE CASCADE
         ON DELETE CASCADE,
     location_uuid UUID NOT NULL
@@ -68,7 +68,7 @@ CREATE TABLE pred.forecasts (
         ON DELETE CASCADE,
     forecast_uuid UUID DEFAULT uuidv7() NOT NULL,
     PRIMARY KEY (forecast_uuid),
-    UNIQUE (location_uuid, source_type_id, predictor_id, init_time_utc)
+    UNIQUE (location_uuid, source_type_id, forecaster_id, init_time_utc)
 );
 
 /*

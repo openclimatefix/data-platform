@@ -174,28 +174,28 @@ func (s *DataPlatformServerImpl) CreateForecaster(
 	querier := db.New(tx)
 	defer tx.Rollback(ctx)
 
-	// Check if the predictor already exists and error out if so
-	gpParams := db.GetPredictorElseLatestParams{
-		PredictorName:    req.Name,
-		PredictorVersion: req.Version,
+	// Check if the forecaster already exists and error out if so
+	gpParams := db.GetForecasterElseLatestParams{
+		ForecasterName:    req.Name,
+		ForecasterVersion: req.Version,
 	}
 
-	dbPredictor, err := querier.GetPredictorElseLatest(ctx, gpParams)
+	dbForecaster, err := querier.GetForecasterElseLatest(ctx, gpParams)
 	if err == nil {
 		return nil, status.Errorf(
 			codes.InvalidArgument,
 			"Forecaster with name '%s' already exists (at version '%s'). Use the update method to add a new version, or create a non-existing forecaster.",
-			dbPredictor.PredictorName,
-			dbPredictor.PredictorVersion,
+			dbForecaster.ForecasterName,
+			dbForecaster.ForecasterVersion,
 		)
 	}
 
-	// Create a new predictor
-	params := db.CreatePredictorParams{PredictorName: req.Name, PredictorVersion: req.Version}
+	// Create a new forecaster
+	params := db.CreateForecasterParams{ForecasterName: req.Name, ForecasterVersion: req.Version}
 
-	forecasterID, err := querier.CreatePredictor(ctx, params)
+	forecasterID, err := querier.CreateForecaster(ctx, params)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreatePredictor(%+v)", params)
+		l.Err(err).Msgf("querier.CreateForecaster(%+v)", params)
 
 		return nil, status.Errorf(
 			codes.InvalidArgument,
@@ -227,12 +227,12 @@ func (s *DataPlatformServerImpl) UpdateForecaster(
 	querier := db.New(tx)
 	defer tx.Rollback(ctx)
 
-	// Check if the predictor already exists and error out if not
-	gpParams := db.GetPredictorElseLatestParams{
-		PredictorName: req.Name,
+	// Check if the forecaster already exists and error out if not
+	gpParams := db.GetForecasterElseLatestParams{
+		ForecasterName: req.Name,
 	}
 
-	dbPredictor, err := querier.GetPredictorElseLatest(ctx, gpParams)
+	dbForecaster, err := querier.GetForecasterElseLatest(ctx, gpParams)
 	if err != nil {
 		return nil, status.Errorf(
 			codes.InvalidArgument,
@@ -242,14 +242,14 @@ func (s *DataPlatformServerImpl) UpdateForecaster(
 	}
 
 	// Update the forecaster
-	params := db.CreatePredictorParams{
-		PredictorName:    dbPredictor.PredictorName,
-		PredictorVersion: req.NewVersion,
+	params := db.CreateForecasterParams{
+		ForecasterName:    dbForecaster.ForecasterName,
+		ForecasterVersion: req.NewVersion,
 	}
 
-	forecasterID, err := querier.CreatePredictor(ctx, params)
+	forecasterID, err := querier.CreateForecaster(ctx, params)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreatePredictor(%+v)", params)
+		l.Err(err).Msgf("querier.CreateForecaster(%+v)", params)
 
 		return nil, status.Errorf(
 			codes.InvalidArgument,
@@ -309,10 +309,10 @@ func (s *DataPlatformServerImpl) StreamForecastData(
 	forecasts := make([]db.ListForecastsRow, 0)
 	for _, forecaster := range req.Forecasters {
 		fcParams := db.ListForecastsParams{
-			LocationUuid:     dbSource.LocationUuid,
-			SourceTypeID:     dbSource.SourceTypeID,
-			PredictorName:    forecaster.ForecasterName,
-			PredictorVersion: forecaster.ForecasterVersion,
+			LocationUuid:      dbSource.LocationUuid,
+			SourceTypeID:      dbSource.SourceTypeID,
+			ForecasterName:    forecaster.ForecasterName,
+			ForecasterVersion: forecaster.ForecasterVersion,
 			StartTimestamp: pgtype.Timestamp{
 				Time:  req.TimeWindow.StartTimestampUtc.AsTime(),
 				Valid: true,
@@ -374,8 +374,8 @@ func (s *DataPlatformServerImpl) StreamForecastData(
 				LocationUuid:  forecast.LocationUuid.String(),
 				ForecasterFullname: fmt.Sprintf(
 					"%s:%s",
-					forecast.PredictorName,
-					forecast.PredictorVersion,
+					forecast.ForecasterName,
+					forecast.ForecasterVersion,
 				),
 				HorizonMins: uint32(dbPreds[i].HorizonMins),
 				P50Percent:  (float32(dbPreds[i].P50Sip) / 30000.0) * 100.0,
@@ -504,15 +504,15 @@ func (s *DataPlatformServerImpl) GetWeekAverageDeltas(
 		)
 	}
 
-	// Get the relevant predictor
-	pctParams := db.GetPredictorElseLatestParams{
-		PredictorName:    req.Forecaster.ForecasterName,
-		PredictorVersion: req.Forecaster.ForecasterVersion,
+	// Get the relevant forecaster
+	pctParams := db.GetForecasterElseLatestParams{
+		ForecasterName:    req.Forecaster.ForecasterName,
+		ForecasterVersion: req.Forecaster.ForecasterVersion,
 	}
 
-	dbPredictor, err := querier.GetPredictorElseLatest(ctx, pctParams)
+	dbForecaster, err := querier.GetForecasterElseLatest(ctx, pctParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetPredictorElseLatest(%+v)", pctParams)
+		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", pctParams)
 
 		return nil, status.Errorf(
 			codes.NotFound, "No forecaster found for name '%s' and version '%s'.",
@@ -537,7 +537,7 @@ func (s *DataPlatformServerImpl) GetWeekAverageDeltas(
 	// Get the deltas
 	avgParams := db.GetWeekAverageDeltasForLocationsParams{
 		SourceTypeID:   dbSource.SourceTypeID,
-		PredictorID:    dbPredictor.PredictorID,
+		ForecasterID:   dbForecaster.ForecasterID,
 		ObserverID:     dbObserver.ObserverID,
 		PivotTimestamp: pgtype.Timestamp{Time: req.PivotTime.AsTime(), Valid: true},
 		LocationUuids:  []uuid.UUID{locationUuid},
@@ -813,15 +813,15 @@ func (s *DataPlatformServerImpl) GetForecastAtTimestamp(
 	querier := db.New(tx)
 	defer tx.Rollback(ctx)
 
-	// Get the relevant predictor
-	params := db.GetPredictorElseLatestParams{
-		PredictorName:    req.Forecaster.ForecasterName,
-		PredictorVersion: req.Forecaster.ForecasterVersion,
+	// Get the relevant forecaster
+	params := db.GetForecasterElseLatestParams{
+		ForecasterName:    req.Forecaster.ForecasterName,
+		ForecasterVersion: req.Forecaster.ForecasterVersion,
 	}
 
-	dbPredictor, err := querier.GetPredictorElseLatest(ctx, params)
+	dbForecaster, err := querier.GetForecasterElseLatest(ctx, params)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetPredictorElseLatest(%+v)", params)
+		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", params)
 
 		return nil, status.Errorf(
 			codes.NotFound, "No forecaster found for name '%s' and version '%s'.",
@@ -830,8 +830,8 @@ func (s *DataPlatformServerImpl) GetForecastAtTimestamp(
 	}
 
 	l.Debug().Msgf(
-		"Using predictor '%s:%s' with ID %d",
-		dbPredictor.PredictorName, dbPredictor.PredictorVersion, dbPredictor.PredictorID,
+		"Using forecaster '%s:%s' with ID %d",
+		dbForecaster.ForecasterName, dbForecaster.ForecasterVersion, dbForecaster.ForecasterID,
 	)
 
 	// Get the capacities of the locations
@@ -876,7 +876,7 @@ func (s *DataPlatformServerImpl) GetForecastAtTimestamp(
 	params3 := db.ListPredictionsAtTimeForLocationsParams{
 		LocationUuids: ids,
 		SourceTypeID:  dbSources[0].SourceTypeID,
-		PredictorID:   dbPredictor.PredictorID,
+		ForecasterID:  dbForecaster.ForecasterID,
 		Time:          pgtype.Timestamp{Time: req.TimestampUtc.AsTime(), Valid: true},
 		HorizonMins:   0,
 	}
@@ -1053,14 +1053,14 @@ func (s *DataPlatformServerImpl) CreateForecast(
 	resolution_mins := req.Values[1].HorizonMins - req.Values[0].HorizonMins // TODO: Check they are all the same
 
 	// Check the forecaster exists
-	pctParams := db.GetPredictorElseLatestParams{
-		PredictorName:    req.Forecast.Forecaster.ForecasterName,
-		PredictorVersion: req.Forecast.Forecaster.ForecasterVersion,
+	pctParams := db.GetForecasterElseLatestParams{
+		ForecasterName:    req.Forecast.Forecaster.ForecasterName,
+		ForecasterVersion: req.Forecast.Forecaster.ForecasterVersion,
 	}
 
-	_, err = querier.GetPredictorElseLatest(ctx, pctParams)
+	_, err = querier.GetForecasterElseLatest(ctx, pctParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetPredictorElseLatest(%+v)", pctParams)
+		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", pctParams)
 
 		return nil, status.Errorf(
 			codes.NotFound, "No forecaster found for name '%s' and version '%s'."+
@@ -1073,8 +1073,8 @@ func (s *DataPlatformServerImpl) CreateForecast(
 	params2 := db.CreateForecastParams{
 		LocationUuid:        locationUuid,
 		SourceTypeID:        dbSource.SourceTypeID,
-		PredictorName:       req.Forecast.Forecaster.ForecasterName,
-		PredictorVersion:    req.Forecast.Forecaster.ForecasterVersion,
+		ForecasterName:      req.Forecast.Forecaster.ForecasterName,
+		ForecasterVersion:   req.Forecast.Forecaster.ForecasterVersion,
 		ValueResolutionMins: int16(resolution_mins),
 		InitTimeUtc: pgtype.Timestamp{
 			Time:  req.Forecast.InitTimeUtc.AsTime(),
@@ -1337,15 +1337,15 @@ func (s *DataPlatformServerImpl) GetForecastAsTimeseries(
 		)
 	}
 
-	// Get the relevant predictor
-	gpParams := db.GetPredictorElseLatestParams{
-		PredictorName:    req.Forecaster.ForecasterName,
-		PredictorVersion: req.Forecaster.ForecasterVersion,
+	// Get the relevant forecaster
+	gpParams := db.GetForecasterElseLatestParams{
+		ForecasterName:    req.Forecaster.ForecasterName,
+		ForecasterVersion: req.Forecaster.ForecasterVersion,
 	}
 
-	dbPredictor, err := querier.GetPredictorElseLatest(ctx, gpParams)
+	dbForecaster, err := querier.GetForecasterElseLatest(ctx, gpParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetPredictorElseLatest(%+v)", gpParams)
+		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", gpParams)
 
 		return nil, status.Errorf(
 			codes.NotFound, "No forecaster found for name '%s' and version '%s'.",
@@ -1362,7 +1362,7 @@ func (s *DataPlatformServerImpl) GetForecastAsTimeseries(
 
 	lpParams := db.ListPredictionsForLocationParams{
 		LocationUuid:   dbSource.LocationUuid,
-		PredictorID:    dbPredictor.PredictorID,
+		ForecasterID:   dbForecaster.ForecasterID,
 		SourceTypeID:   dbSource.SourceTypeID,
 		HorizonMins:    int32(req.HorizonMins),
 		StartTimestamp: start,

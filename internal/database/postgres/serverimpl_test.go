@@ -842,7 +842,7 @@ func TestCreateForecast(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
-	// Create a predictor
+	// Create a forecaster
 	_, err = c.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
 		Name:    "test_model_1",
 		Version: "v1",
