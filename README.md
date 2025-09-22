@@ -1,41 +1,22 @@
-# GRPC Data Platform
+# Data Platform
 
-**Reimagining OCF's Data Platform for Performance and Useability**
+**A complete redesign of OCF's forecast data stack for performance and useability.**
 
-- 2 orders of magnitude faster than current dataplatform (milliseconds vs seconds)
-- Able to scale to fit OCF's ambition for increased size and scope
-- Fully typed implementations in Python and Typescript
-- Simple to understand due to codegen of boilerplate
-- Costly metrics and blend apps obsoleted with on-the-fly calculation capability
-- Safer data platform with single, considered source of entry to database
-- Unlocks greater depth of analysis with geometries, capacity limits, history and more
+<p align="center">
+  <picture align="center">
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/f1b3a35f-4fc5-4a62-b6f3-ed41ddcfb6ed">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/16e95933-8978-4517-b3d4-57b8e669526b">
+    <img width="762" height="285" alt="Shows a bar chart with benchmark results." src="https://github.com/user-attachments/assets/16e95933-8978-4517-b3d4-57b8e669526b">
+  </picture>
+</p>
 
-
-## Usage
-
-### Python Notebook Client
-
-There is an example Python notebook outlining using the Data Platform as a data analysis tool.
-It shows an how an analysis workflow would use the generated python library code. To run it,
-ensure first that the Data Platform Server is running on `localhost:50051`
-(see [Getting Started](#getting-started)); and that colocated with the script are the latest
-generated Python bindings (see [Generating Code](#generating-code)). Then use
-[uvx](https://docs.astral.sh/uv/reference/cli/#uv-tool-run) to run the notebook:
-
-```bash
-$ make gen.proto.python
-$ uvx marimo edit --headless --sandbox examples/python-notebook/example.py 
-```
-
-For ease, the above process is wrapped in a Makefile target:
-
-```bash
-$ make run.notebook
-```
-
-### Typescript Frontend Client
-
-TODO!
+- ⚡️ 2 orders of magnitude faster than current OCF stack (milliseconds vs seconds)
+- 📏 Performant in scaling tests to 50x current org scope
+- 💸 Cheaper deployment stack as metrics and blend apps obsoleted for on-the-fly calculation capability
+- 🐍 Fully typed client implementations in Python and Typescript
+- 💅 Simple to understand due to codegen of boilerplate
+- 🤝 Safer deployment architecture with single, considered source of entry to database
+- 🔧 Unlocks greater depth of analysis with geometries, capacity limits, history and more
 
 
 ## Architecture
@@ -68,7 +49,6 @@ Changes to the schema modifies the data contract, and will require client and se
 implementations to regenerate their bindings and update their code. As such they should be made
 with purpose and care.
 
-
 ### Database schema
 
 The Data Platform uses a PostgreSQL database to store its data. The schema for this database is
@@ -89,7 +69,6 @@ to be optimal with regards to its indexes.
 These changes can be made without having to update the data contract, and so will not require
 updates to clients using the Data Platform.
 
-
 ### Server
 
 The Database Schema is mapped to the External Schema by implementing the server interface generated
@@ -97,6 +76,28 @@ from the Data Contract. This is done in `internal/database/<database>/serverimpl
 more than a conversion layer, with the business logic shared between the implemented functions and
 the SQL queries.
 
+
+## Usage
+
+### Python Notebook Client
+
+There is an example Python notebook outlining using the Data Platform as a data analysis tool.
+It shows an how an analysis workflow would use the generated python library code. To run it,
+ensure first that the Data Platform Server is running on `localhost:50051`
+(see [Getting Started](#getting-started)); and that colocated with the script are the latest
+generated Python bindings (see [Generating Code](#generating-code)). Then use
+[uvx](https://docs.astral.sh/uv/reference/cli/#uv-tool-run) to run the notebook:
+
+```bash
+$ make gen.proto.python
+$ uvx marimo edit --headless --sandbox examples/python-notebook/example.py 
+```
+
+For ease, the above process is wrapped in a Makefile target:
+
+```bash
+$ make run.notebook
+```
 
 
 ## Development
@@ -223,7 +224,7 @@ Processed 909596 bytes, 0.910 megabytes (SI)
 ───────────────────────────────────────────────────────────────────────────────
 ```
 
-(Produced via `$ scc --exclude-dir=".git,examples,proto/buf,proto/google"`)
+(Produced via `$ scc --exclude-dir=".git,examples,proto/buf,proto/google"`. Data may be out of date.)
 
 </details>
 
