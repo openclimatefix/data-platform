@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# Ensure in repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT" || exit 1
+
+make gen
+if [ $? -eq 0 ]; then
+    echo "Generated boilerplate files"
+else
+    echo "ERROR: code generation failed. Check above output and fix errors."
+    echo "Then re-run `make gen`"
+fi

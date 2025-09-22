@@ -1,0 +1,51 @@
+name: Unit Test
+
+on:
+  push:
+    branches-ignore: ['main']
+    paths-ignore: ['README.md', 'examples/**', '/github/workflows/bench.yml', '/github/workflows/build.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up UV
+        uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
+
+      - name: Set up Protoc compiler
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+      
+      - name: Check code generation
+        run: go install tool && make gen
+
+      - name: Check linting
+        run: |
+          OUTPUT=$(make lint)
+          if [ -n "$OUTPUT" ]; then
+            echo "Linting errors found:"
+            echo "$OUTPUT"
+            exit 1
+          else
+            echo "No linting errors found."
+          fi
+
+      - name: Run unit tests
+        run: make test
+
+      - name: Test Summary
+        uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2.4
+        with:
+          paths: "unit-tests.xml"
+          output: "test-summary.md"
+        if: always()

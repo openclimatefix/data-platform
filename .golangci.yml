@@ -1,0 +1,44 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - godot
+    - misspell
+    - perfsprint
+    - wsl_v5
+  settings:
+    govet:
+      settings:
+         printf:
+          funcs:
+            - (github.com/rs/zerolog.Event).Msgf
+            - (google.golang.org/grpc/status).Errorf
+    godot:
+      period: true
+      capital: true
+    misspell:
+      locale: UK
+    extra-words:
+      - typo: "platfrom"
+        correction: "platform"
+    wsl_v5:
+      default: all
+      allow-whole-block: true
+      branch-max-lines: 4
+      disable:
+        - assign
+
+formatters:
+  enable:
+    - goimports
+    - golines
+    - gofumpt
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/devsjc/fcfs
+    gofumpt:
+      module-path: github.com/devsjc/fcfs
