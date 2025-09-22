@@ -10,13 +10,13 @@
   </picture>
 </p>
 
-- ⚡️ 2 orders of magnitude faster than current OCF stack (milliseconds vs seconds)
-- 📏 Performant in scaling tests to 50x current org scope
-- 💸 Cheaper deployment stack as metrics and blend apps obsoleted for on-the-fly calculation capability
-- 🐍 Fully typed client implementations in Python and Typescript
-- 💅 Simple to understand due to codegen of boilerplate
-- 🤝 Safer deployment architecture with single, considered source of entry to database
-- 🔧 Unlocks greater depth of analysis with geometries, capacity limits, history and more
+- **Two orders of magnitude faster** than current OCF stack (milliseconds vs seconds)
+- **Performant at scale** (tested to 50x current org scope)
+- **Cheaper deployment stack** as metrics and blend apps obsoleted for on-the-fly calculation capability
+- **Fully typed** client implementations in Python and Typescript
+- **Simple** to understand due to codegen of boilerplate
+- **Safer deployment architecture** with single, considered source of entry to database
+- Unlocks greater depth of analysis with geometries, capacity limits, history and more
 
 
 ## Architecture
