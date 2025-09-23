@@ -4,6 +4,7 @@ on:
   push:
     branches-ignore: ['main']
     paths-ignore: ['README.md', 'examples/**', '.github/workflows/bench.yml', '.github/workflows/test.yml']
+    tags: ['v*.*.*']
 
 jobs:
   build-container:
@@ -16,12 +17,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - folder: examples/typescript-frontend
-            image: ghcr.io/devsjc/fcfs-frontend
           - folder: .
-            image: ghcr.io/devsjc/fcfs-api
+            image: ghcr.io/openclimatefix/data-platform-api
           - folder: internal/database/postgres/infra
-            image: ghcr.io/devsjc/fcfs-pgdb
+            image: ghcr.io/openclimatefix/data-platform-pgdb
 
     steps:
       - name: Checkout repository

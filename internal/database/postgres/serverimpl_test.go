@@ -865,19 +865,20 @@ func TestCreateForecast(t *testing.T) {
 	for i := range yields {
 		yields[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 30),
-			P50Pct:      float32(50 + i*5),
-			P10Pct:      float32(40 + i*5),
-			P90Pct:      float32(60 + i*5),
+			P50Watts:    uint64((0.5 + float64(i)*0.05) * float64(siteResp.CapacityWatts)),
+			P10Watts:    uint64((0.4 + float64(i)*0.05) * float64(siteResp.CapacityWatts)),
+			P90Watts:    uint64((0.6 + float64(i)*0.05) * float64(siteResp.CapacityWatts)),
 			Metadata:    metadata,
 		}
 	}
 
 	req := &pb.CreateForecastRequest{
 		Forecast: &pb.CreateForecastRequest_Forecast{
-			LocationUuid: siteResp.LocationUuid,
-			Forecaster:   &pb.Forecaster{ForecasterName: "test_model_1", ForecasterVersion: "v1"},
-			EnergySource: pb.EnergySource_SOLAR,
-			InitTimeUtc:  timestamppb.New(time.Now().UTC()),
+			LocationUuid:  siteResp.LocationUuid,
+			Forecaster:    &pb.Forecaster{ForecasterName: "test_model_1", ForecasterVersion: "v1"},
+			EnergySource:  pb.EnergySource_SOLAR,
+			InitTimeUtc:   timestamppb.New(time.Now().UTC()),
+			CapacityWatts: siteResp.CapacityWatts,
 		},
 		Values: yields,
 	}
@@ -922,9 +923,9 @@ func BenchmarkPostgresClient(b *testing.B) {
 		for i := range yields {
 			yields[i] = &pb.CreateForecastRequest_ForecastValue{
 				HorizonMins: uint32(i * 30),
-				P50Pct:      50,
-				P10Pct:      50,
-				P90Pct:      50,
+				P50Watts:    50,
+				P10Watts:    50,
+				P90Watts:    50,
 				Metadata:    metadata,
 			}
 		}
@@ -1007,6 +1008,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 						InitTimeUtc: timestamppb.New(
 							pivotTime.Add(time.Duration(rand.Int64N(2000000)) * time.Minute),
 						),
+						CapacityWatts: 5000,
 					},
 					Values: yields,
 				})

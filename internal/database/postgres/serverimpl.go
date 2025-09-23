@@ -1094,8 +1094,8 @@ func (s *DataPlatformServerImpl) CreateForecast(
 	// Create the forecast data
 	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
 	for i, value := range req.Values {
-		p10sip := int16((value.P10Pct / 100.0) * 30000.0)
-		p90sip := int16((value.P90Pct / 100.0) * 30000.0)
+		p10sip := int16((value.P10Watts / req.Forecast.CapacityWatts) * 30000.0)
+		p90sip := int16((value.P90Watts / req.Forecast.CapacityWatts) * 30000.0)
 
 		metadata, err := value.Metadata.MarshalJSON()
 		if err != nil {
@@ -1110,7 +1110,7 @@ func (s *DataPlatformServerImpl) CreateForecast(
 
 		paramsList[i] = db.CreatePredictedValuesParams{
 			HorizonMins:  int16(value.HorizonMins),
-			P50Sip:       int16((value.P50Pct / 100.0) * 30000.0),
+			P50Sip:       int16((value.P50Watts / req.Forecast.CapacityWatts) * 30000.0),
 			ForecastUuid: dbForecast.ForecastUuid,
 			TargetTimeUtc: pgtype.Timestamp{
 				Time: req.Forecast.InitTimeUtc.AsTime().Add(
