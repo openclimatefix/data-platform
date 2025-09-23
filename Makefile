@@ -90,8 +90,8 @@ run:
 
 .PHONY: run.db # Run an instance of Postgres with the required extensions
 run.db:
-	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t fcfs-pgdb:local
-	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" fcfs-pgdb:local
+	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t data-platform-pgdb:local
+	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" data-platform-pgdb:local
 
 .PHONY: run.client # Run a GRPC client to inspect the API
 run.client:

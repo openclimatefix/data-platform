@@ -1,7 +1,7 @@
-name: fcfs
+name: data-platform
 
 networks:
-  fcfs-net:
+  data-platform-net:
     driver: bridge
 
 volumes:
@@ -23,7 +23,7 @@ services:
         condition: service_healthy
         restart: true
     networks:
-      - fcfs-net
+      - data-platform-net
 
   database:
     build:
@@ -40,7 +40,7 @@ services:
     ports:
       - "5400:5432"
     networks:
-      - fcfs-net
+      - data-platform-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 10s
@@ -55,7 +55,7 @@ services:
     command: ["-plaintext", "api:50051"]
     depends_on: ["api"]
     networks:
-      - fcfs-net
+      - data-platform-net
 
 
 configs:

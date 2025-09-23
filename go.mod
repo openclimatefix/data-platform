@@ -1,4 +1,4 @@
-module github.com/devsjc/fcfs
+module github.com/openclimatefix/data-platform
 
 go 1.24.0
 

@@ -27,7 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/devsjc/fcfs/internal/gen/ocf/dp"
+	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
 // --- HELPERS ------------------------------------------------------------------------------------
