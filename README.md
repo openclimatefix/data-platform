@@ -81,11 +81,11 @@ the SQL queries.
 
 ### Python Notebook Client
 
-There is an example Python notebook outlining using the Data Platform as a data analysis tool.
-It shows an how an analysis workflow would use the generated python library code. To run it,
-ensure first that the Data Platform Server is running on `localhost:50051`
-(see [Getting Started](#getting-started)); and that colocated with the script are the latest
-generated Python bindings (see [Generating Code](#generating-code)). Then use
+There is an example Python notebook, written with [Marimo](https://docs.marimo.io/), demonstrating
+using the Data Platform as a data analysis tool. It shows an how an analysis workflow would use the
+generated python library code. To run it, ensure first that the Data Platform Server is running on
+`localhost:50051` (see [Getting Started](#getting-started)); and that the python bindings have been
+generated (see [Generating Code](#generating-code)). Then use
 [uvx](https://docs.astral.sh/uv/reference/cli/#uv-tool-run) to run the notebook:
 
 ```bash

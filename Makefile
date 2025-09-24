@@ -53,16 +53,33 @@ gen.proto:
 
 # --- EXTERNAL GENERATION TARGETS --------------------------------------------------------------- #
 
+define pyproj =
+[build-system]
+requires = ["setuptools>=67", "wheel", "setuptools-git-versioning>=2.0,<3"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "dp-sdk"
+dynamic = ["version"]
+description = "Python client for OCF Data Platform API"
+dependencies = ["betterproto==2.0.0b7", "grpcio"]
+[tool.setuptools.packages.find]
+where = ["src"]
+[tool.setuptools-git-versioning]
+enabled = true
+endef
+
 .PHONY: gen.proto.python
 gen.proto.python:
-	find examples/python-notebook ! -name 'example.py' -type f -exec rm -f {} +
-	rm -rf gen/python && mkdir -p gen/python
+	@echo "Generating Python client bindings..."
+	@rm -rf gen/python && mkdir -p gen/python/src/dp_sdk
 	uvx --from 'betterproto[compiler]==2.0.0b7' protoc \
 		proto/ocf/dp/*.proto \
 		-I=proto \
 		--python_betterproto_opt=typing.310 \
-		--python_betterproto_out=gen/python
-	cp -r gen/python/* examples/python-notebook/
+		--python_betterproto_out=gen/python/src/dp_sdk
+	@echo "$$pyproj" > gen/python/pyproject.toml
+	@echo "Building wheel..."
+	@cd gen/python && uv build && cd ../..
 
 .PHONY: gen.proto.typescript
 gen.proto.typescript:

@@ -12,8 +12,6 @@
 protogen
 genproto
 gen
-examples/python-notebook/*
-!examples/python-notebook/exmaple.py
 
 # Test binary, built with `go test -c`
 *.test

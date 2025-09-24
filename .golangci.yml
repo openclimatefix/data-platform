@@ -39,6 +39,6 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/devsjc/fcfs
+        - github.com/openclimatefix/data-platform
     gofumpt:
-      module-path: github.com/devsjc/fcfs
+      module-path: github.com/openclimatefix/data-platform
