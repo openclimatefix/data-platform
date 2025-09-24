@@ -86,6 +86,9 @@ jobs:
         run: |
           go run golang.org/x/perf/cmd/benchstat@latest ${{ steps.base-benchfile.outputs.name }} ${{ steps.head-benchfile.outputs.name }} > bench-diff.txt
           cat bench-diff.txt
+          echo 'summary<<EOF' >> $GITHUB_OUTPUT
+          cat bench-diff.txt >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
 
       - name: Write results to markdown file
         env:
@@ -105,12 +108,13 @@ jobs:
       - name: Write benchmark diff to markdown file
         if: github.event_name == 'pull_request' && steps.cache-base-bench.outputs.cache-hit == 'true'
         run: |
+          BENCH_DIFF="${{ steps.bench-diff.outputs.summary }}"
           {
             echo ""
             echo "<details><summary>Benchmark vs base branch</summary>"
             echo ""
             echo "```"
-            cat "bench-diff.txt"
+            echo "$BENCH_DIFF"
             echo "```"
             echo "</details>"
           } >> bench-comment.md
