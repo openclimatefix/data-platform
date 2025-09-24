@@ -47,6 +47,7 @@ jobs:
         run: echo "path=$(go env GOPATH)" >> "$GITHUB_OUTPUT"
 
       - name: Restore gobin cache
+        id: cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
@@ -54,18 +55,15 @@ jobs:
             ${{ steps.gopaths.outputs.path }}/include
           key: ${{ runner.os }}-gobin-${{ hashfiles('Makefile') }}
 
-      - name: Create cache mount
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        id: cache
-        with:
-          path: cache-mount
-          key: cache-mount-${{ hashFiles('Containerfile') }}
-
-      - name: Inject cache mount
+      - name: Inject gobin cache
         uses: reproducible-containers/buildkit-cache-dance@5b81f4d29dc8397a7d341dba3aeecc7ec54d6361 # v3.3.0
         with:
           builder: ${{ steps.setup-buildx.outputs.name }}
-          cache-dir: cache-mount
+          cache-map: |
+            {
+              "${{ steps.gopaths.outputs.path }}/bin": "/go/bin",
+              "${{ steps.gopaths.outputs.path }}/include": "/go/include"
+            }
           dockerfile: Containerfile
           skip-extraction: ${{ steps.cache.outputs.cache-hit }}
  

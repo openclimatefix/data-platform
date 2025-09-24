@@ -2,10 +2,7 @@ FROM golang:1.24 AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV GOPATH=/go
-RUN \
-    --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
