@@ -229,6 +229,8 @@ func (s *seedDBParams) NumPgvRows() int {
 // --- Tests --------------------------------------------------------------------------------------
 
 func TestCapacityToMultiplier(t *testing.T) {
+	t.Parallel()
+
 	type TestCase struct {
 		capacityWatts      uint64
 		expectedValue      int16
@@ -463,35 +465,35 @@ func TestCreateUpdateForecaster(t *testing.T) {
 		{
 			name: "Should create forecaster",
 			createReq: &pb.CreateForecasterRequest{
-				Name:    "test_model_1",
+				Name:    "test_forecaster_1",
 				Version: "v1",
 			},
 		},
 		{
 			name: "Should update existing forecaster",
 			updateReq: &pb.UpdateForecasterRequest{
-				Name:       "test_model_1",
+				Name:       "test_forecaster_1",
 				NewVersion: "v2",
 			},
 		},
 		{
 			name: "Shouldn't update with non-unique version",
 			updateReq: &pb.UpdateForecasterRequest{
-				Name:       "test_model_1",
+				Name:       "test_forecaster_1",
 				NewVersion: "v2",
 			},
 		},
 		{
 			name: "Shouldn't update non-existent forecaster",
 			updateReq: &pb.UpdateForecasterRequest{
-				Name:       "non_existent_model",
+				Name:       "non_existent_forecaster",
 				NewVersion: "v1",
 			},
 		},
 		{
 			name: "Shouldn't create existing forecaster",
 			createReq: &pb.CreateForecasterRequest{
-				Name:    "test_model_1",
+				Name:    "test_forecaster_1",
 				Version: "v2",
 			},
 		},
