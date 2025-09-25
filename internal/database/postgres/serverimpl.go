@@ -391,7 +391,6 @@ func (s *DataPlatformServerImpl) StreamForecastData(
 	return nil
 }
 
-// GetLocationsWithin implements dp.DataPlatformServiceServer.
 func (s *DataPlatformServerImpl) ListLocations(
 	ctx context.Context,
 	req *pb.ListLocationsRequest,
