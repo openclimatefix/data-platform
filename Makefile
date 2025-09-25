@@ -1,11 +1,16 @@
+# --- DEVELOPMENT TARGETS ------------------------------------------------------------------- #
+
 .PHONY: init
 init:
+	@GO_BIN="$${GOPATH:-$${HOME}/go}/bin"; \
+	if ! echo "$${PATH}" | grep -q "$${GO_BIN}"; then \
+		export PATH="$${PATH}:$${GO_BIN}"; \
+	fi
 	@echo "Installing Go dependencies..."
-	go get ./...
-	go install tool
+	@go get ./...
+	@echo " * Success."
 	@echo "Adding git hooks..."
 	@git config --local core.hooksPath .github/hooks
-	@echo "Generating boilerplate code..."
 	@make gen
 
 .PHONY: test
@@ -32,14 +37,19 @@ bench:
 .PHONY: gen
 gen: gen.db gen.proto
 
+# --- SUPPLEMENTARY TARGETS ---------------------------------------------------------------------- #
+
 .PHONY: gen.db
 gen.db:
+	@go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
 	@echo "Generating internal database code..."
-	@go tool sqlc generate --file internal/database/postgres/.sqlc.yaml
+	@sqlc generate --file internal/database/postgres/.sqlc.yaml
 	@echo " * Success."
 
 .PHONY: gen.proto
-gen.proto:
+gen.proto: install.protoc
+	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+	@go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.9
 	@echo "Generating internal protobuf code..."
 	@rm -rf internal/gen && mkdir -p internal/gen
 	@protoc \
@@ -50,6 +60,24 @@ gen.proto:
 		--go-grpc_out=require_unimplemented_servers=false:internal/gen \
 		--go-grpc_opt=paths=source_relative
 	@echo " * Success."
+
+.PHONY: install.protoc
+# Apologies, I'm installing it to gobin since it's already on the path, and I'm assuming (I know)
+# all devs have ARM macs...
+install.protoc:
+	@GO_PATH="$${GOPATH:-$${HOME}/go}"; \
+	if [ ! -f "$${GO_PATH}/bin/protoc" ]; then \
+		echo "Installing protoc..."; \
+		PB_REL="https://github.com/protocolbuffers/protobuf/releases" ;\
+		PB_VER="32.1" ;\
+		if [ "$$(uname -s)" = "Darwin" ]; then \
+			curl -L "$${PB_REL}/download/v$${PB_VER}/protoc-$${PB_VER}-osx-aarch_64.zip" -o /tmp/protoc.zip; \
+		elif [ "$$(uname -s)" = "Linux" ]; then \
+			curl -L "$${PB_REL}/download/v$${PB_VER}/protoc-$${PB_VER}-linux-x86_64.zip" -o /tmp/protoc.zip; \
+		else \
+			echo "Unsupported OS: $$(uname -s)"; exit 1; \
+		fi && unzip /tmp/protoc.zip -x readme.txt -d "$${GO_PATH}" && rm /tmp/protoc.zip; \
+	fi;
 
 # --- EXTERNAL GENERATION TARGETS --------------------------------------------------------------- #
 
@@ -69,10 +97,10 @@ enabled = true
 endef
 
 .PHONY: gen.proto.python
-gen.proto.python:
+gen.proto.python: install.protoc
 	@echo "Generating Python client bindings..."
 	@rm -rf gen/python && mkdir -p gen/python/src/dp_sdk
-	uvx --from 'betterproto[compiler]==2.0.0b7' protoc \
+	@uvx --from 'betterproto[compiler]==2.0.0b7' protoc \
 		proto/ocf/dp/*.proto \
 		-I=proto \
 		--python_betterproto_opt=typing.310 \
@@ -82,25 +110,26 @@ gen.proto.python:
 	@cd gen/python && uv build && cd ../..
 
 .PHONY: gen.proto.typescript
-gen.proto.typescript:
+gen.proto.typescript: install.protoc
 	@test -s protoc-gen-ts || npm install -g @protobuf-ts/plugin
-	rm -rf gen/typescript && mkdir -p gen/typescript
-	protoc \
+	@rm -rf gen/typescript && mkdir -p gen/typescript
+	@protoc \
 		proto/ocf/dp/*.proto \
 		-I=proto \
 		--ts_out=gen/typescript \
 
 .PHONY: gen.proto.openapi
-gen.proto.openapi:
-	rm -rf gen/openapi && mkdir -p gen/openapi
+gen.proto.openapi: install.protoc
+	@rm -rf gen/openapi && mkdir -p gen/openapi
 	@test -s protoc-gen-openapi || go install github.com/googleapis/gnostic/apps/protoc-gen-openapi@latest
-	protoc \
+	@protoc \
 		proto/ocf/dp/*.proto \
 		-I=proto \
 		--openapi_out=gen/openapi
-	npx redocly build-docs gen/openapi.yaml --output gen/index.html
+	@npx redocly build-docs gen/openapi.yaml --output gen/index.html
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
+
 .PHONY: run # Run the Data Platform GRPC API
 run:
 	DATABASE_URL=${DATABASE_URL} LOGLEVEL=DEBUG go run cmd/main.go
