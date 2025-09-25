@@ -109,15 +109,15 @@ jobs:
         if: github.event_name == 'pull_request' && steps.cache-base-bench.outputs.cache-hit == 'true'
         run: |
           BENCH_DIFF="${{ steps.bench-diff.outputs.summary }}"
-          {
-            echo ""
-            echo "<details><summary>Benchmark vs base branch</summary>"
-            echo ""
-            echo "```"
-            echo "$BENCH_DIFF"
-            echo "```"
-            echo "</details>"
-          } >> bench-comment.md
+          cat <<EOF >> bench-comment.md
+
+          <details><summary>Benchmark vs base branch</summary>
+
+          \`\`\`
+          $BENCH_DIFF
+          \`\`\`
+          </details>
+          EOF
 
       - name: Upload benchmark results
         if: github.event_name == 'pull_request'
