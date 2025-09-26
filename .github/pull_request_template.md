@@ -1,3 +1,4 @@
+- [ ] Have you followed the Open Climate Fix [Contribution Guidelines](https://github.com/openclimatefix#github-contributions)?
 - [ ] Have you referenced the [Issue](https://github.com/openclimatefix/data-platform/issues) this PR addresses?
 - [ ] Have you checked to ensure there aren't other open [Pull Requests](https://github.com/Homebrew/brew/pulls) for the same change?
 - [ ] Have you added a summary of the changes?
