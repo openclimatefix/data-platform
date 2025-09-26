@@ -1,0 +1,51 @@
+name: New issue for Reproducible Bug
+description: Description of of a bug to be fixed in the Data Platform
+type: "Bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!Caution]
+        > The maintainers may close your issue without comment if you do not fill out the issue checklist below and provide ALL the requested information.
+  - type: textarea
+    attributes:
+      render: shell
+      label: "`make doctor` output"
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Verification
+      description: Please verify that you've followed these steps. If you cannot truthfully check these boxes, open a discussion at https://github.com/openclimatefix/data-platform/discussions instead.
+      options:
+        - label: I have searched the existing issues to ensure this bug has not already been reported.
+          required: true
+        - label: I have run `make init` locally.
+          required: true
+        - label: I have been able to reproduce this bug locally.
+          required: false
+  - type: textarea
+    attributes:
+      label: What were you trying to do (and why)?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What happened (including relevant commands, logs etc)?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Step-by-step reproduction instructions (optional).
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        > [!NOTE]
+        > The maintainers will close this issue or ask you to create a pull-request if it's something the maintainers are not actively planning to work on.

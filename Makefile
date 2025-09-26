@@ -37,6 +37,12 @@ bench:
 .PHONY: gen
 gen: gen.db gen.proto
 
+.PHONY: doctor
+doctor:
+	@go version
+	@protoc --version || echo "protoc not installed"
+	@echo "sqlc $$(sqlc version || echo "not installed")"
+
 # --- SUPPLEMENTARY TARGETS ---------------------------------------------------------------------- #
 
 .PHONY: gen.db
