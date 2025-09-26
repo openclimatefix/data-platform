@@ -20,6 +20,8 @@ body:
       options:
         - label: I have searched the existing issues to ensure this bug has not already been reported.
           required: true
+        - label: I have run `make init` locally.
+          required: true
         - label: I have been able to reproduce this bug locally.
           required: false
   - type: textarea
