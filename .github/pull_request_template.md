@@ -1,0 +1,7 @@
+- [ ] Have you referenced the [Issue](https://github.com/openclimatefix/data-platform/issues) this PR addresses?
+- [ ] Have you checked to ensure there aren't other open [Pull Requests](https://github.com/Homebrew/brew/pulls) for the same change?
+- [ ] Have you added a summary of the changes?
+- [ ] Have you written new tests for your changes?.
+- [ ] Have you successfully run `make lint` with your changes locally?
+- [ ] Have you successfully run `make gen` with your changes locally?
+- [ ] Have you successfully run `make test` with your changes locally?
