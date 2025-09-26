@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Get help in GitHub Discussions
+    url: https://github.com/openclimatefix/data-platform/discussions
+    about: Have a question? Not sure if your issue affects everyone reproducibly, or want to flag a feature that isn't fully fleshed out yet? Head to the discussions page!

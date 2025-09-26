@@ -1,0 +1,33 @@
+name: New Issue for Feature Suggestion
+description: Description of a feature to be added to the Data Platform
+type: "Feature"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!Caution]
+        > The maintainers may close your issue without comment if you do not fill out the issue checklist below and provide ALL the requested information.
+  - type: checkboxes
+    attributes:
+      label: Verification
+      description: Please verify that you've followed these steps.
+      options:
+        - label: I have searched the existing issues to ensure this feature has not already been requested.
+          required: true
+  - type: textarea
+    attributes:
+      label: Provide a detailed description of the proposed feature.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What is the motivation for the feature?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+  - type: markdown
+    attributes:
+      value: |
+        > [!NOTE]
+        > The maintainers will close this issue or ask you to create a pull-request if it's something the maintainers are not actively planning to work on.
