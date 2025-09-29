@@ -3,7 +3,7 @@
 # dependencies = [
 #     "altair==5.5.0",
 #     "betterproto==2.0.0b7",
-#     "dp_sdk @ ${PROJECT_ROOT/gen/python",
+#     "dp_sdk @ ${PROJECT_ROOT}/gen/python",
 #     "marimo",
 #     "grpclib==0.4.8",
 #     "pandas==2.3.1",
@@ -33,7 +33,8 @@ def _():
     import altair as alt
     from vega_datasets import data
     import uuid
-    return Channel, alt, betterproto, data, dp, dt, mo, pd, uuid
+    from betterproto.lib.google.protobuf import Struct
+    return Channel, Struct, alt, betterproto, data, dp, dt, mo, pd, uuid
 
 
 @app.cell
@@ -53,6 +54,103 @@ def _(Channel, dp):
     channel = Channel(host="localhost", port=50051)
     client = dp.DataPlatformServiceStub(channel)
     return channel, client
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        r"""
+    ## Create a location
+
+    Locations are created with an energy source type, a geometry, a capacity, and metadata.
+    """
+    )
+    return
+
+
+@app.cell
+async def _(Struct, client, dp):
+    cl_request = dp.CreateLocationRequest(
+        capacity_watts=10, # Be explicit about effective capacity, add capacity cap field
+        energy_source=dp.EnergySource.SOLAR,
+        geometry_wkt="POINT(0.54 52.49)",
+        location_type=dp.LocationType.SITE,
+        location_name="EXAMPLE_LOCATION",
+        metadata=Struct().from_pydict({"test": "test"}),
+        user_role="EXAMPLE_USER",  # Subject to change
+    )
+    cl_response = await client.create_location(cl_request)
+    cl_response
+    return (cl_response,)
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        r"""
+    ## Create and update a forecaster
+
+    Forecasters are defined by their name and version.
+    """
+    )
+    return
+
+
+@app.cell
+async def _(client, dp):
+    cf_request = dp.CreateForecasterRequest(
+        name="example_forecaster",
+        version="v0.1.0",
+    )
+    cf_response = await client.create_forecaster(cf_request)
+
+    uf_request = dp.UpdateForecasterRequest(
+        name="example_forecaster",
+        new_version="v0.1.1",
+    )
+    uf_response = await client.update_forecaster(uf_request)
+    uf_response
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        r"""
+    ## Save a forecast
+
+    Forecasts need knowledge of the models that produced them and the locations they are being produced for.
+    """
+    )
+    return
+
+
+@app.cell
+async def _(Struct, cl_response, client, dp, dt):
+    cv_request = dp.CreateForecastRequest(
+        forecast=dp.CreateForecastRequestForecast(
+            forecaster=dp.Forecaster(
+                forecaster_name="example_forecaster"
+            ),  # Unspecified version -> latest
+            location_uuid=cl_response.location_uuid,
+            capacity_watts=cl_response.capacity_watts, # And remove this
+            energy_source=dp.EnergySource.SOLAR,
+            init_time_utc=dt.datetime.now(tz=dt.UTC).replace(hour=0, minute=0, second=0, microsecond=0),
+        ),
+        values=[
+            dp.CreateForecastRequestForecastValue(
+                horizon_mins=i * 60,
+                p10_watts=50000 + i, # Maybe also change these to p10_value_fraction
+                p50_watts=60000 + i,
+                p90_watts=70000 + i,
+                metadata=Struct().from_pydict({"member": 39, "p75": 65000 + i}),
+            )
+            for i in range(37)
+        ],
+    )
+    cv_response = await client.create_forecast(cv_request)
+    cv_response
+    return
 
 
 @app.cell
