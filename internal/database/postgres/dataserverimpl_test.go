@@ -161,7 +161,7 @@ func seed(tb testing.TB, pgConnString string, params seedDBParams) (output struc
 }
 
 // Create a GRPC client for running tests with.
-func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformServiceClient {
+func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformDataServiceClient {
 	tb.Helper()
 	// Create server using in-memory listener
 
@@ -173,7 +173,9 @@ func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformServiceClien
 	)
 	lis := bufconn.Listen(1024 * 1024)
 
-	pb.RegisterDataPlatformServiceServer(s, NewPostgresDataPlatformServerImpl(pgConnString))
+	pool := NewPostgresPool(pgConnString)
+	dataServerImpl := NewDataPlatformDataServiceServerImpl(pool)
+	pb.RegisterDataPlatformDataServiceServer(s, dataServerImpl)
 
 	go func() {
 		if err := s.Serve(lis); err != nil {
@@ -192,7 +194,7 @@ func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformServiceClien
 	)
 	require.NoError(tb, err)
 
-	c := pb.NewDataPlatformServiceClient(cc)
+	c := pb.NewDataPlatformDataServiceClient(cc)
 
 	tb.Logf("GRPC client created successfully")
 

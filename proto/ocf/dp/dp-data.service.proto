@@ -2,13 +2,11 @@ syntax = "proto3";
 
 package ocf.dp;
 
-import "ocf/dp/dp.messages.proto";
+import "ocf/dp/dp-data.messages.proto";
 
 option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
 
-service DataPlatformService {
-
-  // --- QuartzUI ----------------------------------------------------------------
+service DataPlatformDataService {
 
   /* GetForecastTimeseries fetches a horizontal slice of predicted data: many points in time for a
    * single location. Since individually created forecasts can have overlapping time ranges,
@@ -41,8 +39,6 @@ service DataPlatformService {
 
   rpc CreateObserver(CreateObserverRequest) returns (CreateObserverResponse) {}
   rpc CreateObservations(CreateObservationsRequest) returns (CreateObservationsResponse) {}
-
-  rpc AddLocationPolicy(AddLocationPolicyRequest) returns (AddLocationPolicyResponse) {}
 
   // --- Analysis ----------------------------------------------------------------
 

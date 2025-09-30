@@ -2,8 +2,8 @@
 
 /*
  * Schema and tables to handle location-based data.
- * 
- * The generation data we store, be it predicted or otherwise, is always tied to a certain 
+ *
+ * The generation data we store, be it predicted or otherwise, is always tied to a certain
  * location. These locations vary in size and scope, from a single site to an entire country,
  * and the metadata we may want to store about them will also vary accordingly.
 
@@ -13,13 +13,13 @@
  */
 
 CREATE SCHEMA loc;
-CREATE EXTENSION IF NOT EXISTS "btree_gist";
-CREATE EXTENSION IF NOT EXISTS "postgis";
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS postgis;
 
 /*- Lookups -----------------------------------------------------------------------------------*/
 
 -- Lookup table to store different source types
-CREATE TABLE loc.source_types(
+CREATE TABLE loc.source_types (
     source_type_id SMALLINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     source_type_name TEXT NOT NULL,
     CONSTRAINT source_type_name_format_check CHECK (
@@ -33,7 +33,7 @@ CREATE TABLE loc.source_types(
 INSERT INTO loc.source_types (source_type_name) VALUES ('SOLAR'), ('WIND'), ('HYDRO'), ('BATTERY');
 
 -- Lookup table to store different location types
-CREATE TABLE loc.location_types(
+CREATE TABLE loc.location_types (
     location_type_id SMALLINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     location_type_name TEXT NOT NULL,
     CONSTRAINT location_type_name_format_check CHECK (
@@ -51,34 +51,34 @@ INSERT INTO loc.location_types (location_type_name) VALUES ('SITE'), ('GSP'), ('
 
 -- Table to store spatial data for locations
 CREATE TABLE loc.locations (
-    location_uuid UUID DEFAULT uuidv7() NOT NULL,
+    location_uuid UUID DEFAULT UUIDV7() NOT NULL,
     location_name TEXT NOT NULL,
     CONSTRAINT location_name_check CHECK (
         LENGTH(location_name) > 0
         AND location_name = UPPER(location_name)
     ),
-    geom GEOMETRY(GEOMETRY, 4326) NOT NULL,
+    geom GEOMETRY (GEOMETRY, 4326) NOT NULL,
     CONSTRAINT geom_validity_check CHECK (
-        ST_GeometryType(geom) IN ('ST_Point', 'ST_Polygon', 'ST_MultiPolygon')
+        ST_GEOMETRYTYPE(geom) IN ('ST_Point', 'ST_Polygon', 'ST_MultiPolygon')
         AND ST_SRID(geom) = 4326
         AND ST_NDIMS(geom) = 2
         AND ST_ISVALID(geom)
-        AND ST_XMin(geom) >= -180 AND ST_XMax(geom) <= 180
-        AND ST_YMin(geom) >= -90 AND ST_YMax(geom) <= 90
+        AND ST_XMIN(geom) >= -180 AND ST_XMAX(geom) <= 180
+        AND ST_YMIN(geom) >= -90 AND ST_YMAX(geom) <= 90
     ),
     location_type_id SMALLINT NOT NULL
-        REFERENCES loc.location_types(location_type_id)
-        ON UPDATE CASCADE
-        ON DELETE RESTRICT,
-    centroid GEOMETRY(POINT, 4326) GENERATED ALWAYS AS (ST_Centroid(geom)) STORED,
-    geom_hash TEXT GENERATED ALWAYS AS (MD5(ST_AsBinary(geom))) STORED,
+    REFERENCES loc.location_types (location_type_id)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT,
+    centroid GEOMETRY (POINT, 4326) GENERATED ALWAYS AS (ST_CENTROID(geom)) STORED,
+    geom_hash TEXT GENERATED ALWAYS AS (MD5(ST_ASBINARY(geom))) STORED,
     PRIMARY KEY (location_uuid),
     UNIQUE (location_name, geom_hash)
 );
 -- Required index for efficient spatial-based queries
-CREATE INDEX ON loc.locations USING GIST (geom);
+CREATE INDEX ON loc.locations USING gist (geom);
 -- Index for efficiently fetching e.g. all POINT geometry locations
-CREATE INDEX ON loc.locations (ST_GeometryType(geom));
+CREATE INDEX ON loc.locations (ST_GEOMETRYTYPE(geom));
 -- Index for finding all locations of a certain type
 CREATE INDEX ON loc.locations (location_type_id);
 
@@ -90,12 +90,12 @@ CREATE INDEX ON loc.locations (location_type_id);
  */
 CREATE TABLE loc.sources_history (
     source_type_id SMALLINT NOT NULL
-        REFERENCES loc.source_types(source_type_id)
-        ON UPDATE CASCADE
-        ON DELETE RESTRICT,
+    REFERENCES loc.source_types (source_type_id)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT,
     -- Capacity in factors of powers of 10 Watts
     capacity SMALLINT NOT NULL,
-    CONSTRAINT capacity_nonnegative_check CHECK ( capacity >= 0 ),
+    CONSTRAINT capacity_nonnegative_check CHECK (capacity >= 0),
     -- Factor defining power of 10 to multiply the capacity by to get Watts
     capacity_unit_prefix_factor SMALLINT DEFAULT (0) NOT NULL,
     CONSTRAINT capacity_unit_prefix_factor_valid_siprefix_check CHECK (
@@ -114,13 +114,13 @@ CREATE TABLE loc.sources_history (
     ),
     valid_from_utc TIMESTAMP DEFAULT NOW() NOT NULL,
     location_uuid UUID NOT NULL
-        REFERENCES loc.locations(location_uuid)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
+    REFERENCES loc.locations (location_uuid)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
     -- Metadata about the source, e.g. tilt, orientation, etc.
     metadata JSONB DEFAULT NULL,
     CONSTRAINT metadata_nonempty_check CHECK (
-        metadata IS NULL OR metadata <> '{}'::jsonb -- Null is cheaper
+        metadata IS NULL OR metadata <> '{}'::JSONB -- Null is cheaper
     ),
     PRIMARY KEY (location_uuid, source_type_id, valid_from_utc)
 );
@@ -136,19 +136,19 @@ SELECT
     capacity,
     capacity_unit_prefix_factor,
     capacity_limit_sip,
+    metadata,
     TSRANGE(
         valid_from_utc,
         LEAD(valid_from_utc, 1) OVER (
             PARTITION BY location_uuid, source_type_id
-            ORDER BY valid_from_utc)
-        ) AS sys_period,
-    metadata
+            ORDER BY valid_from_utc
+        )
+    ) AS sys_period
 FROM loc.sources_history;
 -- Prevent overlapping records. Required for concurrent refreshes.
 CREATE UNIQUE INDEX ON loc.sources_mv (location_uuid, source_type_id, sys_period);
-CREATE INDEX ON loc.sources_mv USING GIST (sys_period);
+CREATE INDEX ON loc.sources_mv USING gist (sys_period);
 
 
 -- +goose Down
 DROP SCHEMA loc CASCADE;
-

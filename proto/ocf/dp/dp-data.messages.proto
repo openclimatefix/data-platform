@@ -1,5 +1,3 @@
-// Common messages for the Quartz API
-
 syntax = "proto3";
 
 package ocf.dp;

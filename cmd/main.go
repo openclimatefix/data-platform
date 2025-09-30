@@ -33,16 +33,21 @@ func main() {
 	// Choose the server implementation based on the environment
 	databaseUrl := os.Getenv("DATABASE_URL")
 
-	var dpServerImpl pb.DataPlatformServiceServer
+	var (
+		dataServerImpl  pb.DataPlatformDataServiceServer
+		adminServerImpl pb.DataPlatformAdministrationServiceServer
+	)
 
 	if slices.Contains([]string{"", "dummy", "fake"}, strings.ToLower(databaseUrl)) {
 		log.Warn().Msg("Running in test mode with fake data. Not for production use")
 
-		dpServerImpl = dbdy.NewDummyDataPlatformServerImpl()
+		dataServerImpl = dbdy.NewDataPlatformDataServerImpl()
+		adminServerImpl = dbdy.NewDataPlatformAdministrationServiceServerImpl()
 	} else if strings.HasPrefix(databaseUrl, "postgres") && strings.Contains(databaseUrl, "://") {
 		log.Info().Str("type", "postgresql").Msg("Connecting to database backend")
-
-		dpServerImpl = dbpg.NewPostgresDataPlatformServerImpl(databaseUrl)
+		pool := dbpg.NewPostgresPool(databaseUrl)
+		dataServerImpl = dbpg.NewDataPlatformDataServiceServerImpl(pool)
+		adminServerImpl = dbpg.NewDataPlatformAdministrationServiceServerImpl(pool)
 	} else {
 		log.Fatal().Str("url", databaseUrl).Msg("Unsupported DATABASE_URL format")
 	}
@@ -64,10 +69,11 @@ func main() {
 	s := grpc.NewServer(
 		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor(validator)),
 	)
-	pb.RegisterDataPlatformServiceServer(s, dpServerImpl)
+	pb.RegisterDataPlatformDataServiceServer(s, dataServerImpl)
+	pb.RegisterDataPlatformAdministrationServiceServer(s, adminServerImpl)
 	grpc_health_v1.RegisterHealthServer(s, health.NewServer())
 	reflection.Register(s)
-	log.Info().Msg("Listening on :50051")
 
+	log.Info().Msg("Listening on :50051")
 	_ = s.Serve(lis) // If this errors, we want it to panic! It's fundamental
 }

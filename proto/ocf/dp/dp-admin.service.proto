@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package ocf.dp;
+
+import "ocf/dp/dp-admin.messages.proto";
+
+option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
+
+service DataPlatformAdministrationService {
+
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse) {}
+  rpc GetUser(GetUserRequest) returns (GetUserResponse) {}
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse) {}
+
+  rpc CreateOrganisation(CreateOrganisationRequest) returns (CreateOrganisationResponse) {}
+  rpc GetOrganisation(GetOrganisationRequest) returns (GetOrganisationResponse) {}
+  rpc UpdateOrganisation(UpdateOrganisationRequest) returns (UpdateOrganisationResponse) {}
+  rpc DeleteOrganisation(DeleteOrganisationRequest) returns (DeleteOrganisationResponse) {}
+
+  rpc CreateLocationPolicyGroup(CreateLocationPolicyGroupRequest) returns (CreateLocationPolicyGroupResponse) {}
+  rpc GetLocationPolicyGroup(GetLocationPolicyGroupRequest) returns (GetLocationPolicyGroupResponse) {}
+  rpc UpdateLocationPolicyGroup(UpdateLocationPolicyGroupRequest) returns (UpdateLocationPolicyGroupResponse) {}
+  rpc DeleteLocationPolicyGroup(DeleteLocationPolicyGroupRequest) returns (DeleteLocationPolicyGroupResponse) {}
+
+}
