@@ -9,31 +9,25 @@ package postgres
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
 // --- Server Implementation ----------------------------------------------------------------------
 
-func NewDataPlatformAdministrationServiceServerImpl(
-	pool *pgxpool.Pool,
-) *DataPlatformAdministrationServiceServerImpl {
-	return &DataPlatformAdministrationServiceServerImpl{
-		pool: pool,
-	}
+func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministrationServiceServerImpl {
+	return &DataPlatformAdministrationServiceServerImpl{}
 }
 
-type DataPlatformAdministrationServiceServerImpl struct {
-	pool *pgxpool.Pool
-}
+// DataPlatformAdministrationServiceServerImpl implements the pb.DataPlatformDataServiceServer interface.
+// It requires the database transaction for the request to be set in the context.
+type DataPlatformAdministrationServiceServerImpl struct{}
 
 // CreateLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 	context.Context,
 	*pb.CreateLocationPolicyGroupRequest,
 ) (*pb.CreateLocationPolicyGroupResponse, error) {
-	panic("unimplemented")
+	panic("Unimplemented")
 }
 
 // CreateOrganisation implements dp.DataPlatformAdministrationServiceServer.

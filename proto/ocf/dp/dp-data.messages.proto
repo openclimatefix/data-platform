@@ -92,8 +92,10 @@ message GetForecastAsTimeseriesRequest {
   Forecaster forecaster = 5 [
     (buf.validate.field).required = true
   ];
-  string user_role = 6 [
-    (buf.validate.field).string.min_len = 3,
+  // The OAuth ID of the user making the request.
+  // Inclusion ensures the user has access to the location.
+  // Ommission prevents any auth checks.
+  string user_id = 6 [
     (buf.validate.field).string.max_len = 64
   ];
 }
@@ -125,8 +127,10 @@ message GetObservationsAsTimeseriesRequest {
   TimeWindow time_window = 4 [
     (buf.validate.field).required = true
   ];
-  string user_role = 5 [
-    (buf.validate.field).string.min_len = 3,
+  // The OAuth ID of the user making the request.
+  // Inclusion ensures the user has access to the location.
+  // Ommission prevents any auth checks.
+  string user_id = 6 [
     (buf.validate.field).string.max_len = 64
   ];
 }
@@ -161,8 +165,10 @@ message GetForecastAtTimestampRequest {
   Forecaster forecaster = 4 [
     (buf.validate.field).required = true
   ];
-  string user_role = 5 [
-    (buf.validate.field).string.min_len = 3,
+  // The OAuth ID of the user making the request.
+  // Inclusion ensures the user has access to the location.
+  // Ommission prevents any auth checks.
+  string user_id = 6 [
     (buf.validate.field).string.max_len = 64
   ];
 }
@@ -195,8 +201,10 @@ message GetLatestForecastsRequest {
    * If not specified, the current time will be used.
    */
   google.protobuf.Timestamp pivot_timestamp_utc = 3;
-  string user_role = 4 [
-    (buf.validate.field).string.min_len = 3,
+  // The OAuth ID of the user making the request.
+  // Inclusion ensures the user has access to the location.
+  // Ommission prevents any auth checks.
+  string user_id = 6 [
     (buf.validate.field).string.max_len = 64
   ];
 }
@@ -303,8 +311,10 @@ message CreateLocationRequest {
   ];
   LocationType location_type = 5;
   optional google.protobuf.Struct metadata = 6;
-  string user_role = 7 [
-    (buf.validate.field).string.min_len = 3,
+  // The OAuth ID of the user making the request.
+  // Inclusion ensures the user has access to the location.
+  // Ommission prevents any auth checks.
+  string user_id = 7 [
     (buf.validate.field).string.max_len = 64
   ];
 }
@@ -322,8 +332,10 @@ message GetLocationRequest {
   ];
   EnergySource energy_source = 2;
   bool include_geometry = 3;
-  string user_role = 4 [
-    (buf.validate.field).string.min_len = 3,
+  // The OAuth ID of the user making the request.
+  // Inclusion ensures the user has access to the location.
+  // Ommission prevents any auth checks.
+  string user_id = 4 [
     (buf.validate.field).string.max_len = 64
   ];
 }
@@ -383,8 +395,10 @@ message CreateObservationsRequest {
     (buf.validate.field).repeated.min_items = 1,
     (buf.validate.field).repeated.max_items = 10000
   ];
-  string user_role = 5 [
-    (buf.validate.field).string.min_len = 3,
+  // The OAuth ID of the user making the request.
+  // Inclusion ensures the user has access to the location.
+  // Ommission prevents any auth checks.
+  string user_id = 5 [
     (buf.validate.field).string.max_len = 64
   ];
 }
@@ -449,8 +463,10 @@ message ListLocationsRequest {
   optional string enclosing_location_uuid = 2 [
     (buf.validate.field).string.uuid = true
   ];
-  string user_role = 3 [
-    (buf.validate.field).string.min_len = 3,
+  // The OAuth ID of the user making the request.
+  // Inclusion ensures the user has access to the locations.
+  // Ommission prevents any such auth checks.
+  string user_id = 3 [
     (buf.validate.field).string.max_len = 64
   ];
 }
@@ -489,18 +505,3 @@ message StreamForecastDataResponse {
   optional float p90_percent = 7;
 }
 
-message AddLocationPolicyRequest {
-  repeated string location_uuids = 1 [
-    (buf.validate.field).string.uuid = true
-  ];
-  string user_role = 2 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
-  ];
-  string scope = 3 [
-    (buf.validate.field).string.in = "OWNER",
-    (buf.validate.field).string.in = "VIEWER"
-  ];
-}
-
-message AddLocationPolicyResponse {}

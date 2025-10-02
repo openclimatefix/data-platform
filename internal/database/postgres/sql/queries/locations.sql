@@ -149,7 +149,7 @@ SELECT
 FROM iam.user_location_policies_mv AS ulp
     INNER JOIN loc.sources_mv AS s USING (location_uuid)
     INNER JOIN loc.locations AS l USING (location_uuid)
-    INNER JOIN loc.source_types AS st USING (source_type_id)
+    INNER JOIN loc.source_types AS st ON s.source_type_id = st.source_type_id
 WHERE
     ulp.user_uuid = $3
     AND ulp.role_id IN (1, 2)
@@ -197,7 +197,7 @@ SELECT
 FROM iam.user_location_policies_mv AS ulp
     INNER JOIN loc.sources_mv AS s USING (location_uuid)
     INNER JOIN loc.locations AS l USING (location_uuid)
-    INNER JOIN loc.source_types AS st USING (source_type_id)
+    INNER JOIN loc.source_types AS st ON s.source_type_id = st.source_type_id
 WHERE
     ulp.user_uuid = $2
     AND ulp.role_id IN (1, 2)

@@ -506,12 +506,5 @@ func (d *DataPlatformDataServiceServerImpl) UpdateForecaster(
 	}, nil
 }
 
-func (d *DataPlatformDataServiceServerImpl) AddLocationPolicy(
-	context.Context,
-	*pb.AddLocationPolicyRequest,
-) (*pb.AddLocationPolicyResponse, error) {
-	return &pb.AddLocationPolicyResponse{}, nil
-}
-
 // Compile-time check to ensure the interface is implemented fully.
 var _ pb.DataPlatformDataServiceServer = (*DataPlatformDataServiceServerImpl)(nil)

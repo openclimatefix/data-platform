@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -105,13 +104,13 @@ func timeWindowToPgWindow(
 
 // --- Server Implementation ----------------------------------------------------------------------
 
-func NewDataPlatformDataServiceServerImpl(pool *pgxpool.Pool) *DataPlatformDataServiceServerImpl {
-	return &DataPlatformDataServiceServerImpl{pool: pool}
+func NewDataPlatformDataServiceServerImpl() *DataPlatformDataServiceServerImpl {
+	return &DataPlatformDataServiceServerImpl{}
 }
 
-type DataPlatformDataServiceServerImpl struct {
-	pool *pgxpool.Pool
-}
+// DataPlatformDataServiceServerImpl implements the pb.DataPlatformDataServiceServer interface.
+// It requires the database transaction for the request to be set in the context.
+type DataPlatformDataServiceServerImpl struct{}
 
 // --- Server Method Implementations --------------------------------------------------------------
 
@@ -126,15 +125,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		return nil, status.Error(codes.InvalidArgument, "No forecast values provided")
 	}
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.Forecast.LocationUuid)
@@ -239,7 +230,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid predicted generation values")
 	}
 
-	return &pb.CreateForecastResponse{}, tx.Commit(ctx)
+	return &pb.CreateForecastResponse{}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
@@ -257,15 +248,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 ) (*pb.CreateForecasterResponse, error) {
 	l := log.With().Str("method", "CreateForecaster").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Check if the forecaster already exists and error out if so
 	gpParams := db.GetForecasterElseLatestParams{
@@ -300,7 +283,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 
 	return &pb.CreateForecasterResponse{
 		Forecaster: &pb.Forecaster{ForecasterName: req.Name, ForecasterVersion: req.Version},
-	}, tx.Commit(ctx)
+	}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
@@ -309,15 +292,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 ) (*pb.UpdateForecasterResponse, error) {
 	l := log.With().Str("method", "UpdateForecaster").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Check if the forecaster already exists and error out if not
 	gpParams := db.GetForecasterElseLatestParams{
@@ -353,7 +328,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 
 	return &pb.UpdateForecasterResponse{
 		Forecaster: &pb.Forecaster{ForecasterName: req.Name, ForecasterVersion: req.NewVersion},
-	}, tx.Commit(ctx)
+	}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
@@ -362,15 +337,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 ) error {
 	l := log.With().Str("method", "StreamForecastData").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(stream.Context())
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(stream.Context())
+	querier := db.New(GetTxFromContext(stream.Context()))
 
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
@@ -488,24 +455,16 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 ) (*pb.ListLocationsResponse, error) {
 	l := log.With().Str("method", "ListLocations").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	var locations []*pb.ListLocationsResponse_LocationData
 
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserRole}
+	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
 
 	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "Invalid user '%s'", req.UserRole)
+		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
 	}
 
 	if req.EnclosingLocationUuid != nil {
@@ -559,7 +518,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 
 	return &pb.ListLocationsResponse{
 		Locations: locations,
-	}, tx.Commit(ctx)
+	}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
@@ -568,15 +527,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 ) (*pb.GetWeekAverageDeltasResponse, error) {
 	l := log.With().Str("method", "GetWeekAverageDeltas").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
@@ -679,23 +630,15 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 ) (*pb.GetObservationsAsTimeseriesResponse, error) {
 	l := log.With().Str("method", "GetObservationsAsTimeseries").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserRole}
+	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
 
 	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "Invalid user '%s'", req.UserRole)
+		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
 	}
 
 	// Get the location and source
@@ -789,23 +732,15 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 ) (*pb.CreateObservationsResponse, error) {
 	l := log.With().Str("method", "CreateObservations").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserRole}
+	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
 
 	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "Invalid user '%s'", req.UserRole)
+		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
 	}
 
 	// Get the location and source
@@ -875,7 +810,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 		dbSource.LocationUuid, req.ObserverName,
 	)
 
-	return &pb.CreateObservationsResponse{}, tx.Commit(ctx)
+	return &pb.CreateObservationsResponse{}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) CreateObserver(
@@ -884,15 +819,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 ) (*pb.CreateObserverResponse, error) {
 	l := log.With().Str("method", "CreateObserver").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	obParams := db.CreateObserverParams{ObserverName: req.Name}
 
@@ -906,7 +833,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 		)
 	}
 
-	return &pb.CreateObserverResponse{ObserverId: dbObserverId}, tx.Commit(ctx)
+	return &pb.CreateObserverResponse{ObserverId: dbObserverId}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
@@ -915,23 +842,15 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 ) (*pb.GetForecastAtTimestampResponse, error) {
 	l := log.With().Str("method", "GetForecastAtTimestamp").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserRole}
+	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
 
 	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "Invalid user '%s'", req.UserRole)
+		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
 	}
 
 	// Get the relevant forecaster
@@ -1052,23 +971,15 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 ) (*pb.GetLocationResponse, error) {
 	l := log.With().Str("method", "GetLocation").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserRole}
+	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
 
 	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "Invalid user '%s'", req.UserRole)
+		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
 	}
 
 	// Get the location and source
@@ -1132,7 +1043,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 			math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
 		),
 		Metadata: metadata,
-	}, tx.Commit(ctx)
+	}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) CreateLocation(
@@ -1141,23 +1052,15 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 ) (*pb.CreateLocationResponse, error) {
 	l := log.With().Str("method", "CreateLocation").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserRole}
+	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
 
 	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "Invalid user '%s'", req.UserRole)
+		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
 	}
 
 	// Create a new location
@@ -1181,7 +1084,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	lpParams := db.AddLocationPolicesToGroupParams{
 		RoleName:                "OWNER",
 		SourceTypeName:          req.EnergySource.String(),
-		LocationPolicyGroupName: dbUser.OrgName,
+		LocationPolicyGroupName: dbUser.OrgName + "_DEFAULT_LPGROUP",
 		LocationUuids:           []uuid.UUID{dbLocation.LocationUuid},
 	}
 
@@ -1194,6 +1097,12 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 			"No location policy group '%s' found for user '%s' in organisation '%s'",
 			dbUser.OrgName, dbUser.OauthID, dbUser.OrgName,
 		)
+	}
+
+	err = querier.UpdateUserLocationPoliciesMaterializedView(ctx)
+	if err != nil {
+		l.Err(err).Msg("querier.UpdateUserLocationPoliciesMaterializedView()")
+		return nil, status.Error(codes.Internal, "Encountered backend communication error")
 	}
 
 	// Get the energy source type
@@ -1238,7 +1147,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	dbSource, err := querier.CreateUserLocationSourceEntry(ctx, csParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateUserLocationSourceEntry(%+v)", params)
+		l.Err(err).Msgf("querier.CreateUserLocationSourceEntry(%+v)", csParams)
 
 		return nil, status.Error(
 			codes.InvalidArgument,
@@ -1260,24 +1169,16 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		) * uint64(
 			math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
 		),
-	}, tx.Commit(ctx)
+	}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	ctx context.Context,
 	req *pb.GetLocationsAsGeoJSONRequest,
-) (*pb.GetLocationsAsGeoJSONResponse, error) {
+) (resp *pb.GetLocationsAsGeoJSONResponse, err error) {
 	l := log.With().Str("method", "GetLocationsAsGeoJSON").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		log.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the locations as GeoJSON
 	var simplificationLevel float32
@@ -1307,7 +1208,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 		return nil, status.Error(codes.InvalidArgument, "No locations found for input IDs")
 	}
 
-	return &pb.GetLocationsAsGeoJSONResponse{Geojson: string(geojson)}, tx.Commit(ctx)
+	return &pb.GetLocationsAsGeoJSONResponse{Geojson: string(geojson)}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
@@ -1316,23 +1217,15 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 ) (*pb.GetForecastAsTimeseriesResponse, error) {
 	l := log.With().Str("method", "GetForecastAsTimeseries").Logger()
 
-	// Establish a transaction with the database
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		l.Err(err).Msg("q.pool.Begin()")
-		return nil, status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	querier := db.New(tx)
-	defer tx.Rollback(ctx)
+	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserRole}
+	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
 
 	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "Invalid user '%s'", req.UserRole)
+		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
 	}
 
 	// Get the location and source
@@ -1443,7 +1336,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		LocationUuid: dbSource.LocationUuid.String(),
 		LocationName: strings.ToUpper(dbSource.LocationName),
 		Values:       values,
-	}, tx.Commit(ctx)
+	}, nil
 }
 
 // Compile-time check to ensure the interface is implemented fully.

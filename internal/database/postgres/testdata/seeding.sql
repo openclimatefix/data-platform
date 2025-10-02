@@ -16,13 +16,19 @@ DECLARE
     num_pgvs_per_forecast INTEGER := forecast_length_mins / gv_resolution_mins;
     earliest_forecast_offset_mins INTEGER := num_forecasts_per_location * forecast_resolution_mins;
     org_id UUID;
-    lpg_id UUID;
+    ownerlpg_id UUID;
+    viewerlpg_id UUID;
 BEGIN
-    -- Insert a test organisation, users, and location policy groups
-    INSERT INTO iam.orgs (org_name) VALUES ('TEST_ORG') RETURNING org_uuid INTO org_id;
-    INSERT INTO iam.users (org_uuid, oauth_id) VALUES (org_id, 'testuser001');
-    INSERT INTO iam.location_policy_groups (org_uuid, location_policy_group_name) VALUES (org_id, 'TEST_OWNER') RETURNING location_policy_group_uuid INTO lpg_id;
-    INSERT INTO iam.org_location_policy_groups (org_uuid, location_policy_group_uuid) VALUES (org_id, lpg_id);
+    -- Insert a test organisation, users, and location policy groups. One with owner, one with viewer
+    INSERT INTO iam.orgs (org_name) VALUES ('TEST_OWNER_ORG') RETURNING org_uuid INTO org_id;
+    INSERT INTO iam.users (org_uuid, oauth_id) VALUES (org_id, 'test_ownerorg_user1'), (org_id, 'test_ownerorg_user2');
+    INSERT INTO iam.location_policy_groups (location_policy_group_name) VALUES ('TEST_OWNER_ORG_DEFAULT_LPGROUP') RETURNING location_policy_group_uuid INTO ownerlpg_id;
+    INSERT INTO iam.org_location_policy_groups (org_uuid, location_policy_group_uuid) VALUES (org_id, ownerlpg_id);
+
+    INSERT INTO iam.orgs (org_name) VALUES ('TEST_VIEWER_ORG') RETURNING org_uuid INTO org_id;
+    INSERT INTO iam.users (org_uuid, oauth_id) VALUES (org_id, 'test_viewerorg_user1'), (org_id, 'test_viewerorg_user2');
+    INSERT INTO iam.location_policy_groups (location_policy_group_name) VALUES ('TEST_VIEWER_ORG_DEFAULT_LPGROUP') RETURNING location_policy_group_uuid INTO viewerlpg_id;
+    INSERT INTO iam.org_location_policy_groups (org_uuid, location_policy_group_uuid) VALUES (org_id, viewerlpg_id);
 
     -- Insert forecasters
     INSERT INTO pred.forecasters (forecaster_name, forecaster_version)
@@ -50,7 +56,8 @@ BEGIN
         INSERT INTO iam.location_policies
             (role_id, source_type_id, location_uuid, location_policy_group_uuid)
         VALUES
-            (1, 1, loc_id, lpg_id);
+            (1, 1, loc_id, ownerlpg_id),
+            (2, 1, loc_id, viewerlpg_id);
 
         INSERT INTO loc.sources_history
             (location_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc)

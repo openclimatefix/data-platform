@@ -14,7 +14,7 @@ import (
 
 	"buf.build/go/protovalidate"
 	"github.com/google/uuid"
-	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
+	pvinterceptor "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
@@ -168,14 +168,20 @@ func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformDataServiceC
 	validator, err := protovalidate.New()
 	require.NoError(tb, err)
 
+	txInjector := NewTransactionInjector(pgConnString)
 	s := grpc.NewServer(
-		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor(validator)),
+		grpc.ChainUnaryInterceptor(
+			grpc.UnaryServerInterceptor(pvinterceptor.UnaryServerInterceptor(validator)),
+			grpc.UnaryServerInterceptor(txInjector.UnaryServerInterceptor),
+		),
 	)
 	lis := bufconn.Listen(1024 * 1024)
 
-	pool := NewPostgresPool(pgConnString)
-	dataServerImpl := NewDataPlatformDataServiceServerImpl(pool)
+	dataServerImpl := NewDataPlatformDataServiceServerImpl()
+	adminServerImpl := NewDataPlatformAdministrationServiceServerImpl()
+
 	pb.RegisterDataPlatformDataServiceServer(s, dataServerImpl)
+	pb.RegisterDataPlatformAdministrationServiceServer(s, adminServerImpl)
 
 	go func() {
 		if err := s.Serve(lis); err != nil {
@@ -265,7 +271,14 @@ func TestCapacityToMultiplier(t *testing.T) {
 }
 
 func TestCreateLocation(t *testing.T) {
-	c := setupClient(t, createPostgresContainer(t))
+	pgConnString := createPostgresContainer(t)
+	c := setupClient(t, pgConnString)
+	_ = seed(
+		t,
+		pgConnString,
+		seedDBParams{NumLocations: 0, PgvResolutionMins: 30, ForecastResolutionMins: 30},
+	)
+
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
@@ -282,7 +295,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 1230,
 				LocationType:  pb.LocationType_SITE,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -294,7 +307,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 1230,
 				LocationType:  pb.LocationType_SITE,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -306,7 +319,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 4560,
 				LocationType:  pb.LocationType_SITE,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -318,7 +331,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 1230,
 				LocationType:  pb.LocationType_LOCATION_TYPE_UNSPECIFIED,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -330,7 +343,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 1230,
 				LocationType:  pb.LocationType_SITE,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -342,7 +355,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 1000e9,
 				LocationType:  pb.LocationType_GSP,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -354,7 +367,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 14e6,
 				LocationType:  pb.LocationType_DNO,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -366,7 +379,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 1100e6,
 				LocationType:  pb.LocationType_DNO,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -378,7 +391,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 14e6,
 				LocationType:  pb.LocationType_DNO,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 		{
@@ -390,19 +403,7 @@ func TestCreateLocation(t *testing.T) {
 				CapacityWatts: 10289e3,
 				LocationType:  pb.LocationType_SITE,
 				Metadata:      metadata,
-				UserRole:      "TEST_OWNER",
-			},
-		},
-		{
-			name: "Should create location with escaped user role",
-			req: &pb.CreateLocationRequest{
-				LocationName:  "REQUIERES_ESCAPEING_ROLE",
-				EnergySource:  pb.EnergySource_SOLAR,
-				GeometryWkt:   "POINT(10 10)",
-				CapacityWatts: 10289e3,
-				LocationType:  pb.LocationType_SITE,
-				Metadata:      metadata,
-				UserRole:      "TEST_OWNER; DROP TABLE loc.locations; --",
+				UserId:        "test_ownerorg_user1",
 			},
 		},
 	}
@@ -423,7 +424,7 @@ func TestCreateLocation(t *testing.T) {
 						LocationUuid:    resp.LocationUuid,
 						EnergySource:    tt.req.EnergySource,
 						IncludeGeometry: false,
-						UserRole:        tt.req.UserRole,
+						UserId:          tt.req.UserId,
 					},
 				)
 				require.NoError(t, err, "Expected same user to be able to see created location")
@@ -439,7 +440,7 @@ func TestCreateLocation(t *testing.T) {
 						LocationUuid:    resp.LocationUuid,
 						EnergySource:    tt.req.EnergySource,
 						IncludeGeometry: false,
-						UserRole:        "ANOTHER_ROLE",
+						UserId:          "who_am_i",
 					},
 				)
 				require.Error(t, err, "Expected different user to not be able to see location")
@@ -547,7 +548,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 			TimestampUtc:  timestamppb.New(pivotTime),
 			LocationUuids: output.LocationUuids,
 			Forecaster:    &pb.Forecaster{ForecasterName: "test_model_1", ForecasterVersion: "v1"},
-			UserRole:      "TEST_OWNER",
+			UserId:        "test_ownerorg_user1",
 		},
 	)
 	require.NoError(t, err)
@@ -556,7 +557,13 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 }
 
 func TestGetLocationsAsGeoJSON(t *testing.T) {
-	c := setupClient(t, createPostgresContainer(t))
+	pgConnString := createPostgresContainer(t)
+	c := setupClient(t, pgConnString)
+	_ = seed(
+		t,
+		pgConnString,
+		seedDBParams{NumLocations: 0, PgvResolutionMins: 30, ForecastResolutionMins: 30},
+	)
 
 	// Create some locations
 	siteUuids := make([]string, 3)
@@ -568,7 +575,7 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 			EnergySource:  pb.EnergySource_SOLAR,
 			Metadata:      &structpb.Struct{},
 			LocationType:  pb.LocationType_SITE,
-			UserRole:      "TEST_OWNER",
+			UserId:        "test_ownerorg_user1",
 		})
 		require.NoError(t, err)
 
@@ -671,7 +678,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
 				},
-				UserRole: "TEST_OWNER",
+				UserId: "test_ownerorg_user1",
 			})
 			require.NoError(t, err)
 			require.NotNil(t, resp)
@@ -728,7 +735,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 						EndTimestampUtc:   timestamppb.New(tt.endTime),
 					},
 					ObserverName: "test_observer",
-					UserRole:     "TEST_OWNER",
+					UserId:       "test_ownerorg_user1",
 				},
 			)
 			require.NoError(t, err)
@@ -766,6 +773,11 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 func TestGetLocationsWithin(t *testing.T) {
 	pgConnString := createPostgresContainer(t)
 	c := setupClient(t, pgConnString)
+	_ = seed(
+		t,
+		pgConnString,
+		seedDBParams{NumLocations: 0, PgvResolutionMins: 30, ForecastResolutionMins: 30},
+	)
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
@@ -777,7 +789,7 @@ func TestGetLocationsWithin(t *testing.T) {
 		LocationType:  pb.LocationType_GSP,
 		CapacityWatts: 1000,
 		Metadata:      metadata,
-		UserRole:      "TEST_OWNER",
+		UserId:        "test_ownerorg_user1",
 	})
 	require.NoError(t, err)
 
@@ -802,7 +814,7 @@ func TestGetLocationsWithin(t *testing.T) {
 			LocationType:  pb.LocationType_SITE,
 			CapacityWatts: 50,
 			Metadata:      metadata,
-			UserRole:      "TEST_OWNER",
+			UserId:        "test_ownerorg_user1",
 		})
 		require.NoError(t, err)
 		// Make a site in the box with a different owner
@@ -813,7 +825,7 @@ func TestGetLocationsWithin(t *testing.T) {
 			LocationType:  pb.LocationType_SITE,
 			CapacityWatts: 50,
 			Metadata:      metadata,
-			UserRole:      "ANOTHER_OWNER",
+			UserId:        "test_viewerorg_user1",
 		})
 		require.NoError(t, err)
 
@@ -823,7 +835,7 @@ func TestGetLocationsWithin(t *testing.T) {
 	result, err := c.ListLocations(t.Context(), &pb.ListLocationsRequest{
 		EnergySource:          pb.EnergySource_SOLAR,
 		EnclosingLocationUuid: &resp.LocationUuid,
-		UserRole:              "TEST_OWNER",
+		UserId:                "test_ownerorg_user1",
 	})
 	require.NoError(t, err)
 
@@ -843,14 +855,12 @@ func TestGetLocationsWithin(t *testing.T) {
 func TestCreateForecast(t *testing.T) {
 	pgConnString := createPostgresContainer(t)
 	c := setupClient(t, pgConnString)
+	_ = seed(
+		t,
+		pgConnString,
+		seedDBParams{NumLocations: 0, PgvResolutionMins: 30, ForecastResolutionMins: 30},
+	)
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-
-	// Create a forecaster
-	_, err = c.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-		Name:    "test_model_1",
-		Version: "v1",
-	})
 	require.NoError(t, err)
 
 	// Create a site to attach the forecast to
@@ -861,7 +871,7 @@ func TestCreateForecast(t *testing.T) {
 		Metadata:      metadata,
 		EnergySource:  pb.EnergySource_SOLAR,
 		LocationType:  pb.LocationType_SITE,
-		UserRole:      "TEST_OWNER",
+		UserId:        "test_ownerorg_user1",
 	})
 	require.NoError(t, err)
 
@@ -949,7 +959,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 							StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
 							EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
 						},
-						UserRole: "TEST_OWNER",
+						UserId: "test_ownerorg_user1",
 					},
 				)
 				require.NoError(b, err)
@@ -972,7 +982,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 							ForecasterVersion: "v1",
 						},
 						TimestampUtc: timestamppb.New(pivotTime),
-						UserRole:     "TEST_OWNER",
+						UserId:       "test_ownerorg_user1",
 					},
 				)
 				require.NoError(b, err)
@@ -992,7 +1002,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 							StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 36)),
 							EndTimestampUtc:   timestamppb.New(pivotTime),
 						},
-						UserRole: "TEST_OWNER",
+						UserId: "test_ownerorg_user1",
 					},
 				)
 				require.NoError(b, err)
