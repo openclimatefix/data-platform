@@ -143,14 +143,17 @@ CREATE OR REPLACE VIEW iam.org_details_v AS
 WITH aggregated_policies AS (
     SELECT
         olpg.org_uuid,
-        ARRAY_AGG(olpg.location_policy_group_uuid) AS location_policy_group_uuids
+        ARRAY_AGG(olpg.location_policy_group_uuid)::UUID[] AS location_policy_group_uuids,
+        ARRAY_AGG(lpg.location_policy_group_name)::TEXT[] AS location_policy_group_names
     FROM iam.org_location_policy_groups AS olpg
+    INNER JOIN iam.location_policy_groups AS lpg USING (location_policy_group_uuid)
     GROUP BY olpg.org_uuid
 ),
 aggregated_users AS (
     SELECT
         u.org_uuid,
-        ARRAY_AGG(u.user_uuid) AS user_uuids
+        ARRAY_AGG(u.user_uuid)::UUID[] AS user_uuids,
+        ARRAY_AGG(u.oauth_id)::TEXT[] AS oauth_ids
     FROM iam.users AS u
     GROUP BY u.org_uuid
 )
@@ -160,7 +163,9 @@ SELECT
     UUIDV7_EXTRACT_TIMESTAMP(o.org_uuid)::TIMESTAMP AS created_at_utc,
     o.metadata,
     ap.location_policy_group_uuids,
-    au.user_uuids
+    ap.location_policy_group_names,
+    au.user_uuids,
+    au.oauth_ids
 FROM iam.orgs AS o
     INNER JOIN aggregated_policies AS ap USING (org_uuid)
     INNER JOIN aggregated_users AS au USING (org_uuid)

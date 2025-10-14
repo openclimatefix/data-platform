@@ -15,10 +15,11 @@ message CreateUserRequest {
     (buf.validate.field).string.min_len = 5,
     (buf.validate.field).string.max_len = 128
   ];
-  string organization = 2 [
+  string organisation = 2 [
     (buf.validate.field).string.min_len = 2,
     (buf.validate.field).string.max_len = 128
   ];
+  google.protobuf.Struct metadata = 3;
 }
 
 message CreateUserResponse {
@@ -40,9 +41,10 @@ message GetUserResponse {
     (buf.validate.field).string.uuid = true
   ];
   string oauth_id = 2;
-  string organization = 3;
+  string organisation = 3;
   repeated string location_policy_groups = 4;
   google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Struct metadata = 6;
 }
 
 
@@ -100,7 +102,7 @@ message UpdateOrganisationRequest {
   // Inputs here will override the existing metadata.
   google.protobuf.Struct metadata = 3;
   // List of location policy group IDs to associate with the organisation.
-  // Leave empty to keep the current associations. An empty list will keep the current set.
+  // Leave empty to keep the current associations.
   repeated string location_policy_group_ids = 4 [
     (buf.validate.field).repeated.max_items = 1000,
     (buf.validate.field).repeated.items = {
@@ -108,7 +110,7 @@ message UpdateOrganisationRequest {
     }
   ];
   // List of user OAuth IDs to associate with the organisation.
-  // Leave empty to keep the current associations. An empty list will keep the current set.
+  // An empty list will keep the current set.
   repeated string user_oauth_ids = 5 [
     (buf.validate.field).repeated.max_items = 100,
     (buf.validate.field).repeated.items = {
@@ -174,7 +176,6 @@ message GetLocationPolicyGroupResponse {
   string location_policy_group_id = 1;
   string name = 2;
   repeated CreateLocationPolicyGroupRequest.LocationPolicy location_policies = 3;
-  google.protobuf.Timestamp created_at = 4;
 }
 
 
@@ -184,10 +185,10 @@ message UpdateLocationPolicyGroupRequest {
   ];
   // New name for the location policy group. Leave empty to keep the current name.
   string name = 2 [
-    (buf.validate.field).string.max_len = 128
+    (buf.validate.field).string.max_len = 128,
+    (buf.validate.field).string.not_contains = "DEFAULT_LPGROUP"
   ];
   // New list of location policies. Leave empty to keep the current list.
-  // An empty list will keep the current set.
   repeated CreateLocationPolicyGroupRequest.LocationPolicy location_policies = 3 [
     (buf.validate.field).repeated.max_items = 10000
   ];

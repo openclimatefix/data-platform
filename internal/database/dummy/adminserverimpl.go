@@ -9,6 +9,8 @@ package dummy
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
@@ -20,20 +22,25 @@ func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministratio
 
 type DataPlatformAdministrationServiceServerImpl struct{}
 
-// CreateLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
-	context.Context,
-	*pb.CreateLocationPolicyGroupRequest,
+	ctx context.Context,
+	req *pb.CreateLocationPolicyGroupRequest,
 ) (*pb.CreateLocationPolicyGroupResponse, error) {
-	panic("unimplemented")
+	return &pb.CreateLocationPolicyGroupResponse{
+		LocationPolicyGroupId: uuid.New().String(),
+		Name:                  req.Name,
+	}, nil
 }
 
 // CreateOrganisation implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
-	context.Context,
-	*pb.CreateOrganisationRequest,
+	ctx context.Context,
+	req *pb.CreateOrganisationRequest,
 ) (*pb.CreateOrganisationResponse, error) {
-	panic("unimplemented")
+	return &pb.CreateOrganisationResponse{
+		OrgId:   uuid.New().String(),
+		OrgName: req.OrgName,
+	}, nil
 }
 
 // CreateUser implements dp.DataPlatformAdministrationServiceServer.
@@ -41,7 +48,9 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 	context.Context,
 	*pb.CreateUserRequest,
 ) (*pb.CreateUserResponse, error) {
-	panic("unimplemented")
+	return &pb.CreateUserResponse{
+		UserId: uuid.New().String(),
+	}, nil
 }
 
 // DeleteLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
@@ -49,7 +58,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteLocationPolicyGroup(
 	context.Context,
 	*pb.DeleteLocationPolicyGroupRequest,
 ) (*pb.DeleteLocationPolicyGroupResponse, error) {
-	panic("unimplemented")
+	return &pb.DeleteLocationPolicyGroupResponse{}, nil
 }
 
 // DeleteOrganisation implements dp.DataPlatformAdministrationServiceServer.
@@ -57,7 +66,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
 	context.Context,
 	*pb.DeleteOrganisationRequest,
 ) (*pb.DeleteOrganisationResponse, error) {
-	panic("unimplemented")
+	return &pb.DeleteOrganisationResponse{}, nil
 }
 
 // DeleteUser implements dp.DataPlatformAdministrationServiceServer.
@@ -65,7 +74,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteUser(
 	context.Context,
 	*pb.DeleteUserRequest,
 ) (*pb.DeleteUserResponse, error) {
-	panic("unimplemented")
+	return &pb.DeleteUserResponse{}, nil
 }
 
 // GetLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.

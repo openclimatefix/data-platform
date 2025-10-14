@@ -102,6 +102,25 @@ func timeWindowToPgWindow(
 	return start, end, err
 }
 
+// jsonbToStruct converts a JSONB byte array to a protobuf Struct.
+func jsonbToStruct(data []byte) (*structpb.Struct, error) {
+	if len(data) == 0 {
+		return &structpb.Struct{}, nil
+	}
+
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("json.Unmarshal: %w", err)
+	}
+
+	s, err := structpb.NewStruct(m)
+	if err != nil {
+		return nil, fmt.Errorf("structpb.NewStruct: %w", err)
+	}
+
+	return s, nil
+}
+
 // --- Server Implementation ----------------------------------------------------------------------
 
 func NewDataPlatformDataServiceServerImpl() *DataPlatformDataServiceServerImpl {
@@ -645,7 +664,12 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
 		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			"Invalid location UUID: %v",
+			req.LocationUuid,
+		)
 	}
 
 	gsParams := db.GetUserLocationSourceAtTimestampParams{
@@ -1008,20 +1032,9 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 		)
 	}
 
-	var metadataMap map[string]any
-	if dbSource.MetadataJsonb == nil {
-		metadataMap = map[string]any{}
-	} else {
-		err = json.Unmarshal(dbSource.MetadataJsonb, &metadataMap)
-		if err != nil {
-			l.Err(err).Msgf("json.Unmarshal(%s)", dbSource.MetadataJsonb)
-			return nil, status.Errorf(codes.Internal, "Failed to parse metadata for location '%s'", req.LocationUuid)
-		}
-	}
-
-	metadata, err := structpb.NewStruct(metadataMap)
+	metadata, err := jsonbToStruct(dbSource.MetadataJsonb)
 	if err != nil {
-		l.Err(err).Msgf("structpb.NewStruct(%+v)", metadataMap)
+		l.Err(err).Msgf("jsonToStruct(%s)", dbSource.MetadataJsonb)
 
 		return nil, status.Errorf(
 			codes.Internal,

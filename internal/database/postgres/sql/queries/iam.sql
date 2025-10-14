@@ -24,7 +24,9 @@ SELECT
     od.org_name,
     od.created_at_utc,
     od.user_uuids,
+    od.oauth_ids,
     od.location_policy_group_uuids,
+    od.location_policy_group_names,
     od.metadata
 FROM iam.org_details_v AS od
 WHERE org_uuid = $1
@@ -36,7 +38,9 @@ SELECT
     od.org_name,
     od.created_at_utc,
     od.user_uuids,
+    od.oauth_ids,
     od.location_policy_group_uuids,
+    od.location_policy_group_names,
     od.metadata
 FROM iam.org_details_v AS od
 WHERE org_name = $1;
@@ -110,6 +114,10 @@ FROM iam.users AS u
     INNER JOIN iam.orgs AS o USING (org_uuid)
 ORDER BY o.org_name;
 
+-- name: DeleteUser :exec
+DELETE FROM iam.users
+WHERE user_uuid = $1;
+
 /*- Location Policy Groups ----------------------------------------------------------------------*/
 
 -- name: CreateLocationPolicyGroup :one
@@ -148,17 +156,34 @@ ORDER BY location_policy_group_name;
 DELETE FROM iam.location_policy_groups
 WHERE location_policy_group_uuid = $1;
 
--- name: AddLocationPolicyGroupToOrg :exec
+-- name: AddLocationPolicyGroupsToOrg :exec
 INSERT INTO iam.org_location_policy_groups (org_uuid, location_policy_group_uuid)
-VALUES ($1, $2)
+SELECT
+    sqlc.arg(org_uuid)::UUID,
+    lpg.location_policy_group_uuid
+FROM UNNEST(ARRAY[sqlc.arg(location_policy_group_uuids)::UUID []]) AS t (location_policy_group_uuid)
+    INNER JOIN iam.location_policy_groups AS lpg USING (location_policy_group_uuid)
 ON CONFLICT DO NOTHING;
 
--- name: RemoveLocationPolicyGroupFromOrg :exec
+-- name: RemoveLocationPolicyGroupsFromOrg :exec
 DELETE FROM iam.org_location_policy_groups
 WHERE org_uuid = $1
-    AND location_policy_group_uuid = $2;
+    AND location_policy_group_uuid = ANY(sqlc.arg(location_policy_group_uuids)::UUID []);
 
 /*- Location Policies ---------------------------------------------------------------------------*/
+
+-- name: ListLocationPoliciesByGroup :many
+SELECT
+    lp.role_id,
+    r.role_name,
+    lp.source_type_id,
+    st.source_type_name,
+    lp.location_uuid,
+    lp.location_policy_group_uuid
+FROM iam.location_policies AS lp
+    INNER JOIN iam.roles AS r USING (role_id)
+    INNER JOIN loc.source_types AS st USING (source_type_id)
+WHERE lp.location_policy_group_uuid = $1;
 
 -- name: AddLocationPolicesToGroup :exec
 INSERT INTO iam.location_policies (
@@ -195,6 +220,10 @@ WHERE location_policy_group_uuid = $1
         SELECT r.role_id FROM iam.roles AS r
         WHERE r.role_name = $4
     );
+
+-- name: DeleteAllLocationPoliciesFromGroup :exec
+DELETE FROM iam.location_policies
+WHERE location_policy_group_uuid = $1;
 
 /*- Materialized Views ---------------------------------------------------------------------------*/
 
