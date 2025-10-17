@@ -15,10 +15,11 @@ import (
 
 func TestMain(m *testing.M) {
 	fmt.Printf("Starting TestMain\n")
-    exitVal := m.Run()
+	exitVal := m.Run()
+
 	fmt.Printf("Finishing TestMain\n")
 
-    os.Exit(exitVal)
+	os.Exit(exitVal)
 }
 
 func TestCreateOrganisation(t *testing.T) {
@@ -105,29 +106,29 @@ func TestUpdateOrganisation(t *testing.T) {
 	})
 
 	testCases := []struct {
-		name      string
-		updateReq *pb.UpdateOrganisationRequest
-		expectedName string
+		name             string
+		updateReq        *pb.UpdateOrganisationRequest
+		expectedName     string
 		expectedMetadata *structpb.Struct
 	}{
 		{
 			name: "Should update organisation name and metadata",
 			updateReq: &pb.UpdateOrganisationRequest{
 				OrgId:    createResp.OrgId,
-				Name:  "TEST_UPDATE_ORGANISATION_UPDATED",
+				Name:     "TEST_UPDATE_ORGANISATION_UPDATED",
 				Metadata: metadata2,
 			},
-			expectedName: "TEST_UPDATE_ORGANISATION_UPDATED",
+			expectedName:     "TEST_UPDATE_ORGANISATION_UPDATED",
 			expectedMetadata: metadata2,
 		},
 		{
 			name: "Should update only organisation name if metadata is nil",
 			updateReq: &pb.UpdateOrganisationRequest{
 				OrgId:    createResp.OrgId,
-				Name:  "TEST_UPDATE_ORGANISATION_NAME_ONLY",
+				Name:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 				Metadata: nil,
 			},
-			expectedName: "TEST_UPDATE_ORGANISATION_NAME_ONLY",
+			expectedName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 			expectedMetadata: metadata2,
 		},
 		{
@@ -136,14 +137,14 @@ func TestUpdateOrganisation(t *testing.T) {
 				OrgId:    createResp.OrgId,
 				Metadata: metadata1,
 			},
-			expectedName: "TEST_UPDATE_ORGANISATION_NAME_ONLY",
+			expectedName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 			expectedMetadata: metadata1,
 		},
 		{
 			name: "Shouldn't update non-existent organisation",
 			updateReq: &pb.UpdateOrganisationRequest{
 				OrgId:    "non_existent_org_id",
-				Name:  "SHOULD_NOT_UPDATE",
+				Name:     "SHOULD_NOT_UPDATE",
 				Metadata: metadata1,
 			},
 		},
@@ -152,7 +153,7 @@ func TestUpdateOrganisation(t *testing.T) {
 			updateReq: &pb.UpdateOrganisationRequest{
 				OrgId: createResp.OrgId,
 			},
-			expectedName: "TEST_UPDATE_ORGANISATION_NAME_ONLY",
+			expectedName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 			expectedMetadata: metadata1,
 		},
 	}
