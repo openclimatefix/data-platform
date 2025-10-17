@@ -1112,9 +1112,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		)
 	}
 
-	err = querier.UpdateUserLocationPoliciesMaterializedView(ctx)
+	err = querier.RefreshUserLocationPoliciesMaterializedView(ctx)
 	if err != nil {
-		l.Err(err).Msg("querier.UpdateUserLocationPoliciesMaterializedView()")
+		l.Err(err).Msg("querier.RefreshUserLocationPoliciesMaterializedView()")
 		return nil, status.Error(codes.Internal, "Encountered backend communication error")
 	}
 
@@ -1168,9 +1168,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		)
 	}
 
-	err = querier.UpdateSourcesMaterializedView(ctx)
+	err = querier.RefreshSourcesMaterializedView(ctx)
 	if err != nil {
-		l.Err(err).Msg("querier.UpdateSourcesMaterializedView()")
+		l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
 		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
 	}
 

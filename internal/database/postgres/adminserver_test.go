@@ -104,6 +104,7 @@ func TestUpdateOrganisation(t *testing.T) {
 		OrgName:  "TEST_UPDATE_ORGANISATION",
 		Metadata: metadata1,
 	})
+	require.NoError(t, err)
 
 	testCases := []struct {
 		name             string
@@ -239,6 +240,7 @@ func TestCreateUser(t *testing.T) {
 		OrgName:  "TEST_CREATE_USER_ORGANISATION",
 		Metadata: metadata,
 	})
+	require.NoError(t, err)
 
 	testCases := []struct {
 		name      string
@@ -319,6 +321,7 @@ func DeleteUser(t *testing.T) {
 		OrgName:  "TEST_DELETE_USER_ORGANISATION",
 		Metadata: metadata,
 	})
+	require.NoError(t, err)
 
 	createResp, err := c.CreateUser(context.Background(), &pb.CreateUserRequest{
 		OauthId:      "TEST_DELETE_USER",
