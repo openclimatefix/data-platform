@@ -8,39 +8,11 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "buf/validate/validate.proto";
 import "ocf/dp/dp.rules.proto";
+import "ocf/dp/dp.common.proto";
 
 option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
 
 // --- Common message types ----------------------------------------------------------------------
-
-enum EnergySource {
-  ENERGY_SOURCE_UNSPECIFIED = 0;
-  SOLAR = 1;
-  WIND = 2;
-}
-
-enum LocationType {
-  LOCATION_TYPE_UNSPECIFIED = 0;
-  SITE = 1;
-  GSP = 2;
-  DNO = 3;
-  NATION = 4;
-}
-/* LatLng represents a WSG84 coordinate pair.
- * Float precision enables a resolution of about 1cm,
- * which is more precise than we'll ever have data for.
- */
-message LatLng {
-  float latitude = 1[
-    (buf.validate.field).float.lte = 90,
-    (buf.validate.field).float.gte = -90
-  ];
-  float longitude = 2 [
-    (buf.validate.field).float.lte = 180,
-    (buf.validate.field).float.gte = -180
-  ];
-}
-
 message Forecaster {
   /* The name of the forecaster to use.
    * The name must be at least 3 characters long, and cannot be changed once set.
@@ -94,19 +66,17 @@ message GetForecastAsTimeseriesRequest {
   Forecaster forecaster = 5 [
     (buf.validate.field).required = true
   ];
-  string user_role = 6 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
-  ];
 }
 
 message GetForecastAsTimeseriesResponse {
   message Value {
-    google.protobuf.Timestamp timestamp_utc = 1;
-    float p50_value_percent = 2;
-    float p10_value_percent = 3;
-    float p90_value_percent = 4;
+    google.protobuf.Timestamp target_timestamp_utc = 1;
+    float p50_value_fraction = 2;
+    float p10_value_fraction = 3;
+    float p90_value_fraction = 4;
     uint64 effective_capacity_watts = 5;
+    google.protobuf.Timestamp initialization_timestamp_utc = 6;
+    google.protobuf.Timestamp created_timestamp_utc = 7;
   }
 
   string location_uuid = 1;
@@ -127,16 +97,12 @@ message GetObservationsAsTimeseriesRequest {
   TimeWindow time_window = 4 [
     (buf.validate.field).required = true
   ];
-  string user_role = 5 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
-  ];
 }
 
 message GetObservationsAsTimeseriesResponse {
   message Value {
     google.protobuf.Timestamp timestamp_utc = 1;
-    float value_percent = 2;
+    float value_fraction = 2;
     uint64 effective_capacity_watts = 3;
   }
 
@@ -163,17 +129,13 @@ message GetForecastAtTimestampRequest {
   Forecaster forecaster = 4 [
     (buf.validate.field).required = true
   ];
-  string user_role = 5 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
-  ];
 }
 
 message GetForecastAtTimestampResponse {
   message Value {
     string location_uuid = 1;
     string location_name = 2;
-    float value_percent = 3;
+    float value_fraction = 3;
     uint64 effective_capacity_watts = 4;
     LatLng latlng = 5;
   }
@@ -197,10 +159,6 @@ message GetLatestForecastsRequest {
    * If not specified, the current time will be used.
    */
   google.protobuf.Timestamp pivot_timestamp_utc = 3;
-  string user_role = 4 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
-  ];
 }
 
 message GetLatestForecastsResponse {
@@ -249,45 +207,40 @@ message UpdateForecasterResponse {
 message CreateForecastRequest {
   message ForecastValue {
     uint32 horizon_mins = 1;
-    uint64 p50_watts = 2 [
-      (buf.validate.field).required = true
+    float p50_fraction = 2 [
+      (buf.validate.field).float.gte = 0,
+      (buf.validate.field).float.lte = 1.1
     ];
-    uint64 p10_watts = 3 [
-      (buf.validate.field).required = true
+    float p10_fraction = 3 [
+      (buf.validate.field).uint64.gte = 0,
+      (buf.validate.field).float.lte = 1.1
     ];
-    uint64 p90_watts = 4 [
-      (buf.validate.field).required = true
+    float p90_fraction = 4 [
+      (buf.validate.field).uint64.gte = 0,
+      (buf.validate.field).float.lte = 1.1
     ];
     optional google.protobuf.Struct metadata = 5;
   }
 
-  message Forecast {
-    Forecaster forecaster = 1 [
-      (buf.validate.field).required = true
-    ];
-    string location_uuid = 2 [
-      (buf.validate.field).string.uuid = true
-    ];
-    uint64 capacity_watts = 3 [
-      (buf.validate.field).required = true
-    ];
-    EnergySource energy_source = 4;
-    google.protobuf.Timestamp init_time_utc = 5 [
-      (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
-    ];
-  }
-
-  CreateForecastRequest.Forecast forecast = 1 [
+  Forecaster forecaster = 1 [
     (buf.validate.field).required = true
   ];
-  repeated CreateForecastRequest.ForecastValue values = 2 [
+  string location_uuid = 2 [
+    (buf.validate.field).string.uuid = true
+  ];
+  EnergySource energy_source = 3;
+  google.protobuf.Timestamp init_time_utc = 4 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+  ];
+
+  repeated CreateForecastRequest.ForecastValue values = 5 [
     (buf.validate.field).repeated.min_items = 10,
     (buf.validate.field).repeated.max_items = 5000
   ];
 }
 
 message CreateForecastResponse {
-  int64 forecast_id = 1;
+  string forecast_uuid = 1;
 }
 
 
@@ -296,25 +249,31 @@ message CreateLocationRequest {
     (buf.validate.field).string.(valid_location_name) = true
   ];
   EnergySource energy_source = 2;
+  // A geometry string in Well-Known-Text (WKT) format.
+  // Geometry type must be POINT, POLYGON, or MULTIPOLYGON, must have 2 dimensions,
+  // and must be in the EPSG:4326 coordinate system (longitude/latitude).
   string geometry_wkt = 3 [
     (buf.validate.field).string.(valid_geometry) = true,
     (buf.validate.field).string.example = "POLYGON ((-0.127 51.507, -0.127 51.507, -0.127 51.507, -0.127 51.507))"
   ];
-  uint64 capacity_watts = 4 [
+  // The effective capacity of the location in watts.
+  // This refers to the useable capacity for generation, not the installed capacity.
+  // If tracking of installed capacity is required, this should be stored in metadata.
+  uint64 effective_capacity_watts = 4 [
     (buf.validate.field).required = true
   ];
   LocationType location_type = 5;
   optional google.protobuf.Struct metadata = 6;
-  string user_role = 7 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
+  // The UTC time from which this location is considered valid. Leave empty to use current time.
+  google.protobuf.Timestamp valid_from_utc = 7 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
 }
 
 message CreateLocationResponse {
   string location_uuid = 1;
   string location_name = 2;
-  uint64 capacity_watts = 3;
+  uint64 effective_capacity_watts = 3;
 }
 
 
@@ -324,17 +283,13 @@ message GetLocationRequest {
   ];
   EnergySource energy_source = 2;
   bool include_geometry = 3;
-  string user_role = 4 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
-  ];
 }
 
 message GetLocationResponse {
   string location_uuid = 1;
   string location_name = 2;
   LatLng latlng = 3;
-  uint64 capacity_watts = 4;
+  uint64 effective_capacity_watts = 4;
   google.protobuf.Struct metadata = 5;
   optional bytes geometry_wkb = 6;
 }
@@ -363,10 +318,10 @@ message GetLocationsAsGeoJSONResponse {
 message CreateObservationsRequest {
   message Value {
     google.protobuf.Timestamp timestamp_utc = 1;
-    float value_percent = 2 [
+    float value_fraction = 2 [
       (buf.validate.field).required = true,
       (buf.validate.field).float.gte = 0,
-      (buf.validate.field).float.lte = 110
+      (buf.validate.field).float.lte = 1.1
     ];
     uint64 effective_capacity_watts = 3 [
       (buf.validate.field).required = true
@@ -385,10 +340,6 @@ message CreateObservationsRequest {
     (buf.validate.field).repeated.min_items = 1,
     (buf.validate.field).repeated.max_items = 10000
   ];
-  string user_role = 5 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
-  ];
 }
 
 message CreateObservationsResponse {}
@@ -402,7 +353,7 @@ message CreateObserverRequest {
 }
 
 message CreateObserverResponse {
-  int32 observer_id = 1;
+  string observer_uuid = 1;
   string observer_name = 2;
 }
 
@@ -433,7 +384,7 @@ message GetWeekAverageDeltasRequest {
 message GetWeekAverageDeltasResponse {
   message AverageDelta {
     uint32 horizon_mins = 1;
-    float delta_percent = 2;
+    float delta_fraction = 2;
     uint64 effective_capacity_watts = 3;
   }
 
@@ -447,24 +398,40 @@ message GetWeekAverageDeltasResponse {
 }
 
 message ListLocationsRequest {
-  EnergySource energy_source = 1;
-  optional string enclosing_location_uuid = 2 [
-    (buf.validate.field).string.uuid = true
+  // Optional filter to only return locations of a specific energy source.
+  optional EnergySource energy_source_filter = 1;
+  // Optional filter to only return locations of a specific location type.
+  optional LocationType location_type_filter = 2;
+  // Optional filter to only return locations from a given set.
+  repeated string location_uuids_filter = 3 [
+    (buf.validate.field).repeated.max_items = 1000,
+    (buf.validate.field).repeated.items = {
+      string: {uuid: true}
+    }
   ];
-  string user_role = 3 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
+  // Optional filter to only return locations belonging to a specific user.
+  optional string user_oauth_id_filter = 4 [
+    (buf.validate.field).string.max_len = 128
   ];
+  // Optional filter to only return locations for which the user has a specific permission.
+  optional Permission permission_filter = 5;
+  // Optional filter to only return locations enclosed within a specific location.
+  optional string enclosing_location_uuid_filter = 6;
 }
 
 message ListLocationsResponse {
-  message LocationData {
+  message LocationSummary {
     string location_uuid = 1;
     string location_name = 2;
+    EnergySource energy_source = 3;
+    LocationType location_type = 4;
+    uint64 effective_capacity_watts = 5;
+    LatLng latlng = 6;
   }
 
-  repeated ListLocationsResponse.LocationData locations = 1;
+  repeated LocationSummary locations = 1;
 }
+
 
 message StreamForecastDataRequest {
   string location_uuid = 1 [
@@ -486,23 +453,9 @@ message StreamForecastDataResponse {
   string location_uuid = 2;
   string forecaster_fullname = 3;
   uint32 horizon_mins = 4;
-  optional float p10_percent = 5;
-  float p50_percent = 6;
-  optional float p90_percent = 7;
+  optional float p10_fraction = 5;
+  float p50_fraction = 6;
+  optional float p90_fraction = 7;
+  google.protobuf.Timestamp created_timestamp_utc = 8;
 }
 
-message AddLocationPolicyRequest {
-  repeated string location_uuids = 1 [
-    (buf.validate.field).string.uuid = true
-  ];
-  string user_role = 2 [
-    (buf.validate.field).string.min_len = 3,
-    (buf.validate.field).string.max_len = 64
-  ];
-  string scope = 3 [
-    (buf.validate.field).string.in = "OWNER",
-    (buf.validate.field).string.in = "VIEWER"
-  ];
-}
-
-message AddLocationPolicyResponse {}

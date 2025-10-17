@@ -12,19 +12,19 @@ CREATE SCHEMA obs;
 
 /*- Tables ----------------------------------------------------------------------------------*/
 
-/* 
+/*
  * Table to store observers.
  * These are providers of actual recorded generation values from inverters
  * (mostly - looking at you, pvlive...)
 */
 CREATE TABLE obs.observers (
-    observer_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    observer_uuid UUID NOT NULL DEFAULT UUIDV7() NOT NULL,
     observer_name TEXT NOT NULL,
     CONSTRAINT observer_name_format_check CHECK (
         LENGTH(observer_name) > 0 AND LENGTH(observer_name) < 128
         AND observer_name = LOWER(observer_name)
     ),
-    PRIMARY KEY (observer_id),
+    PRIMARY KEY (observer_uuid),
     UNIQUE (observer_name)
 );
 
@@ -39,24 +39,24 @@ CREATE TABLE obs.observers (
  */
 CREATE TABLE obs.observed_generation_values (
     value_sip SMALLINT NOT NULL,
-    CONSTRAINT value_sip_nonnegative_check CHECK ( value_sip >= 0 ),
+    CONSTRAINT value_sip_nonnegative_check CHECK (value_sip >= 0),
     source_type_id SMALLINT NOT NULL
-        REFERENCES loc.source_types(source_type_id)
-        ON UPDATE CASCADE
-        ON DELETE RESTRICT,
-    observer_id INTEGER NOT NULL
-        REFERENCES obs.observers(observer_id)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
+    REFERENCES loc.source_types (source_type_id)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT,
     observation_timestamp_utc TIMESTAMP NOT NULL,
     CONSTRAINT observation_timestamp_utc_recency_check CHECK (
-        observation_timestamp_utc <= CURRENT_TIMESTAMP + make_interval(days => 31)
+        observation_timestamp_utc <= CURRENT_TIMESTAMP + MAKE_INTERVAL(days => 31)
     ),
+    observer_uuid UUID NOT NULL
+    REFERENCES obs.observers (observer_uuid)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
     location_uuid UUID NOT NULL
-        REFERENCES loc.locations(location_uuid)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
-    PRIMARY KEY (location_uuid, source_type_id, observer_id, observation_timestamp_utc)
+    REFERENCES loc.locations (location_uuid)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
+    PRIMARY KEY (location_uuid, source_type_id, observer_uuid, observation_timestamp_utc)
 )
 PARTITION BY RANGE (observation_timestamp_utc);
 
@@ -72,14 +72,15 @@ SELECT partman.create_parent(
     p_type => 'range',
     p_interval => '1 week',
     p_automatic_maintenance => 'on',
-    p_jobmon => false,
+    p_jobmon => FALSE,
     p_premake => 7
 );
 UPDATE partman.part_config
-SET retention = '1 month',
-    retention_keep_table = true,
-    retention_keep_index = false,
-    infinite_time_partitions = true
+SET
+    retention = '1 month',
+    retention_keep_table = TRUE,
+    retention_keep_index = FALSE,
+    infinite_time_partitions = TRUE
 WHERE parent_table = 'obs.observed_generation_values';
 
 -- +goose Down

@@ -1,11 +1,11 @@
 -- Function to seed values into the database
 CREATE OR REPLACE FUNCTION seed_db(
+    name_prefix TEXT,
     num_locations INTEGER DEFAULT 1000,
     gv_resolution_mins INTEGER DEFAULT 30,
     forecast_resolution_mins INTEGER DEFAULT 30,
     forecast_length_mins INTEGER DEFAULT 480,
     num_forecasts_per_location INTEGER DEFAULT 24,
-    num_models INTEGER DEFAULT 1,
     pivot_time TIMESTAMP DEFAULT DATE_TRUNC('hour', NOW())
 )
 RETURNS TABLE (num_values INTEGER, location_uuids UUID[]) AS $$
@@ -18,32 +18,22 @@ DECLARE
 BEGIN
     -- Insert forecasters
     INSERT INTO pred.forecasters (forecaster_name, forecaster_version)
-    SELECT
-        'test_model_' || i,
-        'v1'
-    FROM generate_series(1, num_models) AS i;
+    VALUES (LOWER(name_prefix) || '_forecaster', 'v1');
 
     -- Insert locations
     INSERT INTO loc.locations
       (location_name, location_type_id, geom)
     SELECT
-        'TESTLOCATION' || i AS location_name,
-        (SELECT location_type_id FROM loc.location_types WHERE location_type_name = 'SITE'),
-        ST_SetSRID(ST_MakePoint(random() * 360 - 180, random() * 180 - 90), 4326)
+        LOWER(name_prefix) || '_testlocation' || i AS location_name,
+        1,
+        ST_SetSRID(ST_MakePoint(random() * 355 - 180, random() * 175 - 90), 4326)
     FROM generate_series(0, num_locations - 1) as i;
     RAISE NOTICE 'Inserted % locations', (SELECT COUNT(*) FROM loc.locations);
 
     -- Insert observers
-    INSERT INTO obs.observers (observer_name) VALUES ('test_observer');
+    INSERT INTO obs.observers (observer_name) VALUES (LOWER(name_prefix) || '_observer');
 
     FOR loc_id IN SELECT location_uuid FROM loc.locations LOOP
-
-        -- Create location policies for the locations
-        INSERT INTO iam.location_policies
-            (role_id, service_account, location_uuid)
-        VALUES
-            (1, 'TEST_OWNER', loc_id),
-            (2, 'TEST_VIEWER', loc_id);
 
         INSERT INTO loc.sources_history
             (location_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc)
@@ -60,7 +50,7 @@ BEGIN
             INSERT INTO pred.forecasts
                 (source_type_id, location_uuid, forecaster_id, init_time_utc, value_resolution_mins)
             SELECT
-                (SELECT source_type_id FROM loc.source_types WHERE source_type_name = 'SOLAR'),
+                1,
                 loc_id,
                 p_id,
                 pivot_time - (i || ' minutes')::interval,
@@ -70,11 +60,11 @@ BEGIN
 
         -- Insert observed generation values covering all the forecast period, always half the capacity
         INSERT INTO obs.observed_generation_values
-            (value_sip, source_type_id, observer_id, location_uuid, observation_timestamp_utc)
+            (value_sip, source_type_id, observer_uuid, location_uuid, observation_timestamp_utc)
         SELECT
             15000::SMALLINT,
-            (SELECT source_type_id FROM loc.source_types WHERE source_type_name = 'SOLAR'),
-            (SELECT observer_id FROM obs.observers WHERE observer_name = 'test_observer'),
+            1,
+            (SELECT observer_uuid FROM obs.observers WHERE observer_name = LOWER(name_prefix) || '_observer'),
             loc_id,
             pivot_time - (i || ' minutes')::interval
         FROM generate_series(0, earliest_forecast_offset_mins - gv_resolution_mins, gv_resolution_mins) AS i;

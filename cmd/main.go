@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"buf.build/go/protovalidate"
-	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
+	protovalidate_ix "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -16,9 +16,10 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
-	dbdy "github.com/openclimatefix/data-platform/internal/database/dummy"
-	dbpg "github.com/openclimatefix/data-platform/internal/database/postgres"
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
+	ix "github.com/openclimatefix/data-platform/internal/interceptors"
+	dbdy "github.com/openclimatefix/data-platform/internal/server/dummy"
+	dbpg "github.com/openclimatefix/data-platform/internal/server/postgres"
 )
 
 func main() {
@@ -30,44 +31,73 @@ func main() {
 
 	zerolog.SetGlobalLevel(logLevel)
 
+	// Open a listener on port 50051
+	lis, err := net.Listen("tcp", ":50051")
+	if err != nil {
+		log.Fatal().Err(err).Msg("net.Listen({tcp: 500051})")
+	}
+
+	// Create a validator to use with protovalidate interceptor
+	validator, err := protovalidate.New()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create validator")
+	}
+
 	// Choose the server implementation based on the environment
 	databaseUrl := os.Getenv("DATABASE_URL")
 
-	var dpServerImpl pb.DataPlatformServiceServer
+	var (
+		dataServerImpl  pb.DataPlatformDataServiceServer
+		adminServerImpl pb.DataPlatformAdministrationServiceServer
+		s               *grpc.Server
+	)
 
 	if slices.Contains([]string{"", "dummy", "fake"}, strings.ToLower(databaseUrl)) {
 		log.Warn().Msg("Running in test mode with fake data. Not for production use")
 
-		dpServerImpl = dbdy.NewDummyDataPlatformServerImpl()
-	} else if strings.HasPrefix(databaseUrl, "postgres") && strings.Contains(databaseUrl, "://") {
-		log.Info().Str("type", "postgresql").Msg("Connecting to database backend")
+		dataServerImpl = dbdy.NewDataPlatformDataServerImpl()
+		adminServerImpl = dbdy.NewDataPlatformAdministrationServiceServerImpl()
 
-		dpServerImpl = dbpg.NewPostgresDataPlatformServerImpl(databaseUrl)
+		// For a dummy-backed server, just validate requests
+		s = grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				grpc.UnaryServerInterceptor(protovalidate_ix.UnaryServerInterceptor(validator)),
+			),
+		)
+	} else if strings.HasPrefix(databaseUrl, "postgres") && strings.Contains(databaseUrl, "://") {
+		log.Debug().Str("type", "postgresql").Msg("Connecting to database backend")
+
+		logInterceptor := ix.NewLoggingInterceptor()
+		txInterceptor := ix.NewTransactionInterceptor(databaseUrl, dbpg.Migrations)
+		dataServerImpl = dbpg.NewDataPlatformDataServiceServerImpl()
+		adminServerImpl = dbpg.NewDataPlatformAdministrationServiceServerImpl()
+
+		// For a postgres-backed server, validate requests and manage database transactions
+		s = grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				grpc.UnaryServerInterceptor(protovalidate_ix.UnaryServerInterceptor(validator)),
+				grpc.UnaryServerInterceptor(logInterceptor.UnaryServerInterceptor),
+				grpc.UnaryServerInterceptor(txInterceptor.UnaryServerInterceptor),
+			),
+			grpc.ChainStreamInterceptor(
+				grpc.StreamServerInterceptor(protovalidate_ix.StreamServerInterceptor(validator)),
+				grpc.StreamServerInterceptor(logInterceptor.StreamServerInterceptor),
+				grpc.StreamServerInterceptor(txInterceptor.StreamServerInterceptor),
+			),
+		)
 	} else {
 		log.Fatal().Str("url", databaseUrl).Msg("Unsupported DATABASE_URL format")
 	}
 
 	// Create the GRPC server
 	// * Add an interceptor for request validation
-	log.Info().Int("port", 50051).Msg("Starting GRPC server")
+	log.Debug().Int("port", 50051).Msg("Starting GRPC server")
 
-	lis, err := net.Listen("tcp", ":50051")
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to listen")
-	}
-
-	validator, err := protovalidate.New()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create validator")
-	}
-
-	s := grpc.NewServer(
-		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor(validator)),
-	)
-	pb.RegisterDataPlatformServiceServer(s, dpServerImpl)
+	pb.RegisterDataPlatformDataServiceServer(s, dataServerImpl)
+	pb.RegisterDataPlatformAdministrationServiceServer(s, adminServerImpl)
 	grpc_health_v1.RegisterHealthServer(s, health.NewServer())
 	reflection.Register(s)
-	log.Info().Msg("Listening on :50051")
 
+	log.Info().Msg("Listening on :50051")
 	_ = s.Serve(lis) // If this errors, we want it to panic! It's fundamental
 }

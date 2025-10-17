@@ -27,15 +27,15 @@ lint:
 	@golangci-lint fmt
 	@uvx -q sqlfluff fix -q \
 		--disable-progress-bar \
-		--config=internal/database/postgres/sql/.sqlfluff.toml \
-		internal/database/postgres/sql/queries
+		--config=internal/server/postgres/sql/.sqlfluff.toml \
+		internal/server/postgres/sql/queries
 
 .PHONY: bench
 bench:
 	@go test ./...  -bench=. -run=^a -timeout=30m
 
 .PHONY: gen
-gen: gen.db gen.proto
+gen: gen.db gen.proto.go
 
 .PHONY: doctor
 doctor:
@@ -49,11 +49,11 @@ doctor:
 gen.db:
 	@go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
 	@echo "Generating internal database code..."
-	@sqlc generate --file internal/database/postgres/.sqlc.yaml
+	@sqlc generate --file internal/server/postgres/.sqlc.yaml
 	@echo " * Success."
 
-.PHONY: gen.proto
-gen.proto: install.protoc
+.PHONY: gen.proto.go
+gen.proto.go: install.protoc
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.9
 	@echo "Generating internal protobuf code..."
@@ -136,13 +136,14 @@ gen.proto.openapi: install.protoc
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
 
-.PHONY: run # Run the Data Platform GRPC API
+.PHONY: run # Run the Data Platform GRPC API.
+# Set DATABASE_URL="postgresql://postgres:postgres@localhost:5400/postgres" in env to connect to instance spawned with `make run.db`
 run:
 	DATABASE_URL=${DATABASE_URL} LOGLEVEL=DEBUG go run cmd/main.go
 
 .PHONY: run.db # Run an instance of Postgres with the required extensions
 run.db:
-	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t data-platform-pgdb:local
+	docker build -f internal/server/postgres/infra/Containerfile internal/server/postgres/infra -t data-platform-pgdb:local
 	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" data-platform-pgdb:local
 
 .PHONY: run.client # Run a GRPC client to inspect the API

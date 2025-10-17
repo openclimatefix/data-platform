@@ -1,0 +1,213 @@
+syntax = "proto3";
+
+package ocf.dp;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "buf/validate/validate.proto";
+import "ocf/dp/dp.common.proto";
+
+option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
+
+
+message LocationPolicy {
+  string location_id = 1 [
+    (buf.validate.field).string.uuid = true
+  ];
+  EnergySource energy_source = 2;
+  Permission permission = 3;
+}
+
+message CreateUserRequest {
+  string oauth_id = 1 [
+    (buf.validate.field).string.min_len = 5,
+    (buf.validate.field).string.max_len = 128
+  ];
+  string organisation = 2 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  google.protobuf.Struct metadata = 3;
+}
+
+message CreateUserResponse {
+  string user_id = 1 [
+    (buf.validate.field).string.uuid = true
+  ];
+  string oauth_id = 2;
+}
+
+
+message GetUserRequest {
+  string oauth_id = 1 [
+    (buf.validate.field).string.min_len = 5,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message GetUserResponse {
+  string user_id = 1 [
+    (buf.validate.field).string.uuid = true
+  ];
+  string oauth_id = 2;
+  string organisation = 3;
+  repeated string location_policy_groups = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Struct metadata = 6;
+}
+
+
+message DeleteUserRequest {
+  string user_id = 1 [
+    (buf.validate.field).string.uuid = true
+  ];
+}
+
+message DeleteUserResponse {}
+
+message CreateOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  google.protobuf.Struct metadata = 2;
+}
+
+message CreateOrganisationResponse {
+  string org_id = 1 [
+    (buf.validate.field).string.uuid = true
+  ];
+  string org_name = 2;
+}
+
+
+message GetOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message GetOrganisationResponse {
+  string org_id = 1 [
+    (buf.validate.field).string.uuid = true
+  ];
+  string org_name = 2;
+  google.protobuf.Struct metadata = 3;
+  google.protobuf.Timestamp created_at = 4;
+  repeated string location_policy_groups = 5;
+  repeated string user_oauth_ids = 6;
+}
+
+message DeleteOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message DeleteOrganisationResponse {}
+
+message AddLocationPolicyGroupToOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  string location_policy_group_name = 2 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message AddLocationPolicyGroupToOrganisationResponse {}
+
+
+message RemoveLocationPolicyGroupFromOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  string location_policy_group_name = 2 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message RemoveLocationPolicyGroupFromOrganisationResponse {}
+
+
+message AddUserToOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  string user_oauth_id = 2 [
+    (buf.validate.field).string.min_len = 5,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message AddUserToOrganisationResponse {}
+
+message RemoveUserFromOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  string user_oauth_id = 2 [
+    (buf.validate.field).string.min_len = 5,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message RemoveUserFromOrganisationResponse {}
+
+
+message CreateLocationPolicyGroupRequest {
+  string name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message CreateLocationPolicyGroupResponse {
+  string location_policy_group_id = 1;
+  string name = 2;
+}
+
+message GetLocationPolicyGroupRequest {
+  string location_policy_group_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message GetLocationPolicyGroupResponse {
+  string location_policy_group_id = 1;
+  string name = 2;
+  repeated LocationPolicy location_policies = 3;
+}
+
+message AddLocationPoliciesToGroupRequest {
+  string location_policy_group_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  repeated LocationPolicy location_policies = 2 [
+    (buf.validate.field).repeated.max_items = 10000
+  ];
+}
+
+message AddLocationPoliciesToGroupResponse {}
+
+message RemoveLocationPoliciesFromGroupRequest {
+  string location_policy_group_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  repeated LocationPolicy location_policies = 2 [
+    (buf.validate.field).repeated.max_items = 10000
+  ];
+}
+
+message RemoveLocationPoliciesFromGroupResponse {}

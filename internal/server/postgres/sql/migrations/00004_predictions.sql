@@ -46,27 +46,27 @@ CREATE TABLE pred.forecasters (
 CREATE TABLE pred.forecasts (
     -- Type of energy source
     source_type_id SMALLINT NOT NULL
-        REFERENCES loc.source_types(source_type_id)
-        ON UPDATE CASCADE
-        ON DELETE RESTRICT,
+    REFERENCES loc.source_types (source_type_id)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT,
     value_resolution_mins SMALLINT NOT NULL,
     CONSTRAINT value_resolution_mins_size_check CHECK (
         value_resolution_mins > 0 AND value_resolution_mins <= 60
     ),
     init_time_utc TIMESTAMP NOT NULL,
     CONSTRAINT init_time_utc_recency_check CHECK (
-        init_time_utc >= '2000-01-01 00:00:00'::timestamp
-        AND init_time_utc < CURRENT_TIMESTAMP + make_interval(days => 30)
+        init_time_utc >= '2000-01-01 00:00:00'::TIMESTAMP
+        AND init_time_utc < CURRENT_TIMESTAMP + MAKE_INTERVAL(days => 30)
     ),
     forecaster_id INTEGER NOT NULL
-        REFERENCES pred.forecasters(forecaster_id)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
+    REFERENCES pred.forecasters (forecaster_id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
     location_uuid UUID NOT NULL
-        REFERENCES loc.locations(location_uuid)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
-    forecast_uuid UUID DEFAULT uuidv7() NOT NULL,
+    REFERENCES loc.locations (location_uuid)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
+    forecast_uuid UUID DEFAULT UUIDV7() NOT NULL,
     PRIMARY KEY (forecast_uuid),
     UNIQUE (location_uuid, source_type_id, forecaster_id, init_time_utc)
 );
@@ -95,16 +95,16 @@ CREATE TABLE pred.predicted_generation_values (
     p50_sip SMALLINT NOT NULL,
     CONSTRAINT p50_sip_nonnegative_check CHECK (p50_sip >= 0),
     p10_sip SMALLINT DEFAULT NULL,
-    CONSTRAINT p10_sip_nonnegative_check CHECK (p10_sip IS NULL or p10_sip >= 0),
+    CONSTRAINT p10_sip_nonnegative_check CHECK (p10_sip IS NULL OR p10_sip >= 0),
     p90_sip SMALLINT DEFAULT NULL
-        CHECK (p90_sip IS NULL or p90_sip >= 0),
+    CHECK (p90_sip IS NULL OR p90_sip >= 0),
     target_time_utc TIMESTAMP NOT NULL,
     metadata JSONB DEFAULT NULL
-        CHECK (metadata IS NULL OR metadata != '{}'),
+    CHECK (metadata IS NULL OR metadata != '{}'),
     forecast_uuid UUID NOT NULL
-        REFERENCES pred.forecasts(forecast_uuid)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
+    REFERENCES pred.forecasts (forecast_uuid)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
     PRIMARY KEY (forecast_uuid, target_time_utc, horizon_mins)
 )
 PARTITION BY RANGE (target_time_utc);
@@ -121,16 +121,16 @@ SELECT partman.create_parent(
     p_type => 'range',
     p_interval => '1 week',
     p_automatic_maintenance => 'on',
-    p_jobmon => false,
+    p_jobmon => FALSE,
     p_premake => 7
 );
 UPDATE partman.part_config
-SET retention = '1 month',
-    retention_keep_table = true,
-    retention_keep_index = false,
-    infinite_time_partitions = true
+SET
+    retention = '1 month',
+    retention_keep_table = TRUE,
+    retention_keep_index = FALSE,
+    infinite_time_partitions = TRUE
 WHERE parent_table = 'pred.predicted_generation_values';
 
 -- +goose Down
 DROP SCHEMA pred CASCADE;
-

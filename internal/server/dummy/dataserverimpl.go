@@ -215,26 +215,26 @@ func determineIrradiance(t time.Time, p lnglat) SolarData {
 
 // --- Server Implementation ----------------------------------------------------------------------
 
-type DataPlatformServerImpl struct{}
+type DataPlatformDataServiceServerImpl struct{}
 
-func NewDummyDataPlatformServerImpl() *DataPlatformServerImpl {
-	return &DataPlatformServerImpl{}
+func NewDataPlatformDataServerImpl() *DataPlatformDataServiceServerImpl {
+	return &DataPlatformDataServiceServerImpl{}
 }
 
 // --- Server Method Implementations -------------------------------------------------------------
 
-// CreateForecast implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) CreateForecast(
+// CreateForecast implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) CreateForecast(
 	ctx context.Context,
 	req *pb.CreateForecastRequest,
 ) (*pb.CreateForecastResponse, error) {
 	return &pb.CreateForecastResponse{
-		ForecastId: 1,
+		ForecastUuid: uuid.New().String(),
 	}, nil
 }
 
-// CreateForecaster implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) CreateForecaster(
+// CreateForecaster implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) CreateForecaster(
 	ctx context.Context,
 	req *pb.CreateForecasterRequest,
 ) (*pb.CreateForecasterResponse, error) {
@@ -246,39 +246,39 @@ func (d *DataPlatformServerImpl) CreateForecaster(
 	}, nil
 }
 
-// CreateLocation implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) CreateLocation(
+// CreateLocation implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) CreateLocation(
 	ctx context.Context,
 	req *pb.CreateLocationRequest,
 ) (*pb.CreateLocationResponse, error) {
 	return &pb.CreateLocationResponse{
-		LocationUuid:  uuid.New().String(),
-		LocationName:  req.LocationName,
-		CapacityWatts: req.CapacityWatts,
+		LocationUuid:           uuid.New().String(),
+		LocationName:           req.LocationName,
+		EffectiveCapacityWatts: req.EffectiveCapacityWatts,
 	}, nil
 }
 
-// CreateObservations implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) CreateObservations(
+// CreateObservations implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) CreateObservations(
 	ctx context.Context,
 	req *pb.CreateObservationsRequest,
 ) (*pb.CreateObservationsResponse, error) {
 	return &pb.CreateObservationsResponse{}, nil
 }
 
-// CreateObserver implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) CreateObserver(
+// CreateObserver implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) CreateObserver(
 	ctx context.Context,
 	req *pb.CreateObserverRequest,
 ) (*pb.CreateObserverResponse, error) {
 	return &pb.CreateObserverResponse{
-		ObserverId:   0,
+		ObserverUuid: uuid.New().String(),
 		ObserverName: req.Name,
 	}, nil
 }
 
-// GetForecastAsTimeseries implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) GetForecastAsTimeseries(
+// GetForecastAsTimeseries implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	ctx context.Context,
 	req *pb.GetForecastAsTimeseriesRequest,
 ) (*pb.GetForecastAsTimeseriesResponse, error) {
@@ -289,11 +289,17 @@ func (d *DataPlatformServerImpl) GetForecastAsTimeseries(
 		sd := determineIrradiance(t, randomUkLngLat())
 
 		values = append(values, &pb.GetForecastAsTimeseriesResponse_Value{
-			TimestampUtc:           timestamppb.New(t),
-			P50ValuePercent:        float32(sd.normalizedIrradiance()) * 100,
-			P10ValuePercent:        float32(sd.normalizedIrradiance()) * 95,
-			P90ValuePercent:        float32(sd.normalizedIrradiance()) * 105,
+			TargetTimestampUtc:     timestamppb.New(t),
+			P50ValueFraction:       float32(sd.normalizedIrradiance()) * 1.00,
+			P10ValueFraction:       float32(sd.normalizedIrradiance()) * 0.95,
+			P90ValueFraction:       float32(sd.normalizedIrradiance()) * 1.05,
 			EffectiveCapacityWatts: 150e6,
+			InitializationTimestampUtc: timestamppb.New(
+				t.Add(-time.Duration(req.HorizonMins) * time.Minute),
+			),
+			CreatedTimestampUtc: timestamppb.New(
+				t.Add(-time.Duration(req.HorizonMins) * 3 * time.Minute),
+			),
 		})
 		t = t.Add(30 * time.Minute)
 	}
@@ -305,8 +311,8 @@ func (d *DataPlatformServerImpl) GetForecastAsTimeseries(
 	}, nil
 }
 
-// GetForecastAtTimestamp implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) GetForecastAtTimestamp(
+// GetForecastAtTimestamp implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	ctx context.Context,
 	req *pb.GetForecastAtTimestampRequest,
 ) (*pb.GetForecastAtTimestampResponse, error) {
@@ -322,7 +328,7 @@ func (d *DataPlatformServerImpl) GetForecastAtTimestamp(
 				Latitude:  float32(ll.latDegs),
 				Longitude: float32(ll.lonDegs),
 			},
-			ValuePercent:           float32(sd.normalizedIrradiance()) * 100,
+			ValueFraction:          float32(sd.normalizedIrradiance()),
 			EffectiveCapacityWatts: 150e6,
 		}
 	}
@@ -333,16 +339,16 @@ func (d *DataPlatformServerImpl) GetForecastAtTimestamp(
 	}, nil
 }
 
-// GetLatestForecasts implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) GetLatestForecasts(
+// GetLatestForecasts implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 	context.Context,
 	*pb.GetLatestForecastsRequest,
 ) (*pb.GetLatestForecastsResponse, error) {
 	panic("unimplemented")
 }
 
-// GetLocation implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) GetLocation(
+// GetLocation implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetLocation(
 	ctx context.Context,
 	req *pb.GetLocationRequest,
 ) (*pb.GetLocationResponse, error) {
@@ -354,33 +360,37 @@ func (d *DataPlatformServerImpl) GetLocation(
 	ll := randomUkLngLat()
 
 	return &pb.GetLocationResponse{
-		LocationUuid:  req.LocationUuid,
-		LocationName:  "DummyLocation",
-		Latlng:        &pb.LatLng{Latitude: float32(ll.latDegs), Longitude: float32(ll.lonDegs)},
-		CapacityWatts: 1280e3,
-		Metadata:      &structpb.Struct{},
-		GeometryWkb:   geometryWkb,
+		LocationUuid: req.LocationUuid,
+		LocationName: "DummyLocation",
+		Latlng: &pb.LatLng{
+			Latitude:  float32(ll.latDegs),
+			Longitude: float32(ll.lonDegs),
+		},
+		EffectiveCapacityWatts: 1280e3,
+		Metadata:               &structpb.Struct{},
+		GeometryWkb:            geometryWkb,
 	}, nil
 }
 
-// GetLocationsAsGeoJSON implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) GetLocationsAsGeoJSON(
+// ListLocations implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) ListLocations(
 	context.Context,
-	*pb.GetLocationsAsGeoJSONRequest,
-) (*pb.GetLocationsAsGeoJSONResponse, error) {
-	panic("unimplemented")
-}
-
-// GetLocationsWithin implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) ListLocations(
-	ctx context.Context,
-	req *pb.ListLocationsRequest,
+	*pb.ListLocationsRequest,
 ) (*pb.ListLocationsResponse, error) {
-	locations := make([]*pb.ListLocationsResponse_LocationData, 5)
+	locations := make([]*pb.ListLocationsResponse_LocationSummary, 4)
+
 	for i := range locations {
-		locations[i] = &pb.ListLocationsResponse_LocationData{
-			LocationUuid: uuid.New().String(),
-			LocationName: fmt.Sprintf("DummyLocation%d", i),
+		ll := randomUkLngLat()
+		locations[i] = &pb.ListLocationsResponse_LocationSummary{
+			LocationUuid:           uuid.New().String(),
+			LocationName:           fmt.Sprintf("DummyLocation%d", i),
+			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+			EffectiveCapacityWatts: 150e6,
+			Latlng: &pb.LatLng{
+				Latitude:  float32(ll.latDegs),
+				Longitude: float32(ll.lonDegs),
+			},
 		}
 	}
 
@@ -389,8 +399,16 @@ func (d *DataPlatformServerImpl) ListLocations(
 	}, nil
 }
 
-// GetObservationsAsTimeseries implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) GetObservationsAsTimeseries(
+// GetLocationsAsGeoJSON implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
+	context.Context,
+	*pb.GetLocationsAsGeoJSONRequest,
+) (*pb.GetLocationsAsGeoJSONResponse, error) {
+	panic("unimplemented")
+}
+
+// GetObservationsAsTimeseries implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	ctx context.Context,
 	req *pb.GetObservationsAsTimeseriesRequest,
 ) (*pb.GetObservationsAsTimeseriesResponse, error) {
@@ -403,7 +421,7 @@ func (d *DataPlatformServerImpl) GetObservationsAsTimeseries(
 
 		values[i] = &pb.GetObservationsAsTimeseriesResponse_Value{
 			TimestampUtc:           timestamppb.New(t),
-			ValuePercent:           float32(sd.normalizedIrradiance()) * 100,
+			ValueFraction:          float32(sd.normalizedIrradiance()),
 			EffectiveCapacityWatts: 150e6,
 		}
 	}
@@ -415,8 +433,8 @@ func (d *DataPlatformServerImpl) GetObservationsAsTimeseries(
 	}, nil
 }
 
-// GetWeekAverageDeltas implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) GetWeekAverageDeltas(
+// GetWeekAverageDeltas implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	ctx context.Context,
 	req *pb.GetWeekAverageDeltasRequest,
 ) (*pb.GetWeekAverageDeltasResponse, error) {
@@ -424,7 +442,7 @@ func (d *DataPlatformServerImpl) GetWeekAverageDeltas(
 	for i := range values {
 		values[i] = &pb.GetWeekAverageDeltasResponse_AverageDelta{
 			HorizonMins:            uint32(i * 30),
-			DeltaPercent:           rand.Float32()*10 - 5,
+			DeltaFraction:          rand.Float32()*0.1 - 0.05,
 			EffectiveCapacityWatts: 1000e3,
 		}
 	}
@@ -435,8 +453,8 @@ func (d *DataPlatformServerImpl) GetWeekAverageDeltas(
 	}, nil
 }
 
-// StreamForecastData implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) StreamForecastData(
+// StreamForecastData implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 	req *pb.StreamForecastDataRequest,
 	stream grpc.ServerStreamingServer[pb.StreamForecastDataResponse],
 ) error {
@@ -464,8 +482,8 @@ func (d *DataPlatformServerImpl) StreamForecastData(
 					p10 *float32
 				)
 
-				p90val := float32(sd.normalizedIrradiance()) * 105
-				p10val := float32(sd.normalizedIrradiance()) * 95
+				p90val := float32(sd.normalizedIrradiance()) * 1.05
+				p10val := float32(sd.normalizedIrradiance()) * 0.95
 
 				p90 = &p90val
 				p10 = &p10val
@@ -478,10 +496,11 @@ func (d *DataPlatformServerImpl) StreamForecastData(
 						fc.ForecasterName,
 						fc.ForecasterVersion,
 					),
-					HorizonMins: uint32(h),
-					P50Percent:  float32(sd.normalizedIrradiance()) * 100,
-					P10Percent:  p10,
-					P90Percent:  p90,
+					HorizonMins:         uint32(h),
+					P50Fraction:         float32(sd.normalizedIrradiance()),
+					P10Fraction:         p10,
+					P90Fraction:         p90,
+					CreatedTimestampUtc: timestamppb.New(time.Now().UTC()),
 				})
 				if err != nil {
 					return err
@@ -493,8 +512,8 @@ func (d *DataPlatformServerImpl) StreamForecastData(
 	return nil
 }
 
-// UpdateForecaster implements dp.DataPlatformServiceServer.
-func (d *DataPlatformServerImpl) UpdateForecaster(
+// UpdateForecaster implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) UpdateForecaster(
 	ctx context.Context,
 	req *pb.UpdateForecasterRequest,
 ) (*pb.UpdateForecasterResponse, error) {
@@ -506,12 +525,5 @@ func (d *DataPlatformServerImpl) UpdateForecaster(
 	}, nil
 }
 
-func (d *DataPlatformServerImpl) AddLocationPolicy(
-	context.Context,
-	*pb.AddLocationPolicyRequest,
-) (*pb.AddLocationPolicyResponse, error) {
-	return &pb.AddLocationPolicyResponse{}, nil
-}
-
 // Compile-time check to ensure the interface is implemented fully.
-var _ pb.DataPlatformServiceServer = (*DataPlatformServerImpl)(nil)
+var _ pb.DataPlatformDataServiceServer = (*DataPlatformDataServiceServerImpl)(nil)

@@ -6,6 +6,8 @@ echo "Running pre-push checks..."
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT" || exit 1
 
+echo " * Checking linting..."
+# Run linting and formatting checks (no output indicates nothing to fix)
 UNFORMATTED_FILES=$(make lint)
 if [ -n "$UNFORMATTED_FILES" ]; then
     echo "ERROR: Linting/fixing reformatted some files:"

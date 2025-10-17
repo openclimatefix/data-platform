@@ -9,8 +9,8 @@ option go_package = "github.com/openclimatefix/data-platform/internal/protogen/o
 extend buf.validate.StringRules {
  optional bool valid_location_name = 4457818 [(buf.validate.predefined).cel = {
    id: "string.valid.locationname",
-   message: "Required field, 2-100 chars long; alphanumeric and underscores only",
-   expression: "this.size() >= 2 && this.size() <= 100 && this.matches(\'^[a-zA-Z0-9_]+$\')"
+   message: "Required field, 2-100 chars long; lowercase, alphanumeric and underscores only",
+   expression: "this.size() >= 2 && this.size() <= 100 && this.matches(\'^[a-z0-9_]+$\')"
  }];
 } 
 

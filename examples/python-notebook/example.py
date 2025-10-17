@@ -77,7 +77,7 @@ async def _(Struct, client, dp):
         location_type=dp.LocationType.SITE,
         location_name="EXAMPLE_LOCATION",
         metadata=Struct().from_pydict({"test": "test"}),
-        user_role="EXAMPLE_USER",  # Subject to change
+        user_permission="EXAMPLE_USER",  # Subject to change
     )
     cl_response = await client.create_location(cl_request)
     cl_response
@@ -212,7 +212,7 @@ async def _(client, dp, dt, horizon_slider, pivot_timestamp, uuid):
             start_timestamp_utc=pivot_timestamp - dt.timedelta(hours=48),
             end_timestamp_utc=pivot_timestamp + dt.timedelta(hours=36),
         ),
-        user_role="TEST_OWNER",
+        user_permission="TEST_OWNER",
     )
     gf_response = await client.get_forecast_as_timeseries(gf_request)
     gf_response
@@ -338,7 +338,7 @@ async def _(client, dp, pivot_timestamp, uuid):
             forecaster_version="v1",
         ),
         timestamp_utc=pivot_timestamp,
-        user_role="TEST_OWNER",
+        user_permission="TEST_OWNER",
     )
     gm_response = await client.get_forecast_at_timestamp(gm_request)
     gm_response
