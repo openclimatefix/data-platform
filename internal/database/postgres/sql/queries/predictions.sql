@@ -12,13 +12,13 @@ INSERT INTO pred.forecasters (forecaster_name, forecaster_version) VALUES (
 */
 WITH desired_version AS (
     SELECT
-        COALESCE(NULLIF(sqlc.arg(forecaster_version)::text, ''), (
+        COALESCE(NULLIF(sqlc.arg(forecaster_version)::TEXT, ''), (
             SELECT forecaster_version
             FROM pred.forecasters
             WHERE forecaster_name = $1
             ORDER BY created_at_utc DESC
             LIMIT 1
-        )) AS value
+        )) AS forecaster_version
 )
 SELECT
     p.forecaster_id,
@@ -26,9 +26,9 @@ SELECT
     p.forecaster_version,
     p.created_at_utc
 FROM pred.forecasters AS p
-INNER JOIN desired_version ON true
+    INNER JOIN desired_version ON TRUE
 WHERE p.forecaster_name = $1
-    AND p.forecaster_version = desired_version.value;
+    AND p.forecaster_version = desired_version.forecaster_version;
 
 /* --- Forecasts ------------------------------------------------------------------------------ */
 
@@ -81,8 +81,7 @@ FROM pred.forecasts AS f
 WHERE f.location_uuid = $1
     AND f.source_type_id = $2
     AND f.forecaster_id = $3
-    AND f.init_time_utc
-    <= sqlc.arg(pivot_timestamp)::timestamp - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
+    AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
 ORDER BY f.init_time_utc DESC LIMIT 1;
 
 -- name: ListForecasts :many
@@ -93,19 +92,19 @@ SELECT
     f.forecast_uuid,
     f.init_time_utc,
     f.location_uuid,
-    sqlc.arg(forecaster_name)::text AS forecaster_name,
-    sqlc.arg(forecaster_version)::text AS forecaster_version
+    sqlc.arg(forecaster_name)::TEXT AS forecaster_name,
+    sqlc.arg(forecaster_version)::TEXT AS forecaster_version
 FROM pred.forecasts AS f
 WHERE f.location_uuid = $1
     AND f.source_type_id = $2
     AND f.forecaster_id = (
-        SELECT forecaster_id FROM pred.forecasters AS p
-        WHERE p.forecaster_name = sqlc.arg(forecaster_name)::text
-            AND p.forecaster_version = sqlc.arg(forecaster_version)::text
+        SELECT p.forecaster_id FROM pred.forecasters AS p
+        WHERE p.forecaster_name = sqlc.arg(forecaster_name)::TEXT
+            AND p.forecaster_version = sqlc.arg(forecaster_version)::TEXT
     )
     AND f.init_time_utc BETWEEN
-    sqlc.arg(start_timestamp)::timestamp
-    AND sqlc.arg(end_timestamp)::timestamp;
+    sqlc.arg(start_timestamp)::TIMESTAMP
+    AND sqlc.arg(end_timestamp)::TIMESTAMP;
 
 -- name: ListPredictionsForForecast :many
 /* ListPredictionsForForecast retrieves predicted generation values
@@ -137,9 +136,9 @@ WITH relevant_forecasts AS (
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
         AND f.init_time_utc BETWEEN
-        sqlc.arg(start_timestamp)::timestamp
-        - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
-        AND sqlc.arg(end_timestamp)::timestamp
+        sqlc.arg(start_timestamp)::TIMESTAMP
+        - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
+        AND sqlc.arg(end_timestamp)::TIMESTAMP
 ),
 filtered_predictions AS (
     /* Get all the predicted generation values for the relevant forecasts who's horizon is greater than
@@ -151,13 +150,13 @@ filtered_predictions AS (
         pg.p90_sip,
         pg.target_time_utc,
         pg.metadata
-    FROM pred.predicted_generation_values pg
-    INNER JOIN relevant_forecasts USING (forecast_uuid)
+    FROM pred.predicted_generation_values AS pg
+        INNER JOIN relevant_forecasts USING (forecast_uuid)
     WHERE pg.target_time_utc BETWEEN
-        sqlc.arg(start_timestamp)::timestamp
-        - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
-        AND sqlc.arg(end_timestamp)::timestamp
-        AND pg.horizon_mins >= sqlc.arg(horizon_mins)::integer
+        sqlc.arg(start_timestamp)::TIMESTAMP
+        - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
+        AND sqlc.arg(end_timestamp)::TIMESTAMP
+        AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
 ),
 ranked_predictions AS (
     /* Rank the predictions by horizon_mins for each target_time_utc */
@@ -191,11 +190,11 @@ WITH relevant_forecasts AS (
         f.init_time_utc,
         ROW_NUMBER() OVER (PARTITION BY f.location_uuid ORDER BY f.init_time_utc DESC) AS rn
     FROM pred.forecasts AS f
-    WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::uuid [])
+    WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.init_time_utc
-        <= sqlc.arg(time)::timestamp - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::integer)
+        <= sqlc.arg(time)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
 ),
 latest_relevant_forecasts AS (
     SELECT
@@ -214,8 +213,8 @@ SELECT
     pg.target_time_utc,
     pg.metadata
 FROM pred.predicted_generation_values AS pg
-INNER JOIN latest_relevant_forecasts AS rf USING (forecast_uuid)
-WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::integer;
+    INNER JOIN latest_relevant_forecasts AS rf USING (forecast_uuid)
+WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::INTEGER;
 
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed generation values
@@ -224,12 +223,12 @@ WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::integer;
  * The results are grouped by location and horizon.
  */
 WITH desired_init_times AS (
-    SELECT (d.day::date + sqlc.arg(pivot_timestamp)::timestamp::time)::timestamp AS init_time_utc
+    SELECT (d.day::DATE + sqlc.arg(pivot_timestamp)::TIMESTAMP::TIME)::TIMESTAMP AS init_time_utc
     FROM
         GENERATE_SERIES(
-            sqlc.arg(pivot_timestamp)::timestamp::date - interval '7 days',
-            sqlc.arg(pivot_timestamp)::timestamp::date - interval '1 day',
-            interval '1 day'
+            sqlc.arg(pivot_timestamp)::TIMESTAMP::DATE - INTERVAL '7 days',
+            sqlc.arg(pivot_timestamp)::TIMESTAMP::DATE - INTERVAL '1 day',
+            INTERVAL '1 day'
         ) AS d (day)
     ORDER BY d.day ASC
 ),
@@ -241,8 +240,8 @@ relevant_forecasts AS (
         f.location_uuid,
         f.forecaster_id
     FROM pred.forecasts AS f
-    INNER JOIN desired_init_times dit ON f.init_time_utc = dit.init_time_utc
-    WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::uuid [])
+        INNER JOIN desired_init_times AS dit ON f.init_time_utc = dit.init_time_utc
+    WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
 ),
@@ -255,7 +254,7 @@ relevant_predicted_values AS (
         pg.horizon_mins,
         pg.p50_sip
     FROM relevant_forecasts AS rf
-    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
+        INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
 ),
 deltas AS (
     SELECT
@@ -266,7 +265,7 @@ deltas AS (
         rv.horizon_mins,
         rv.p50_sip - og.value_sip AS delta_sip
     FROM relevant_predicted_values AS rv
-    LEFT JOIN obs.observed_generation_values AS og USING (location_uuid, source_type_id)
+        LEFT OUTER JOIN obs.observed_generation_values AS og USING (location_uuid, source_type_id)
     WHERE
         og.observer_id = $3
         AND og.observation_timestamp_utc = rv.target_time_utc

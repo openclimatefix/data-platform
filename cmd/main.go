@@ -30,19 +30,53 @@ func main() {
 
 	zerolog.SetGlobalLevel(logLevel)
 
+	// Open a listener on port 50051
+	lis, err := net.Listen("tcp", ":50051")
+	if err != nil {
+		log.Fatal().Err(err).Msg("net.Listen({tcp: 500051})")
+	}
+
+	// Create a validator to use with protovalidate interceptor
+	validator, err := protovalidate.New()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create validator")
+	}
+
 	// Choose the server implementation based on the environment
 	databaseUrl := os.Getenv("DATABASE_URL")
 
-	var dpServerImpl pb.DataPlatformServiceServer
+	var (
+		dataServerImpl  pb.DataPlatformDataServiceServer
+		adminServerImpl pb.DataPlatformAdministrationServiceServer
+		s               *grpc.Server
+	)
 
 	if slices.Contains([]string{"", "dummy", "fake"}, strings.ToLower(databaseUrl)) {
 		log.Warn().Msg("Running in test mode with fake data. Not for production use")
 
-		dpServerImpl = dbdy.NewDummyDataPlatformServerImpl()
+		dataServerImpl = dbdy.NewDataPlatformDataServerImpl()
+		adminServerImpl = dbdy.NewDataPlatformAdministrationServiceServerImpl()
+
+		// For a dummy-backed server, just validate requests
+		s = grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				grpc.UnaryServerInterceptor(middleware.UnaryServerInterceptor(validator)),
+			),
+		)
 	} else if strings.HasPrefix(databaseUrl, "postgres") && strings.Contains(databaseUrl, "://") {
 		log.Info().Str("type", "postgresql").Msg("Connecting to database backend")
 
-		dpServerImpl = dbpg.NewPostgresDataPlatformServerImpl(databaseUrl)
+		txInjector := dbpg.NewTransactionInjector(databaseUrl)
+		dataServerImpl = dbpg.NewDataPlatformDataServiceServerImpl()
+		adminServerImpl = dbpg.NewDataPlatformAdministrationServiceServerImpl()
+
+		// For a postgres-backed server, validate requests and manage database transactions
+		s = grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				grpc.UnaryServerInterceptor(middleware.UnaryServerInterceptor(validator)),
+				grpc.UnaryServerInterceptor(txInjector.UnaryServerInterceptor),
+			),
+		)
 	} else {
 		log.Fatal().Str("url", databaseUrl).Msg("Unsupported DATABASE_URL format")
 	}
@@ -51,23 +85,11 @@ func main() {
 	// * Add an interceptor for request validation
 	log.Info().Int("port", 50051).Msg("Starting GRPC server")
 
-	lis, err := net.Listen("tcp", ":50051")
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to listen")
-	}
-
-	validator, err := protovalidate.New()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create validator")
-	}
-
-	s := grpc.NewServer(
-		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor(validator)),
-	)
-	pb.RegisterDataPlatformServiceServer(s, dpServerImpl)
+	pb.RegisterDataPlatformDataServiceServer(s, dataServerImpl)
+	pb.RegisterDataPlatformAdministrationServiceServer(s, adminServerImpl)
 	grpc_health_v1.RegisterHealthServer(s, health.NewServer())
 	reflection.Register(s)
-	log.Info().Msg("Listening on :50051")
 
+	log.Info().Msg("Listening on :50051")
 	_ = s.Serve(lis) // If this errors, we want it to panic! It's fundamental
 }
