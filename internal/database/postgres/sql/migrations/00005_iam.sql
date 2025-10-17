@@ -136,8 +136,6 @@ CREATE TABLE iam.location_policies (
 
 /*
  * View that presents org details in an aggregated format.
- * Inner joins are okay here, as an org should always have at least one user and one location
- * policy group.
  */
 CREATE OR REPLACE VIEW iam.org_details_v AS
 WITH aggregated_policies AS (
@@ -167,8 +165,8 @@ SELECT
     au.user_uuids,
     au.oauth_ids
 FROM iam.orgs AS o
-    INNER JOIN aggregated_policies AS ap USING (org_uuid)
-    INNER JOIN aggregated_users AS au USING (org_uuid)
+    LEFT JOIN aggregated_policies AS ap USING (org_uuid)
+    LEFT JOIN aggregated_users AS au USING (org_uuid)
 ORDER BY o.org_name;
 
 /*

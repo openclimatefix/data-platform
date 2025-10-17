@@ -230,7 +230,7 @@ WHERE ulp.user_uuid = $7
     AND ulp.location_uuid = $1
 RETURNING location_uuid, capacity, capacity_unit_prefix_factor;
 
--- name: UpdateSourcesMaterializedView :exec
+-- name: RefreshSourcesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;
 
 -- name: DecommissionUserSource :exec

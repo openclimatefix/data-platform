@@ -24,6 +24,14 @@ linters:
     extra-words:
       - typo: "platfrom"
         correction: "platform"
+      - typo: "organisaion"
+        correction: "organisation"
+      - type: "organasiation"
+        correction: "organisation"
+      - typo: "organisaiton"
+        correction: "organisation"
+      - typo: "organization"
+        correction: "organisation"
     wsl_v5:
       default: all
       allow-whole-block: true

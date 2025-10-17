@@ -227,5 +227,5 @@ WHERE location_policy_group_uuid = $1;
 
 /*- Materialized Views ---------------------------------------------------------------------------*/
 
--- name: UpdateUserLocationPoliciesMaterializedView :exec
+-- name: RefreshUserLocationPoliciesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY iam.user_location_policies_mv;

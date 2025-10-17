@@ -77,14 +77,14 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
 		)
 	}
 
-	coParams := db.CreateOrgParams{
+	coprms := db.CreateOrgParams{
 		OrgName:  req.OrgName,
 		Metadata: metadata,
 	}
 
-	dbOrg, err := querier.CreateOrg(ctx, coParams)
+	dbOrg, err := querier.CreateOrg(ctx, coprms)
 	if err != nil {
-		l.Error().Err(err).Msgf("querier.CreateOrg(%+v)", coParams)
+		l.Error().Err(err).Msgf("querier.CreateOrg(%+v)", coprms)
 
 		return nil, status.Error(
 			codes.InvalidArgument,
@@ -247,6 +247,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 	glpgParams := db.GetLocationPolicyGroupByUUIDParams{
 		LocationPolicyGroupUuid: lpgUuid,
 	}
+
 	dbGroup, err := querier.GetLocationPolicyGroupByUUID(ctx, glpgParams)
 	if err != nil {
 		l.Error().Err(err).Msgf("querier.GetLocationPolicyGroupByUUID(%+v)", glpgParams)
@@ -406,9 +407,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
 	ggParams := db.GetLocationPolicyGroupByUUIDParams{
 		LocationPolicyGroupUuid: lpgUuid,
 	}
+
 	dbLpg, err := querier.GetLocationPolicyGroupByUUID(ctx, ggParams)
 	if err != nil {
 		l.Error().Err(err).Msgf("querier.GetLocationPolicyGroupByUUID(%+v)", ggParams)
+
 		return nil, status.Errorf(
 			codes.NotFound,
 			"Location policy group with ID '%s' not found",
@@ -422,9 +425,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
 			LocationPolicyGroupUuid: lpgUuid,
 			LocationPolicyGroupName: req.Name,
 		}
+
 		dbLpg, err = querier.UpdateLocationPolicyGroup(ctx, ugParams)
 		if err != nil {
 			l.Error().Err(err).Msgf("querier.UpdateLocationPolicyGroup(%+v)", ugParams)
+
 			return nil, status.Errorf(
 				codes.Internal,
 				"Error updating location policy group with ID '%s'",
@@ -439,9 +444,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
 		daParams := db.DeleteAllLocationPoliciesFromGroupParams{
 			LocationPolicyGroupUuid: lpgUuid,
 		}
+
 		err := querier.DeleteAllLocationPoliciesFromGroup(ctx, daParams)
 		if err != nil {
 			l.Error().Err(err).Msgf("querier.DeleteAllLocationPoliciesFromGroup(%+v)", daParams)
+
 			return nil, status.Errorf(
 				codes.Internal,
 				"Error removing existing policies from location policy group with ID '%s'",
@@ -458,9 +465,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
 				LocationPolicyGroupName: dbLpg.LocationPolicyGroupName,
 				LocationUuids:           []uuid.UUID{locUuid},
 			}
+
 			err = querier.AddLocationPolicesToGroup(ctx, apParams)
 			if err != nil {
 				l.Error().Err(err).Msgf("querier.AddLocationPolicesToGroup(%+v)", apParams)
+
 				return nil, status.Errorf(
 					codes.Internal,
 					"Error adding policy for location '%s' to location policy group with ID '%s'",
@@ -471,13 +480,15 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
 		}
 	}
 
-    // Fetch the policies
+	// Fetch the policies
 	llpParams := db.ListLocationPoliciesByGroupParams{
 		LocationPolicyGroupUuid: lpgUuid,
 	}
+
 	dbPolicies, err := querier.ListLocationPoliciesByGroup(ctx, llpParams)
 	if err != nil {
 		l.Error().Err(err).Msgf("querier.ListLocationPoliciesByGroup(%+v)", llpParams)
+
 		return nil, status.Errorf(
 			codes.Internal,
 			"Error fetching updated policies for location policy group with ID '%s'",
@@ -513,9 +524,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 	goParams := db.GetOrgByUUIDParams{
 		OrgUuid: orgUuid,
 	}
+
 	dbOrg, err := querier.GetOrgByUUID(ctx, goParams)
 	if err != nil {
 		l.Error().Err(err).Msgf("querier.GetOrgByUUID(%+v)", goParams)
+
 		return nil, status.Errorf(
 			codes.NotFound,
 			"Organisation with ID '%s' not found",
@@ -547,12 +560,14 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 	if len(req.LocationPolicyGroupIds) > 0 {
 		// Remove the existing groups
 		rlpgParams := db.RemoveLocationPolicyGroupsFromOrgParams{
-			OrgUuid: orgUuid,
+			OrgUuid:                  orgUuid,
 			LocationPolicyGroupUuids: dbOrg.LocationPolicyGroupUuids,
 		}
+
 		err := querier.RemoveLocationPolicyGroupsFromOrg(ctx, rlpgParams)
 		if err != nil {
 			l.Error().Err(err).Msgf("querier.RemoveLocationPolicyGroupsFromOrg(%+v)", rlpgParams)
+
 			return nil, status.Errorf(
 				codes.Internal,
 				"Error removing existing location policy groups from organisation with ID '%s'",
@@ -566,12 +581,14 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 			lpgUuids[i] = uuid.MustParse(id)
 		}
 		alpgParams := db.AddLocationPolicyGroupsToOrgParams{
-			OrgUuid:                   orgUuid,
+			OrgUuid:                  orgUuid,
 			LocationPolicyGroupUuids: lpgUuids,
 		}
+
 		err = querier.AddLocationPolicyGroupsToOrg(ctx, alpgParams)
 		if err != nil {
 			l.Error().Err(err).Msgf("querier.AddLocationPolicyGroupsToOrg(%+v)", alpgParams)
+
 			return nil, status.Errorf(
 				codes.Internal,
 				"Error adding location policy groups to organisation with ID '%s'. "+
@@ -581,15 +598,16 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 		}
 	}
 
-
 	uoParams := db.UpdateOrgParams{
 		OrgUuid:  orgUuid,
 		OrgName:  name,
 		Metadata: metadata,
 	}
+
 	_, err = querier.UpdateOrg(ctx, uoParams)
 	if err != nil {
 		l.Error().Err(err).Msgf("querier.UpdateOrg(%+v)", uoParams)
+
 		return nil, status.Errorf(
 			codes.Internal,
 			"Error updating organisation with ID '%s'. Ensure name is unique and metadata is valid JSON.",
@@ -601,9 +619,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 	goParams = db.GetOrgByUUIDParams{
 		OrgUuid: orgUuid,
 	}
+
 	dbOrg, err = querier.GetOrgByUUID(ctx, goParams)
 	if err != nil {
 		l.Error().Err(err).Msgf("querier.GetOrgByUUID(%+v)", goParams)
+
 		return nil, status.Errorf(
 			codes.Internal,
 			"Error fetching updated organisation with ID '%s'",
@@ -630,7 +650,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 		LocationPolicyGroups: dbOrg.LocationPolicyGroupNames,
 		UserOauthIds:         dbOrg.OauthIds,
 	}, nil
-
 }
 
 // Compile-time check to ensure the interface is implemented fully.

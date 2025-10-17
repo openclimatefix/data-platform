@@ -161,7 +161,10 @@ func seed(tb testing.TB, pgConnString string, params seedDBParams) (output struc
 }
 
 // Create a GRPC client for running tests with.
-func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformDataServiceClient {
+func setupClient(
+	tb testing.TB,
+	pgConnString string,
+) (pb.DataPlatformDataServiceClient, pb.DataPlatformAdministrationServiceClient) {
 	tb.Helper()
 	// Create server using in-memory listener
 
@@ -200,7 +203,8 @@ func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformDataServiceC
 	)
 	require.NoError(tb, err)
 
-	c := pb.NewDataPlatformDataServiceClient(cc)
+	dc := pb.NewDataPlatformDataServiceClient(cc)
+	ac := pb.NewDataPlatformAdministrationServiceClient(cc)
 
 	tb.Logf("GRPC client created successfully")
 
@@ -213,7 +217,7 @@ func setupClient(tb testing.TB, pgConnString string) pb.DataPlatformDataServiceC
 		require.NoError(tb, err)
 	})
 
-	return c
+	return dc, ac
 }
 
 type seedDBParams struct {
@@ -272,7 +276,7 @@ func TestCapacityToMultiplier(t *testing.T) {
 
 func TestCreateLocation(t *testing.T) {
 	pgConnString := createPostgresContainer(t)
-	c := setupClient(t, pgConnString)
+	c, _ := setupClient(t, pgConnString)
 	_ = seed(
 		t,
 		pgConnString,
@@ -458,7 +462,7 @@ func TestCreateLocation(t *testing.T) {
 }
 
 func TestCreateUpdateForecaster(t *testing.T) {
-	c := setupClient(t, createPostgresContainer(t))
+	c, _ := setupClient(t, createPostgresContainer(t))
 
 	tests := []struct {
 		name      string
@@ -530,7 +534,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 func TestGetForecastAtTimestamp(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 5, 12, 0, 0, 0, time.UTC)
 	pgConnString := createPostgresContainer(t)
-	c := setupClient(t, pgConnString)
+	c, _ := setupClient(t, pgConnString)
 	// Create 100 locations with 4 forecasts each
 	output := seed(t, pgConnString, seedDBParams{
 		NumLocations:            100,
@@ -558,7 +562,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 
 func TestGetLocationsAsGeoJSON(t *testing.T) {
 	pgConnString := createPostgresContainer(t)
-	c := setupClient(t, pgConnString)
+	c, _ := setupClient(t, pgConnString)
 	_ = seed(
 		t,
 		pgConnString,
@@ -599,7 +603,7 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 func TestGetForecastAsTimeseries(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 5, 12, 0, 0, 0, time.UTC)
 	pgConnString := createPostgresContainer(t)
-	c := setupClient(t, pgConnString)
+	c, _ := setupClient(t, pgConnString)
 
 	// Create four forecasts, each half an hour apart, up to the latestForecastTime
 	// Give each forecast one hour's worth of predicted generation values, occurring every 5 minutes
@@ -700,7 +704,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 func TestGetObservationsAsTimeseries(t *testing.T) {
 	pivotTime := time.Now().Truncate(time.Minute)
 	pgConnString := createPostgresContainer(t)
-	c := setupClient(t, pgConnString)
+	c, _ := setupClient(t, pgConnString)
 	output := seed(t, pgConnString, seedDBParams{
 		NumLocations:            1,
 		NumForecasters:          1,
@@ -747,7 +751,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 func TestGetWeekAverageDeltas(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	pgConnString := createPostgresContainer(t)
-	c := setupClient(t, pgConnString)
+	c, _ := setupClient(t, pgConnString)
 	output := seed(t, pgConnString, seedDBParams{
 		NumLocations:            1,
 		NumForecasters:          1,
@@ -772,7 +776,7 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 
 func TestGetLocationsWithin(t *testing.T) {
 	pgConnString := createPostgresContainer(t)
-	c := setupClient(t, pgConnString)
+	c, _ := setupClient(t, pgConnString)
 	_ = seed(
 		t,
 		pgConnString,
@@ -854,7 +858,7 @@ func TestGetLocationsWithin(t *testing.T) {
 
 func TestCreateForecast(t *testing.T) {
 	pgConnString := createPostgresContainer(t)
-	c := setupClient(t, pgConnString)
+	c, _ := setupClient(t, pgConnString)
 	_ = seed(
 		t,
 		pgConnString,
@@ -929,7 +933,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 	}
 	for _, tt := range tests {
 		pgConnString := createPostgresContainer(b)
-		c := setupClient(b, pgConnString)
+		c, _ := setupClient(b, pgConnString)
 		output := seed(b, pgConnString, tt)
 
 		// Create some test yields
