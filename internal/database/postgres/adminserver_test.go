@@ -2,8 +2,6 @@ package postgres
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -13,19 +11,7 @@ import (
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
-func TestMain(m *testing.M) {
-	fmt.Printf("Starting TestMain\n")
-	exitVal := m.Run()
-
-	fmt.Printf("Finishing TestMain\n")
-
-	os.Exit(exitVal)
-}
-
 func TestCreateOrganisation(t *testing.T) {
-	pgConnString := createPostgresContainer(t)
-	_, c := setupClient(t, pgConnString)
-
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
@@ -72,15 +58,15 @@ func TestCreateOrganisation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := c.CreateOrganisation(context.Background(), tc.createReq)
+			resp, err := ac.CreateOrganisation(context.Background(), tc.createReq)
 			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 
 				// Read back the organisation
-				dbOrg, err := c.GetOrganisation(context.Background(), &pb.GetOrganisationRequest{
-					OrgId: resp.OrgId,
+				dbOrg, err := ac.GetOrganisation(context.Background(), &pb.GetOrganisationRequest{
+					OrgName: resp.OrgName,
 				})
 				require.NoError(t, err)
 
@@ -92,15 +78,12 @@ func TestCreateOrganisation(t *testing.T) {
 }
 
 func TestUpdateOrganisation(t *testing.T) {
-	pgConnString := createPostgresContainer(t)
-	_, c := setupClient(t, pgConnString)
-
 	metadata1, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 	metadata2, err := structpb.NewStruct(map[string]any{"source": "updated_test"})
 	require.NoError(t, err)
 
-	createResp, err := c.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
+	createResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
 		OrgName:  "TEST_UPDATE_ORGANISATION",
 		Metadata: metadata1,
 	})
@@ -115,8 +98,8 @@ func TestUpdateOrganisation(t *testing.T) {
 		{
 			name: "Should update organisation name and metadata",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgId:    createResp.OrgId,
-				Name:     "TEST_UPDATE_ORGANISATION_UPDATED",
+				OrgName:    createResp.OrgName,
+				NewName:     "TEST_UPDATE_ORGANISATION_UPDATED",
 				Metadata: metadata2,
 			},
 			expectedName:     "TEST_UPDATE_ORGANISATION_UPDATED",
@@ -125,8 +108,8 @@ func TestUpdateOrganisation(t *testing.T) {
 		{
 			name: "Should update only organisation name if metadata is nil",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgId:    createResp.OrgId,
-				Name:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
+				OrgName:    "TEST_UPDATE_ORGANISATION_UPDATED",
+				NewName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 				Metadata: nil,
 			},
 			expectedName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
@@ -135,7 +118,7 @@ func TestUpdateOrganisation(t *testing.T) {
 		{
 			name: "Should update only metadata if name is empty",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgId:    createResp.OrgId,
+				OrgName:    "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 				Metadata: metadata1,
 			},
 			expectedName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
@@ -144,15 +127,15 @@ func TestUpdateOrganisation(t *testing.T) {
 		{
 			name: "Shouldn't update non-existent organisation",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgId:    "non_existent_org_id",
-				Name:     "SHOULD_NOT_UPDATE",
+				OrgName:    "non_existent_org_id",
+				NewName:     "SHOULD_NOT_UPDATE",
 				Metadata: metadata1,
 			},
 		},
 		{
 			name: "Should do nothing if both name and metadata are empty",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgId: createResp.OrgId,
+				OrgName: "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 			},
 			expectedName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 			expectedMetadata: metadata1,
@@ -161,15 +144,15 @@ func TestUpdateOrganisation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := c.UpdateOrganisation(context.Background(), tc.updateReq)
+			_, err := ac.UpdateOrganisation(context.Background(), tc.updateReq)
 			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 
 				// Read back the organisation
-				dbOrg, err := c.GetOrganisation(context.Background(), &pb.GetOrganisationRequest{
-					OrgId: tc.updateReq.OrgId,
+				dbOrg, err := ac.GetOrganisation(context.Background(), &pb.GetOrganisationRequest{
+					OrgName: tc.expectedName,
 				})
 				require.NoError(t, err)
 
@@ -181,13 +164,10 @@ func TestUpdateOrganisation(t *testing.T) {
 }
 
 func TestDeleteOrganisation(t *testing.T) {
-	pgConnString := createPostgresContainer(t)
-	_, c := setupClient(t, pgConnString)
-
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
-	createResp, err := c.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
+	createResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
 		OrgName:  "TEST_DELETE_ORGANISATION",
 		Metadata: metadata,
 	})
@@ -212,15 +192,15 @@ func TestDeleteOrganisation(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := c.DeleteOrganisation(context.Background(), tc.deleteReq)
+			_, err := ac.DeleteOrganisation(context.Background(), tc.deleteReq)
 			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 
 				// Try to read back the organisation
-				_, err := c.GetOrganisation(context.Background(), &pb.GetOrganisationRequest{
-					OrgId: tc.deleteReq.OrgId,
+				_, err := ac.GetOrganisation(context.Background(), &pb.GetOrganisationRequest{
+					OrgName: "TEST_DELETE_ORGANISATION",
 				})
 				// Obviously should error here
 				require.Error(t, err)
@@ -230,13 +210,10 @@ func TestDeleteOrganisation(t *testing.T) {
 }
 
 func TestCreateUser(t *testing.T) {
-	pgConnString := createPostgresContainer(t)
-	_, c := setupClient(t, pgConnString)
-
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
-	orgResp, err := c.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
+	orgResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
 		OrgName:  "TEST_CREATE_USER_ORGANISATION",
 		Metadata: metadata,
 	})
@@ -290,14 +267,14 @@ func TestCreateUser(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := c.CreateUser(context.Background(), tc.createReq)
+			_, err := ac.CreateUser(context.Background(), tc.createReq)
 			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 
 				// Read back the user
-				dbUser, err := c.GetUser(context.Background(), &pb.GetUserRequest{
+				dbUser, err := ac.GetUser(context.Background(), &pb.GetUserRequest{
 					OauthId: tc.createReq.OauthId,
 				})
 				require.NoError(t, err)
@@ -311,19 +288,16 @@ func TestCreateUser(t *testing.T) {
 }
 
 func DeleteUser(t *testing.T) {
-	pgConnString := createPostgresContainer(t)
-	_, c := setupClient(t, pgConnString)
-
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
-	orgResp, err := c.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
+	orgResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
 		OrgName:  "TEST_DELETE_USER_ORGANISATION",
 		Metadata: metadata,
 	})
 	require.NoError(t, err)
 
-	createResp, err := c.CreateUser(context.Background(), &pb.CreateUserRequest{
+	createResp, err := ac.CreateUser(context.Background(), &pb.CreateUserRequest{
 		OauthId:      "TEST_DELETE_USER",
 		Organisation: orgResp.OrgName,
 		Metadata:     metadata,
@@ -349,14 +323,14 @@ func DeleteUser(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := c.DeleteUser(context.Background(), tc.deleteReq)
+			_, err := ac.DeleteUser(context.Background(), tc.deleteReq)
 			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 
 				// Try to read back the user
-				_, err := c.GetUser(context.Background(), &pb.GetUserRequest{
+				_, err := ac.GetUser(context.Background(), &pb.GetUserRequest{
 					OauthId: "TEST_DELETE_USER",
 				})
 				// Obviously should error here

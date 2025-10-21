@@ -147,16 +147,16 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	querier := db.New(GetTxFromContext(ctx))
 
 	// Get the location and source
-	locationUuid, err := uuid.Parse(req.Forecast.LocationUuid)
+	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("uuid.Parse(%s)", req.Forecast.LocationUuid)
+		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 	}
 
 	gsParams := db.GetLocationSourceAtTimestampParams{
 		LocationUuid:   locationUuid,
-		SourceTypeName: req.Forecast.EnergySource.String(),
-		AtTimestampUtc: pgtype.Timestamp{Time: req.Forecast.InitTimeUtc.AsTime(), Valid: true},
+		SourceTypeID: int16(req.EnergySource.Number()),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.InitTimeUtc.AsTime(), Valid: true},
 	}
 
 	dbSource, err := querier.GetLocationSourceAtTimestamp(ctx, gsParams)
@@ -165,7 +165,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 		return nil, status.Errorf(
 			codes.NotFound, "No location found for id '%s' with source type '%s'.",
-			req.Forecast.LocationUuid, req.Forecast.EnergySource,
+			req.LocationUuid, req.EnergySource,
 		)
 	}
 
@@ -173,8 +173,8 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 	// Check the forecaster exists
 	pctParams := db.GetForecasterElseLatestParams{
-		ForecasterName:    req.Forecast.Forecaster.ForecasterName,
-		ForecasterVersion: req.Forecast.Forecaster.ForecasterVersion,
+		ForecasterName:    req.Forecaster.ForecasterName,
+		ForecasterVersion: req.Forecaster.ForecasterVersion,
 	}
 
 	_, err = querier.GetForecasterElseLatest(ctx, pctParams)
@@ -184,7 +184,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		return nil, status.Errorf(
 			codes.NotFound, "No forecaster found for name '%s' and version '%s'."+
 				"Create the forecaster before submitting a forecast.",
-			req.Forecast.Forecaster.ForecasterName, req.Forecast.Forecaster.ForecasterVersion,
+			req.Forecaster.ForecasterName, req.Forecaster.ForecasterVersion,
 		)
 	}
 
@@ -192,11 +192,11 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	params2 := db.CreateForecastParams{
 		LocationUuid:        locationUuid,
 		SourceTypeID:        dbSource.SourceTypeID,
-		ForecasterName:      req.Forecast.Forecaster.ForecasterName,
-		ForecasterVersion:   req.Forecast.Forecaster.ForecasterVersion,
+		ForecasterName:      req.Forecaster.ForecasterName,
+		ForecasterVersion:   req.Forecaster.ForecasterVersion,
 		ValueResolutionMins: int16(resolution_mins),
 		InitTimeUtc: pgtype.Timestamp{
-			Time:  req.Forecast.InitTimeUtc.AsTime(),
+			Time:  req.InitTimeUtc.AsTime(),
 			Valid: true,
 		},
 	}
@@ -213,8 +213,8 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	// Create the forecast data
 	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
 	for i, value := range req.Values {
-		p10sip := int16((value.P10Watts / req.Forecast.CapacityWatts) * 30000.0)
-		p90sip := int16((value.P90Watts / req.Forecast.CapacityWatts) * 30000.0)
+		p10sip := int16(value.P10Fraction * 30000.0)
+		p90sip := int16(value.P90Fraction * 30000.0)
 
 		metadata, err := value.Metadata.MarshalJSON()
 		if err != nil {
@@ -229,10 +229,10 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 		paramsList[i] = db.CreatePredictedValuesParams{
 			HorizonMins:  int16(value.HorizonMins),
-			P50Sip:       int16((value.P50Watts / req.Forecast.CapacityWatts) * 30000.0),
+			P50Sip:       int16(value.P50Fraction * 30000.0),
 			ForecastUuid: dbForecast.ForecastUuid,
 			TargetTimeUtc: pgtype.Timestamp{
-				Time: req.Forecast.InitTimeUtc.AsTime().Add(
+				Time: req.InitTimeUtc.AsTime().Add(
 					time.Duration(value.HorizonMins) * time.Minute,
 				),
 				Valid: true,
@@ -366,7 +366,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 	// Get the source as it was at the initial time of the time window
 	srcParams := db.GetLocationSourceAtTimestampParams{
 		LocationUuid:   locationUuid,
-		SourceTypeName: req.EnergySource.String(),
+		SourceTypeID: int16(req.EnergySource.Number()),
 		AtTimestampUtc: pgtype.Timestamp{
 			Time:  req.TimeWindow.StartTimestampUtc.AsTime(),
 			Valid: true,
@@ -435,13 +435,13 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 		for i := range dbPreds {
 			var p90 *float32
 			if dbPreds[i].P90Sip != nil {
-				p90val := (float32(*dbPreds[i].P90Sip) / 30000.0) * 100.0
+				p90val := float32(*dbPreds[i].P90Sip) / 30000.0
 				p90 = &p90val
 			}
 
 			var p10 *float32
 			if dbPreds[i].P10Sip != nil {
-				p10val := (float32(*dbPreds[i].P10Sip) / 30000.0) * 100.0
+				p10val := float32(*dbPreds[i].P10Sip) / 30000.0
 
 				p10 = &p10val
 			}
@@ -455,9 +455,9 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					forecast.ForecasterVersion,
 				),
 				HorizonMins: uint32(dbPreds[i].HorizonMins),
-				P50Percent:  (float32(dbPreds[i].P50Sip) / 30000.0) * 100.0,
-				P10Percent:  p10,
-				P90Percent:  p90,
+				P50Fraction:  float32(dbPreds[i].P50Sip) / 30000.0,
+				P10Fraction:  p10,
+				P90Fraction:  p90,
 			})
 			if err != nil {
 				return err
@@ -472,68 +472,13 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 	ctx context.Context,
 	req *pb.ListLocationsRequest,
 ) (*pb.ListLocationsResponse, error) {
-	l := log.With().Str("method", "ListLocations").Logger()
+	// l := log.With().Str("method", "ListLocations").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	// querier := db.New(GetTxFromContext(ctx))
 
 	var locations []*pb.ListLocationsResponse_LocationData
 
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
-
-	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
-	}
-
-	if req.EnclosingLocationUuid != nil {
-		// Only get the locations that are contained within a specific outer location
-		locationUuid, err := uuid.Parse(*req.EnclosingLocationUuid)
-		if err != nil {
-			l.Err(err).Msgf("uuid.Parse(%s)", *req.EnclosingLocationUuid)
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
-		}
-
-		lwParams := db.GetUserLocationsWithinParams{
-			LocationUuid: locationUuid,
-			UserUuid:     dbUser.UserUuid,
-		}
-
-		dbLocations, err := querier.GetUserLocationsWithin(ctx, lwParams)
-		if err != nil {
-			l.Err(err).Msgf("querier.GetUserLocationsWithin(%+v)", lwParams)
-
-			return nil, status.Errorf(
-				codes.NotFound,
-				"No locations found within the specified location '%s'", *req.EnclosingLocationUuid,
-			)
-		}
-
-		for i := range dbLocations {
-			locations = append(locations, &pb.ListLocationsResponse_LocationData{
-				LocationUuid: dbLocations[i].LocationUuid.String(),
-				LocationName: strings.ToUpper(dbLocations[i].LocationName),
-			})
-		}
-	} else {
-		// List all the locations
-		glParams := db.GetUserLocationsParams{
-			UserUuid: dbUser.UserUuid,
-		}
-
-		dbLocations, err := querier.GetUserLocations(ctx, glParams)
-		if err != nil {
-			l.Err(err).Msgf("querier.GetUserLocations(%+v)", glParams)
-			return nil, status.Errorf(codes.NotFound, "No locations found")
-		}
-
-		for i := range dbLocations {
-			locations = append(locations, &pb.ListLocationsResponse_LocationData{
-				LocationUuid: dbLocations[i].LocationUuid.String(),
-				LocationName: strings.ToUpper(dbLocations[i].LocationName),
-			})
-		}
-	}
+	// TODO:
 
 	return &pb.ListLocationsResponse{
 		Locations: locations,
@@ -557,7 +502,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	gstParams := db.GetLocationSourceAtTimestampParams{
 		LocationUuid:   locationUuid,
-		SourceTypeName: req.EnergySource.String(),
+		SourceTypeID: int16(req.EnergySource.Number()),
 		AtTimestampUtc: pgtype.Timestamp{Time: req.PivotTime.AsTime(), Valid: true},
 	}
 
@@ -627,7 +572,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	deltas := make([]*pb.GetWeekAverageDeltasResponse_AverageDelta, len(dbDeltas))
 	for i, delta := range dbDeltas {
 		deltas[i] = &pb.GetWeekAverageDeltasResponse_AverageDelta{
-			DeltaPercent: (float32(delta.AvgDeltaSip) / 30000.0) * 100.0,
+			DeltaFraction: float32(delta.AvgDeltaSip) / 30000.0,
 			HorizonMins:  uint32(delta.HorizonMins),
 			EffectiveCapacityWatts: uint64(
 				dbSource.Capacity,
@@ -650,52 +595,22 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	l := log.With().Str("method", "GetObservationsAsTimeseries").Logger()
 
 	querier := db.New(GetTxFromContext(ctx))
+	locationUuid := uuid.MustParse(req.LocationUuid)
 
-	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
-
-	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
+	stprms := db.GetSourceTypeByNameParams{SourceTypeName: req.EnergySource.String()}
+	sourceTypeResp, err := querier.GetSourceTypeByName(ctx, stprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
-	}
-
-	// Get the location and source
-	locationUuid, err := uuid.Parse(req.LocationUuid)
-	if err != nil {
-		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
-
+		l.Err(err).Msgf("querier.GetSourceTypeByName(%+v)", stprms)
 		return nil, status.Errorf(
-			codes.InvalidArgument,
-			"Invalid location UUID: %v",
-			req.LocationUuid,
-		)
-	}
-
-	gsParams := db.GetUserLocationSourceAtTimestampParams{
-		LocationUuid:   locationUuid,
-		SourceTypeName: req.EnergySource.String(),
-		AtTimestampUtc: pgtype.Timestamp{
-			Time:  req.TimeWindow.StartTimestampUtc.AsTime(),
-			Valid: true,
-		},
-		UserUuid: dbUser.UserUuid,
-	}
-
-	dbSource, err := querier.GetUserLocationSourceAtTimestamp(ctx, gsParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetUserLocationSourceAtTimestamp(%+v)", gsParams)
-
-		return nil, status.Errorf(
-			codes.NotFound, "No location found for ID '%s' with source type '%s'.",
-			req.LocationUuid, req.EnergySource,
+			codes.NotFound, "No source type found for name '%s'.",
+			req.EnergySource,
 		)
 	}
 
 	// Get the observer
 	obParams := db.GetObserverByNameParams{ObserverName: req.ObserverName}
 
-	dbObserver, err := querier.GetObserverByName(ctx, obParams)
+	observerResp, err := querier.GetObserverByName(ctx, obParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obParams)
 
@@ -715,8 +630,8 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 	goParams := db.GetObservationsBetweenParams{
 		LocationUuid: locationUuid,
-		SourceTypeID: dbSource.SourceTypeID,
-		ObserverID:   dbObserver.ObserverID,
+		SourceTypeID: sourceTypeResp.SourceTypeID,
+		ObserverID:   observerResp.ObserverID,
 		StartTimeUtc: start,
 		EndTimeUtc:   end,
 	}
@@ -735,7 +650,7 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	values := make([]*pb.GetObservationsAsTimeseriesResponse_Value, len(dbObs))
 	for i, obs := range dbObs {
 		values[i] = &pb.GetObservationsAsTimeseriesResponse_Value{
-			ValuePercent: (float32(obs.ValueSip) / 30000.0) * 100.0,
+			ValueFraction: float32(obs.ValueSip) / 30000.0,
 			TimestampUtc: timestamppb.New(obs.ObservationTimestampUtc.Time),
 			EffectiveCapacityWatts: uint64(
 				float64(obs.EffectiveCapacity) * math.Pow10(int(obs.CapacityUnitPrefixFactor)),
@@ -744,8 +659,8 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	}
 
 	return &pb.GetObservationsAsTimeseriesResponse{
-		LocationUuid: dbSource.LocationUuid.String(),
-		LocationName: strings.ToUpper(dbSource.LocationName),
+		LocationUuid: locationUuid.String(),
+		LocationName: "", // TODO
 		Values:       values,
 	}, nil
 }
@@ -758,15 +673,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 
 	querier := db.New(GetTxFromContext(ctx))
 
-	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
-
-	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
-	}
-
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
@@ -774,14 +680,13 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 	}
 
-	params := db.GetUserLocationSourceAtTimestampParams{
+	params := db.GetLocationSourceAtTimestampParams{
 		LocationUuid:   locationUuid,
-		SourceTypeName: req.EnergySource.String(),
+		SourceTypeID: int16(req.EnergySource.Number()),
 		AtTimestampUtc: pgtype.Timestamp{Time: req.Values[0].TimestampUtc.AsTime(), Valid: true},
-		UserUuid:       dbUser.UserUuid,
 	}
 
-	dbSource, err := querier.GetUserLocationSourceAtTimestamp(ctx, params)
+	dbSource, err := querier.GetLocationSourceAtTimestamp(ctx, params)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetUserLocationSourceAtTimestamp(%+v)", params)
 
@@ -816,7 +721,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 				Valid: true,
 			},
 			SourceTypeID: dbSource.SourceTypeID,
-			ValueSip:     int16((v.ValuePercent / 100.0) * 30000.0),
+			ValueSip:     int16(v.ValueFraction * 30000.0),
 		}
 	}
 
@@ -868,15 +773,6 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	querier := db.New(GetTxFromContext(ctx))
 
-	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
-
-	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
-	}
-
 	// Get the relevant forecaster
 	params := db.GetForecasterElseLatestParams{
 		ForecasterName:    req.Forecaster.ForecasterName,
@@ -908,14 +804,13 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 		}
 	}
 
-	lsParams := db.ListUserLocationSourcesAtTimestampParams{
+	lsParams := db.ListSourcesAtTimestampParams{
 		SourceTypeName: req.EnergySource.String(),
 		LocationUuids:  locationUuids,
 		AtTimestampUtc: pgtype.Timestamp{Time: req.TimestampUtc.AsTime(), Valid: true},
-		UserUuid:       dbUser.UserUuid,
 	}
 
-	dbSources, err := querier.ListUserLocationSourcesAtTimestamp(ctx, lsParams)
+	dbSources, err := querier.ListSourcesAtTimestamp(ctx, lsParams)
 	if err != nil || len(dbSources) == 0 {
 		l.Err(err).Msgf("querier.ListUserLocationSourcesAtTimestamp(%+v)", lsParams)
 
@@ -967,7 +862,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 		)
 		if idx > -1 {
 			values = append(values, &pb.GetForecastAtTimestampResponse_Value{
-				ValuePercent: (float32(dbCrossSection[idx].P50Sip) / 30000.0) * 100.0,
+				ValueFraction: float32(dbCrossSection[idx].P50Sip) / 30000.0,
 				EffectiveCapacityWatts: uint64(
 					value.Capacity,
 				) * uint64(
@@ -997,15 +892,6 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 
 	querier := db.New(GetTxFromContext(ctx))
 
-	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
-
-	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
-	}
-
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
@@ -1013,16 +899,15 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 	}
 
-	params := db.GetUserLocationSourceAtTimestampParams{
+	params := db.GetLocationSourceAtTimestampParams{
 		LocationUuid:   locationUuid,
-		SourceTypeName: req.EnergySource.String(),
+		SourceTypeID: int16(req.EnergySource.Number()),
 		AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
-		UserUuid:       dbUser.UserUuid,
 	}
 
-	dbSource, err := querier.GetUserLocationSourceAtTimestamp(ctx, params)
+	dbSource, err := querier.GetLocationSourceAtTimestamp(ctx, params)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetUserLocationSourceAtTimestamp(%+v)", params)
+		l.Err(err).Msgf("querier.GetLocationSourceAtTimestamp(%+v)", params)
 
 		return nil, status.Errorf(
 			codes.NotFound,
@@ -1067,15 +952,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	querier := db.New(GetTxFromContext(ctx))
 
-	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
-
-	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
-	}
-
 	// Create a new location
 	params := db.CreateLocationParams{
 		LocationTypeName: strings.ToLower(req.LocationType.String()),
@@ -1091,31 +967,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 			codes.InvalidArgument,
 			"Invalid location. Ensure name is not empty and uppercase, and that geometry is valid, closed,  WGS84.",
 		)
-	}
-
-	// Make the user's org the owner of the location
-	lpParams := db.AddLocationPolicesToGroupParams{
-		RoleName:                "OWNER",
-		SourceTypeName:          req.EnergySource.String(),
-		LocationPolicyGroupName: dbUser.OrgName + "_DEFAULT_LPGROUP",
-		LocationUuids:           []uuid.UUID{dbLocation.LocationUuid},
-	}
-
-	err = querier.AddLocationPolicesToGroup(ctx, lpParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.AddLocationPolicesToGroup(%+v)", lpParams)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No location policy group '%s' found for user '%s' in organisation '%s'",
-			dbUser.OrgName, dbUser.OauthID, dbUser.OrgName,
-		)
-	}
-
-	err = querier.RefreshUserLocationPoliciesMaterializedView(ctx)
-	if err != nil {
-		l.Err(err).Msg("querier.RefreshUserLocationPoliciesMaterializedView()")
-		return nil, status.Error(codes.Internal, "Encountered backend communication error")
 	}
 
 	// Get the energy source type
@@ -1148,19 +999,23 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		)
 	}
 
-	csParams := db.CreateUserLocationSourceEntryParams{
+	validFrom := time.Now().UTC()
+	if req.ValidFromUtc != nil {
+		validFrom = req.ValidFromUtc.AsTime()
+	}
+
+	csParams := db.CreateLocationSourceEntryParams{
 		LocationUuid:             dbLocation.LocationUuid,
 		SourceTypeID:             dbSourceType.SourceTypeID,
 		Capacity:                 cp,
 		CapacityUnitPrefixFactor: ex,
 		Metadata:                 metadata,
-		ValidFromUtc:             pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
-		UserUuid:                 dbUser.UserUuid,
+		ValidFromUtc:             pgtype.Timestamp{Time: validFrom, Valid: true},
 	}
 
-	dbSource, err := querier.CreateUserLocationSourceEntry(ctx, csParams)
+	dbSource, err := querier.CreateLocationSourceEntry(ctx, csParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateUserLocationSourceEntry(%+v)", csParams)
+		l.Err(err).Msgf("querier.CreateLocationSourceEntry(%+v)", csParams)
 
 		return nil, status.Error(
 			codes.InvalidArgument,
@@ -1232,38 +1087,22 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 	querier := db.New(GetTxFromContext(ctx))
 
-	// Get the user
-	guParams := db.GetUserByOAuthIDParams{OauthID: req.UserId}
-
-	dbUser, err := querier.GetUserByOAuthID(ctx, guParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetUserByOAuthID(%v)", guParams)
-		return nil, status.Errorf(codes.NotFound, "No such user '%s'", req.UserId)
-	}
-
 	// Get the location and source
-	locationUuid, err := uuid.Parse(req.LocationUuid)
-	if err != nil {
-		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
-	}
-
-	gsParams := db.GetUserLocationSourceAtTimestampParams{
-		LocationUuid:   locationUuid,
-		SourceTypeName: req.EnergySource.String(),
+	gsParams := db.GetLocationSourceAtTimestampParams{
+		LocationUuid:   uuid.MustParse(req.LocationUuid),
+		SourceTypeID: int16(req.EnergySource.Number()),
 		AtTimestampUtc: pgtype.Timestamp{
 			Time:  req.TimeWindow.StartTimestampUtc.AsTime(),
 			Valid: true,
 		},
-		UserUuid: dbUser.UserUuid,
 	}
 
-	dbSource, err := querier.GetUserLocationSourceAtTimestamp(ctx, gsParams)
+	dbSource, err := querier.GetLocationSourceAtTimestamp(ctx, gsParams)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetUserLocationSourceAtTimestamp(%+v)", gsParams)
+		l.Err(err).Msgf("querier.GetLocationSourceAtTimestamp(%+v)", gsParams)
 
 		return nil, status.Errorf(
-			codes.NotFound, "No location found for name '%s' with source type '%s'.",
+			codes.NotFound, "No location found for uuid '%s' with source type '%s'.",
 			req.LocationUuid, req.EnergySource,
 		)
 	}
@@ -1322,26 +1161,26 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		if value.P10Sip == nil {
 			p10 = float32(math.NaN())
 		} else {
-			p10 = (float32(*value.P10Sip) / 30000.0) * 100.0
+			p10 = float32(*value.P10Sip) / 30000.0
 		}
 
 		var p90 float32
 		if value.P90Sip == nil {
 			p90 = float32(math.NaN())
 		} else {
-			p90 = (float32(*value.P90Sip) / 30000.0) * 100.0
+			p90 = float32(*value.P90Sip) / 30000.0
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
 			TimestampUtc:    timestamppb.New(value.TargetTimeUtc.Time),
-			P50ValuePercent: (float32(value.P50Sip) / 30000.0) * 100.0,
-			P10ValuePercent: p10,
-			P90ValuePercent: p90,
+			P50ValueFraction: float32(value.P50Sip) / 30000.0,
+			P10ValueFraction: p10,
+			P90ValueFraction: p90,
 			EffectiveCapacityWatts: uint64(
 				dbSource.Capacity,
 			) * uint64(
 				math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
-			), // TODO: Capacity
+			), // TODO: Capacity over time
 		}
 	}
 

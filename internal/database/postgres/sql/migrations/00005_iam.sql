@@ -189,8 +189,8 @@ FROM iam.orgs AS o
     INNER JOIN iam.location_policy_groups USING (location_policy_group_uuid)
     INNER JOIN iam.location_policies AS lp USING (location_policy_group_uuid)
     INNER JOIN iam.roles AS r USING (role_id)
-ORDER BY u.user_uuid, r.role_id, lp.location_uuid, lp.source_type_id;
-CREATE UNIQUE INDEX ON iam.user_location_policies_mv (user_uuid, role_id, location_uuid, source_type_id);
+ORDER BY u.user_uuid, r.role_id, lp.source_type_id, lp.location_uuid;
+CREATE UNIQUE INDEX ON iam.user_location_policies_mv (user_uuid, role_id, source_type_id, location_uuid);
 
 -- +goose Down
 DROP SCHEMA iam CASCADE;

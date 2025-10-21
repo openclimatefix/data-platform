@@ -1,11 +1,11 @@
 -- Function to seed values into the database
 CREATE OR REPLACE FUNCTION seed_db(
+    name_prefix TEXT,
     num_locations INTEGER DEFAULT 1000,
     gv_resolution_mins INTEGER DEFAULT 30,
     forecast_resolution_mins INTEGER DEFAULT 30,
     forecast_length_mins INTEGER DEFAULT 480,
     num_forecasts_per_location INTEGER DEFAULT 24,
-    num_models INTEGER DEFAULT 1,
     pivot_time TIMESTAMP DEFAULT DATE_TRUNC('hour', NOW())
 )
 RETURNS TABLE (num_values INTEGER, location_uuids UUID[]) AS $$
@@ -15,49 +15,25 @@ DECLARE
     result RECORD;
     num_pgvs_per_forecast INTEGER := forecast_length_mins / gv_resolution_mins;
     earliest_forecast_offset_mins INTEGER := num_forecasts_per_location * forecast_resolution_mins;
-    org_id UUID;
-    ownerlpg_id UUID;
-    viewerlpg_id UUID;
 BEGIN
-    -- Insert a test organisation, users, and location policy groups. One with owner, one with viewer
-    INSERT INTO iam.orgs (org_name) VALUES ('TEST_OWNER_ORG') RETURNING org_uuid INTO org_id;
-    INSERT INTO iam.users (org_uuid, oauth_id) VALUES (org_id, 'test_ownerorg_user1'), (org_id, 'test_ownerorg_user2');
-    INSERT INTO iam.location_policy_groups (location_policy_group_name) VALUES ('TEST_OWNER_ORG_DEFAULT_LPGROUP') RETURNING location_policy_group_uuid INTO ownerlpg_id;
-    INSERT INTO iam.org_location_policy_groups (org_uuid, location_policy_group_uuid) VALUES (org_id, ownerlpg_id);
-
-    INSERT INTO iam.orgs (org_name) VALUES ('TEST_VIEWER_ORG') RETURNING org_uuid INTO org_id;
-    INSERT INTO iam.users (org_uuid, oauth_id) VALUES (org_id, 'test_viewerorg_user1'), (org_id, 'test_viewerorg_user2');
-    INSERT INTO iam.location_policy_groups (location_policy_group_name) VALUES ('TEST_VIEWER_ORG_DEFAULT_LPGROUP') RETURNING location_policy_group_uuid INTO viewerlpg_id;
-    INSERT INTO iam.org_location_policy_groups (org_uuid, location_policy_group_uuid) VALUES (org_id, viewerlpg_id);
-
     -- Insert forecasters
     INSERT INTO pred.forecasters (forecaster_name, forecaster_version)
-    SELECT
-        'test_model_' || i,
-        'v1'
-    FROM generate_series(1, num_models) AS i;
+    VALUES (LOWER(name_prefix) || '_forecaster', 'v1');
 
     -- Insert locations
     INSERT INTO loc.locations
       (location_name, location_type_id, geom)
     SELECT
-        'TESTLOCATION' || i AS location_name,
+        UPPER(name_prefix) || '_TESTLOCATION' || i AS location_name,
         (SELECT location_type_id FROM loc.location_types WHERE location_type_name = 'SITE'),
-        ST_SetSRID(ST_MakePoint(random() * 360 - 180, random() * 180 - 90), 4326)
+        ST_SetSRID(ST_MakePoint(random() * 355 - 180, random() * 175 - 90), 4326)
     FROM generate_series(0, num_locations - 1) as i;
     RAISE NOTICE 'Inserted % locations', (SELECT COUNT(*) FROM loc.locations);
 
     -- Insert observers
-    INSERT INTO obs.observers (observer_name) VALUES ('test_observer');
+    INSERT INTO obs.observers (observer_name) VALUES (LOWER(name_prefix) || '_observer');
 
     FOR loc_id IN SELECT location_uuid FROM loc.locations LOOP
-
-        -- Create location policies for the locations
-        INSERT INTO iam.location_policies
-            (role_id, source_type_id, location_uuid, location_policy_group_uuid)
-        VALUES
-            (1, 1, loc_id, ownerlpg_id),
-            (2, 1, loc_id, viewerlpg_id);
 
         INSERT INTO loc.sources_history
             (location_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc)

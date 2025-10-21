@@ -126,35 +126,9 @@ SELECT
     ST_Y(l.centroid)::REAL AS latitude
 FROM loc.sources_mv AS s
     INNER JOIN loc.locations AS l USING (location_uuid)
-    INNER JOIN loc.source_types AS st USING (source_type_id)
 WHERE
     l.location_uuid = $1
-    AND st.source_type_name = $2
-    AND s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP;
-
--- name: GetUserLocationSourceAtTimestamp :one
-/* GetUserLocationSourceAtTimestamp returns the source for a given location and source type at a
- * specific timestamp, if the user has access to that location.
- */
-SELECT
-    s.capacity,
-    s.capacity_unit_prefix_factor,
-    s.capacity_limit_sip,
-    s.source_type_id,
-    s.metadata AS metadata_jsonb,
-    s.location_uuid,
-    l.location_name,
-    ST_X(l.centroid)::REAL AS longitude,
-    ST_Y(l.centroid)::REAL AS latitude
-FROM iam.user_location_policies_mv AS ulp
-    INNER JOIN loc.sources_mv AS s USING (location_uuid)
-    INNER JOIN loc.locations AS l USING (location_uuid)
-    INNER JOIN loc.source_types AS st ON s.source_type_id = st.source_type_id
-WHERE
-    ulp.user_uuid = $3
-    AND ulp.role_id IN (1, 2)
-    AND ulp.location_uuid = $1
-    AND st.source_type_name = $2
+    AND s.source_type_id = $2
     AND s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP;
 
 -- name: ListSourcesAtTimestamp :many
@@ -179,34 +153,8 @@ WHERE
     AND st.source_type_name = $1
     AND s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP;
 
--- name: ListUserLocationSourcesAtTimestamp :many
-/* ListUserLocationSourcesAtTimestamp returns all sources for a given source type and set of location
- * uuids that the user has access to.
- * If just querying for one source, it will be faster to use GetUserLocationSourceAtTimestamp.
- */
-SELECT
-    s.capacity,
-    s.capacity_unit_prefix_factor,
-    s.capacity_limit_sip,
-    s.source_type_id,
-    s.metadata AS metadata_jsonb,
-    s.location_uuid,
-    l.location_name,
-    ST_X(l.centroid)::REAL AS longitude,
-    ST_Y(l.centroid)::REAL AS latitude
-FROM iam.user_location_policies_mv AS ulp
-    INNER JOIN loc.sources_mv AS s USING (location_uuid)
-    INNER JOIN loc.locations AS l USING (location_uuid)
-    INNER JOIN loc.source_types AS st ON s.source_type_id = st.source_type_id
-WHERE
-    ulp.user_uuid = $2
-    AND ulp.role_id IN (1, 2)
-    AND ulp.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
-    AND st.source_type_name = $1
-    AND s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP;
-
--- name: CreateUserLocationSourceEntry :one
-/* CreateUserLocationSourceEntry creates a new source entry for a given location and source type.
+-- name: CreateLocationSourceEntry :one
+/* CreateLocationSourceEntry creates a new source entry for a given location and source type.
  */
 INSERT INTO loc.sources_history (
     location_uuid,
@@ -216,19 +164,15 @@ INSERT INTO loc.sources_history (
     capacity_limit_sip,
     valid_from_utc,
     metadata
-) SELECT
-    ulp.location_uuid,
+) VALUES (
+    $1,
     $2,
     $3,
     $4,
     $5,
     $6,
     CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
-FROM iam.user_location_policies_mv AS ulp
-WHERE ulp.user_uuid = $7
-    AND ulp.role_id = 1 -- Have to be owner to create a source
-    AND ulp.location_uuid = $1
-RETURNING location_uuid, capacity, capacity_unit_prefix_factor;
+) RETURNING location_uuid, capacity, capacity_unit_prefix_factor;
 
 -- name: RefreshSourcesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;
@@ -256,23 +200,6 @@ FROM iam.user_location_policies_mv AS ulp
 WHERE ulp.user_uuid = $3
     AND ulp.role_id = 1 -- Have to be owner to decommission a source
     AND ulp.location_uuid = $1;
-
--- name: GetUserLocationSourceHistoryTimeseries :many
-/* GetUserLocationSourceHistoryTimeseries shows all the historical records for a given location
- * and source type, if the user has access to that location.
- */
-SELECT
-    sh.capacity,
-    sh.capacity_unit_prefix_factor,
-    sh.capacity_limit_sip,
-    sh.valid_from_utc
-FROM loc.sources_history AS sh
-    INNER JOIN iam.user_location_policies_mv AS ulp USING (location_uuid)
-WHERE ulp.user_uuid = $3
-    AND ulp.role_id IN (1, 2) -- Have to be owner or viewer to see source history
-    AND ulp.location_uuid = $1
-    AND sh.source_type_id = $2
-ORDER BY valid_from_utc DESC;
 
 -- name: GetLocationSourceHistoryTimeseries :many
 /* GetLocationSourceHistoryTimeseries shows all the historical records for a given location and source type. */

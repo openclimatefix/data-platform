@@ -18,20 +18,6 @@ SET
 WHERE org_uuid = $1
 RETURNING org_uuid, org_name, metadata;
 
--- name: GetOrgByUUID :one
-SELECT
-    od.org_uuid,
-    od.org_name,
-    od.created_at_utc,
-    od.user_uuids,
-    od.oauth_ids,
-    od.location_policy_group_uuids,
-    od.location_policy_group_names,
-    od.metadata
-FROM iam.org_details_v AS od
-WHERE org_uuid = $1
-ORDER BY org_uuid;
-
 -- name: GetOrgByName :one
 SELECT
     od.org_uuid,
@@ -78,18 +64,6 @@ SET
 WHERE user_uuid = $1
 RETURNING user_uuid, org_uuid, oauth_id, metadata;
 
--- name: GetUserByUUID :one
-SELECT
-    u.user_uuid,
-    UUIDV7_EXTRACT_TIMESTAMP(u.user_uuid)::TIMESTAMP AS created_at_utc,
-    u.org_uuid,
-    o.org_name,
-    u.oauth_id,
-    u.metadata
-FROM iam.users AS u
-    INNER JOIN iam.orgs AS o USING (org_uuid)
-WHERE u.user_uuid = $1;
-
 -- name: GetUserByOAuthID :one
 SELECT
     u.user_uuid,
@@ -101,6 +75,18 @@ SELECT
 FROM iam.orgs AS o
     INNER JOIN iam.users AS u USING (org_uuid)
 WHERE u.oauth_id = $1;
+
+-- name: FilterLocationsByUser :many
+/* FilterLocationsByOAuthID returns the intersection of the locations accessible by the user
+ * (identified by the given OAuth ID), and the provided list of location UUIDs.
+ */
+SELECT
+    location_uuid
+FROM iam.user_location_policies_mv
+WHERE user_uuid = $1
+    AND role_id = ANY(sqlc.arg(role_id)::TEXT [])
+    AND source_type_id = $2
+    AND location_uuid = ANY(sqlc.arg(unfiltered_location_uuids)::UUID []);
 
 -- name: ListUsers :many
 SELECT

@@ -73,8 +73,9 @@ message CreateOrganisationResponse {
 
 
 message GetOrganisationRequest {
-  string org_id = 1 [
-    (buf.validate.field).string.uuid = true
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
   ];
 }
 
@@ -91,11 +92,12 @@ message GetOrganisationResponse {
 
 
 message UpdateOrganisationRequest {
-  string org_id = 1 [
-    (buf.validate.field).string.uuid = true
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
   ];
   // New name for the organisation. Leave empty to keep the current name.
-  string name = 2 [
+  string new_name = 2 [
     (buf.validate.field).string.max_len = 128
   ];
   // New metadata for the organisation. Leave empty to keep the current metadata.

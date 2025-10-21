@@ -298,19 +298,18 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 	l := log.With().Str("method", "GetOrganisation").Logger()
 	querier := db.New(GetTxFromContext(ctx))
 
-	orgUuid := uuid.MustParse(req.OrgId)
-	goParams := db.GetOrgByUUIDParams{
-		OrgUuid: orgUuid,
+	goParams := db.GetOrgByNameParams{
+		OrgName: req.OrgName,
 	}
 
-	dbOrg, err := querier.GetOrgByUUID(ctx, goParams)
+	dbOrg, err := querier.GetOrgByName(ctx, goParams)
 	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetOrgByUUID(%+v)", goParams)
+		l.Error().Err(err).Msgf("querier.GetOrgByName(%+v)", goParams)
 
 		return nil, status.Errorf(
 			codes.NotFound,
-			"Organisation with ID '%s' not found",
-			req.OrgId,
+			"Organisation with name '%s' not found",
+			req.OrgName,
 		)
 	}
 
@@ -320,8 +319,8 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 
 		return nil, status.Errorf(
 			codes.Internal,
-			"Error parsing metadata for organisation with ID '%s'",
-			req.OrgId,
+			"Error parsing metadata for organisation with name '%s'",
+			req.OrgName,
 		)
 	}
 
@@ -369,13 +368,13 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 		)
 	}
 
-	goParams := db.GetOrgByUUIDParams{
-		OrgUuid: dbUser.OrgUuid,
+	goParams := db.GetOrgByNameParams{
+		OrgName: dbUser.OrgName,
 	}
 
-	dbOrg, err := querier.GetOrgByUUID(ctx, goParams)
+	dbOrg, err := querier.GetOrgByName(ctx, goParams)
 	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetOrgByUUID(%+v)", goParams)
+		l.Error().Err(err).Msgf("querier.GetOrgByName(%+v)", goParams)
 
 		return nil, status.Errorf(
 			codes.Internal,
@@ -519,20 +518,19 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 ) (*pb.UpdateOrganisationResponse, error) {
 	l := log.With().Str("method", "UpdateOrganisation").Logger()
 	querier := db.New(GetTxFromContext(ctx))
-	orgUuid := uuid.MustParse(req.OrgId)
 	// Get the org as it currently is
-	goParams := db.GetOrgByUUIDParams{
-		OrgUuid: orgUuid,
+	goParams := db.GetOrgByNameParams{
+		OrgName: req.OrgName,
 	}
 
-	dbOrg, err := querier.GetOrgByUUID(ctx, goParams)
+	dbOrg, err := querier.GetOrgByName(ctx, goParams)
 	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetOrgByUUID(%+v)", goParams)
+		l.Error().Err(err).Msgf("querier.GetOrgByName(%+v)", goParams)
 
 		return nil, status.Errorf(
 			codes.NotFound,
-			"Organisation with ID '%s' not found",
-			req.OrgId,
+			"Organisation with name '%s' not found",
+			req.OrgName,
 		)
 	}
 
@@ -552,15 +550,15 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 
 	// Set the name to update, if desired; else keep as is
 	name := dbOrg.OrgName
-	if req.Name != "" {
-		name = req.Name
+	if req.NewName != "" {
+		name = req.NewName
 	}
 
 	// Update the location policy groups, if desired; else keep as is
 	if len(req.LocationPolicyGroupIds) > 0 {
 		// Remove the existing groups
 		rlpgParams := db.RemoveLocationPolicyGroupsFromOrgParams{
-			OrgUuid:                  orgUuid,
+			OrgUuid:                  dbOrg.OrgUuid,
 			LocationPolicyGroupUuids: dbOrg.LocationPolicyGroupUuids,
 		}
 
@@ -571,7 +569,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 			return nil, status.Errorf(
 				codes.Internal,
 				"Error removing existing location policy groups from organisation with ID '%s'",
-				req.OrgId,
+				dbOrg.OrgUuid,
 			)
 		}
 
@@ -581,7 +579,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 			lpgUuids[i] = uuid.MustParse(id)
 		}
 		alpgParams := db.AddLocationPolicyGroupsToOrgParams{
-			OrgUuid:                  orgUuid,
+			OrgUuid:                  dbOrg.OrgUuid,
 			LocationPolicyGroupUuids: lpgUuids,
 		}
 
@@ -591,15 +589,15 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 
 			return nil, status.Errorf(
 				codes.Internal,
-				"Error adding location policy groups to organisation with ID '%s'. "+
+				"Error adding location policy groups to organisation '%s'. "+
 					"Ensure all location policy group IDs exist.",
-				req.OrgId,
+				req.OrgName,
 			)
 		}
 	}
 
 	uoParams := db.UpdateOrgParams{
-		OrgUuid:  orgUuid,
+		OrgUuid:  dbOrg.OrgUuid,
 		OrgName:  name,
 		Metadata: metadata,
 	}
@@ -610,24 +608,24 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 
 		return nil, status.Errorf(
 			codes.Internal,
-			"Error updating organisation with ID '%s'. Ensure name is unique and metadata is valid JSON.",
-			req.OrgId,
+			"Error updating organisation '%s'. Ensure name is unique and metadata is valid JSON.",
+			req.OrgName,
 		)
 	}
 
 	// Get updated org
-	goParams = db.GetOrgByUUIDParams{
-		OrgUuid: orgUuid,
+	goParams = db.GetOrgByNameParams{
+		OrgName: name,
 	}
 
-	dbOrg, err = querier.GetOrgByUUID(ctx, goParams)
+	dbOrg, err = querier.GetOrgByName(ctx, goParams)
 	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetOrgByUUID(%+v)", goParams)
+		l.Error().Err(err).Msgf("querier.GetOrgByName(%+v)", goParams)
 
 		return nil, status.Errorf(
 			codes.Internal,
-			"Error fetching updated organisation with ID '%s'",
-			req.OrgId,
+			"Error fetching updated organisation '%s'",
+			req.OrgName,
 		)
 	}
 
@@ -637,8 +635,8 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 
 		return nil, status.Errorf(
 			codes.Internal,
-			"Error parsing metadata for organisation with ID '%s'",
-			req.OrgId,
+			"Error parsing metadata for organisation '%s'",
+			req.OrgName,
 		)
 	}
 
