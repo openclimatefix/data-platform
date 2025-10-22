@@ -278,11 +278,17 @@ message CreateLocationRequest {
     (buf.validate.field).string.(valid_location_name) = true
   ];
   EnergySource energy_source = 2;
+  // A geometry string in Well-Known-Text (WKT) format.
+  // Geometry type must be POINT, POLYGON, or MULTIPOLYGON, must have 2 dimensions,
+  // and must be in the EPSG:4326 coordinate system (longitude/latitude).
   string geometry_wkt = 3 [
     (buf.validate.field).string.(valid_geometry) = true,
     (buf.validate.field).string.example = "POLYGON ((-0.127 51.507, -0.127 51.507, -0.127 51.507, -0.127 51.507))"
   ];
-  uint64 capacity_watts = 4 [
+  // The effective capacity of the location in watts.
+  // This refers to the useable capacity for generation, not the installed capacity.
+  // If tracking of installed capacity is required, this should be stored in metadata.
+  uint64 effective_capacity_watts = 4 [
     (buf.validate.field).required = true
   ];
   LocationType location_type = 5;
@@ -296,7 +302,7 @@ message CreateLocationRequest {
 message CreateLocationResponse {
   string location_uuid = 1;
   string location_name = 2;
-  uint64 capacity_watts = 3;
+  uint64 effective_capacity_watts = 3;
 }
 
 
@@ -312,7 +318,7 @@ message GetLocationResponse {
   string location_uuid = 1;
   string location_name = 2;
   LatLng latlng = 3;
-  uint64 capacity_watts = 4;
+  uint64 effective_capacity_watts = 4;
   google.protobuf.Struct metadata = 5;
   optional bytes geometry_wkb = 6;
 }

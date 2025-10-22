@@ -958,7 +958,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 			Latitude:  dbSource.Latitude,
 			Longitude: dbSource.Longitude,
 		},
-		CapacityWatts: uint64(
+		EffectiveCapacityWatts: uint64(
 			dbSource.Capacity,
 		) * uint64(
 			math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
@@ -1015,9 +1015,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		)
 	}
 
-	cp, ex, err := capacityToValueMultiplier(req.CapacityWatts)
+	cp, ex, err := capacityToValueMultiplier(req.EffectiveCapacityWatts)
 	if err != nil {
-		l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.CapacityWatts)
+		l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.EffectiveCapacityWatts)
 
 		return nil, status.Error(
 			codes.InvalidArgument,
@@ -1063,7 +1063,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	return &pb.CreateLocationResponse{
 		LocationUuid: dbLocation.LocationUuid.String(),
 		LocationName: strings.ToUpper(dbLocation.LocationName),
-		CapacityWatts: uint64(
+		EffectiveCapacityWatts: uint64(
 			dbSource.Capacity,
 		) * uint64(
 			math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
