@@ -76,6 +76,22 @@ FROM iam.orgs AS o
     INNER JOIN iam.users AS u USING (org_uuid)
 WHERE u.oauth_id = $1;
 
+-- name: GetUserLocations :many
+/* GetUserLocations returns all locations that the service account has access to.
+ */
+SELECT
+    l.location_uuid,
+    l.location_name,
+    ulp.source_type_id,
+    ulp.role_name,
+    ST_Y(l.centroid)::REAL AS latitude,
+    ST_X(l.centroid)::REAL AS longitude
+FROM loc.locations AS l
+    INNER JOIN iam.user_location_policies_mv AS ulp USING (location_uuid)
+WHERE ulp.user_uuid = $1
+    AND ulp.role_id IN (1, 2)
+ORDER BY l.location_name;
+
 -- name: FilterLocationsByUser :many
 /* FilterLocationsByOAuthID returns the intersection of the locations accessible by the user
  * (identified by the given OAuth ID), and the provided list of location UUIDs.

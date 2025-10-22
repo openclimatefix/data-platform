@@ -468,19 +468,35 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 	return nil
 }
 
-func (s *DataPlatformDataServiceServerImpl) ListLocations(
+func (s *DataPlatformDataServiceServerImpl) ListLocationsWithin(
 	ctx context.Context,
-	req *pb.ListLocationsRequest,
-) (*pb.ListLocationsResponse, error) {
-	// l := log.With().Str("method", "ListLocations").Logger()
+	req *pb.ListLocationsWithinRequest,
+) (*pb.ListLocationsWithinResponse, error) {
+	l := log.With().Str("method", "ListLocationsWithin").Logger()
 
-	// querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(GetTxFromContext(ctx))
 
-	var locations []*pb.ListLocationsResponse_LocationData
+	lwprms := db.GetLocationsWithinParams{
+		LocationUuid: uuid.MustParse(req.EnclosingLocationUuid),
+	}
+	dbLocations, err := querier.GetLocationsWithin(ctx, lwprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetLocationsWithin(%+v)", lwprms)
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No locations found within the specified location '%s'", req.EnclosingLocationUuid,
+		)
+	}
 
-	// TODO:
+	locations := make([]*pb.ListLocationsWithinResponse_LocationData, len(dbLocations))
+	for i := range dbLocations {
+		locations[i] = &pb.ListLocationsWithinResponse_LocationData{
+			LocationUuid: dbLocations[i].LocationUuid.String(),
+			LocationName: strings.ToUpper(dbLocations[i].LocationName),
+		}
+	}
 
-	return &pb.ListLocationsResponse{
+	return &pb.ListLocationsWithinResponse{
 		Locations: locations,
 	}, nil
 }
@@ -752,7 +768,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 
 	obParams := db.CreateObserverParams{ObserverName: req.Name}
 
-	dbObserverId, err := querier.CreateObserver(ctx, obParams)
+	dbObserver, err := querier.CreateObserver(ctx, obParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.CreateObserver(%+v)", obParams)
 
@@ -762,7 +778,10 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 		)
 	}
 
-	return &pb.CreateObserverResponse{ObserverId: dbObserverId}, nil
+	return &pb.CreateObserverResponse{
+		ObserverId: dbObserver.ObserverID,
+		ObserverName: dbObserver.ObserverName,
+	}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
@@ -968,6 +987,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 			"Invalid location. Ensure name is not empty and uppercase, and that geometry is valid, closed,  WGS84.",
 		)
 	}
+	l.Debug().Msgf("Created location with UUID '%s' and name '%s'", dbLocation.LocationUuid, dbLocation.LocationName)
 
 	// Get the energy source type
 	sParams := db.GetSourceTypeByNameParams{SourceTypeName: req.EnergySource.String()}
@@ -1022,12 +1042,14 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 			"Invalid location. Ensure metadata is NULL or a non-empty JSON object.",
 		)
 	}
+	l.Debug().Msgf("Created source for location UUID '%s' with source type '%s'", dbLocation.LocationUuid, dbSourceType.SourceTypeName)
 
 	err = querier.RefreshSourcesMaterializedView(ctx)
 	if err != nil {
 		l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
 		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
 	}
+	l.Debug().Msg("Refreshed sources materialized view")
 
 	return &pb.CreateLocationResponse{
 		LocationUuid: dbLocation.LocationUuid.String(),

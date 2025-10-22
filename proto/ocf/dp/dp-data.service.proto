@@ -22,13 +22,11 @@ service DataPlatformDataService {
    * single location.
    */
   rpc GetObservationsAsTimeseries(GetObservationsAsTimeseriesRequest) returns (GetObservationsAsTimeseriesResponse) {}
-  /* GetLocationsWithin fetches all the locations contained within a given location.
-   */
 
   // --- Crud ---------------------------------------------------------------------
 
   rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
-  rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse) {}
+  rpc ListLocationsWithin(ListLocationsWithinRequest) returns (ListLocationsWithinResponse) {}
   rpc CreateLocation(CreateLocationRequest) returns (CreateLocationResponse) {}
 
   rpc CreateForecaster(CreateForecasterRequest) returns (CreateForecasterResponse) {}

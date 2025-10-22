@@ -372,19 +372,19 @@ func (d *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 }
 
 // GetLocationsWithin implements dp.DataPlatformDataServiceServer.
-func (d *DataPlatformDataServiceServerImpl) ListLocations(
+func (d *DataPlatformDataServiceServerImpl) ListLocationsWithin(
 	ctx context.Context,
-	req *pb.ListLocationsRequest,
-) (*pb.ListLocationsResponse, error) {
-	locations := make([]*pb.ListLocationsResponse_LocationData, 5)
+	req *pb.ListLocationsWithinRequest,
+) (*pb.ListLocationsWithinResponse, error) {
+	locations := make([]*pb.ListLocationsWithinResponse_LocationData, 5)
 	for i := range locations {
-		locations[i] = &pb.ListLocationsResponse_LocationData{
+		locations[i] = &pb.ListLocationsWithinResponse_LocationData{
 			LocationUuid: uuid.New().String(),
 			LocationName: fmt.Sprintf("DummyLocation%d", i),
 		}
 	}
 
-	return &pb.ListLocationsResponse{
+	return &pb.ListLocationsWithinResponse{
 		Locations: locations,
 	}, nil
 }

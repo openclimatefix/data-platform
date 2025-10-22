@@ -420,20 +420,21 @@ message GetWeekAverageDeltasResponse {
   ];
 }
 
-message ListLocationsRequest {
+message ListLocationsWithinRequest {
   EnergySource energy_source = 1;
-  optional string enclosing_location_uuid = 2 [
-    (buf.validate.field).string.uuid = true
+  // The UUID of the enclosing location to search within.
+  string enclosing_location_uuid = 2 [
+    (buf.validate.field).string.uuid = true,
   ];
 }
 
-message ListLocationsResponse {
+message ListLocationsWithinResponse {
   message LocationData {
     string location_uuid = 1;
     string location_name = 2;
   }
 
-  repeated ListLocationsResponse.LocationData locations = 1;
+  repeated ListLocationsWithinResponse.LocationData locations = 1;
 }
 
 message StreamForecastDataRequest {

@@ -1,5 +1,5 @@
 -- name: CreateObserver :one
-INSERT INTO obs.observers (observer_name) VALUES ($1) RETURNING observer_id;
+INSERT INTO obs.observers (observer_name) VALUES ($1) RETURNING observer_id, observer_name;
 
 -- name: ListObservers :many
 SELECT

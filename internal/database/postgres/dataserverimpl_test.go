@@ -102,8 +102,6 @@ func (s *seedDBParams) NumPgvRows() int {
 // --- Tests --------------------------------------------------------------------------------------
 
 func TestCapacityToMultiplier(t *testing.T) {
-	t.Parallel()
-
 	type TestCase struct {
 		capacityWatts      uint64
 		expectedValue      int16
@@ -387,7 +385,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a forecaster
-	_, err = dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
+	forecasterResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
 		Name:    "test_get_forecast_at_timestamp_forecaster",
 		Version: "v1",
 	})
@@ -407,7 +405,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 	for _, locationUuid := range [2]string{siteResp.LocationUuid, siteResp2.LocationUuid} {
 		req := &pb.CreateForecastRequest{
 			LocationUuid:  locationUuid,
-			Forecaster:    &pb.Forecaster{ForecasterName: "test_get_forecast_at_timestamp_forecaster", ForecasterVersion: "v1"},
+			Forecaster:    forecasterResp.Forecaster,
 			EnergySource:  pb.EnergySource_SOLAR,
 			InitTimeUtc:   timestamppb.New(pivotTime),
 			Values: yields,
@@ -423,7 +421,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 			EnergySource:  pb.EnergySource_SOLAR,
 			TimestampUtc:  timestamppb.New(pivotTime),
 			LocationUuids: []string{siteResp.LocationUuid, siteResp2.LocationUuid},
-			Forecaster:    &pb.Forecaster{ForecasterName: "test_get_forecast_at_timestamp_forecaster", ForecasterVersion: "v1"},
+			Forecaster:    forecasterResp.Forecaster,
 		},
 	)
 	require.NoError(t, err)
@@ -469,7 +467,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 	require.NoError(t, err)
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 		LocationName:  "TEST_GET_FORECAST_AS_TIMESERIES_SITE",
-		GeometryWkt:   "POINT(-20.25 57.5)",
+		GeometryWkt:   "POINT(-60.25 57.5)",
 		CapacityWatts: 1000000,
 		Metadata:      metadata,
 		EnergySource:  pb.EnergySource_SOLAR,
@@ -479,16 +477,16 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a forecaster to make the forecasts
-	_, err = dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
+	forecasterResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
 		Name:    "test_get_forecast_as_timeseries_forecaster",
 		Version: "v1",
 	})
 	require.NoError(t, err)
 
-	// Create 4 hour-long forecasts, each 30 minutes apart, with a resolution of 5 minutes.
+	// Create 4, hour-long forecasts, each 30 minutes apart, with a resolution of 5 minutes.
 	// The forecast values increase linearly from 0% to 100% of capacity over each forecast.
 	// The last forecast begins at the pivot time.
-	yields := make([]*pb.CreateForecastRequest_ForecastValue, 12)
+	yields := make([]*pb.CreateForecastRequest_ForecastValue, 60/5)
 	for i := range yields {
 		yields[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 5),
@@ -501,7 +499,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 	for i := 3; i >= 0; i-- {
 		req := &pb.CreateForecastRequest{
 			LocationUuid:  siteResp.LocationUuid,
-			Forecaster:    &pb.Forecaster{ForecasterName: "test_get_forecast_as_timeseries_forecaster", ForecasterVersion: "v1"},
+			Forecaster:    forecasterResp.Forecaster,
 			EnergySource:  pb.EnergySource_SOLAR,
 			InitTimeUtc:   timestamppb.New(pivotTime.Add(time.Duration(-i*30) * time.Minute)),
 			Values: yields,
@@ -566,10 +564,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			resp, err := dc.GetForecastAsTimeseries(t.Context(), &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: siteResp.LocationUuid,
 				HorizonMins:  uint32(tt.horizonMins),
-				Forecaster: &pb.Forecaster{
-					ForecasterName:    "test_get_forecast_as_timeseries_forecaster",
-					ForecasterVersion: "v1",
-				},
+				Forecaster: forecasterResp.Forecaster,
 				EnergySource: pb.EnergySource_SOLAR,
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
@@ -609,9 +604,10 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create an observer to make the observations
-	_, err = dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
+	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
 		Name:    "test_get_observations_as_timeseries_observer",
 	})
+	require.NoError(t, err)
 
 	// Seed some 5-minutely observations for the site.
 	// The observations cover the 24-hour period ending at the pivot time,
@@ -627,7 +623,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
 		LocationUuid: siteResp.LocationUuid,
 		EnergySource: pb.EnergySource_SOLAR,
-		ObserverName: "test_get_observations_as_timeseries_observer",
+		ObserverName: obsResp.ObserverName,
 		Values:       values,
 	})
 	require.NoError(t, err)
@@ -655,7 +651,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 						StartTimestampUtc: timestamppb.New(tt.startTime),
 						EndTimestampUtc:   timestamppb.New(tt.endTime),
 					},
-					ObserverName: "test_get_observations_as_timeseries_observer",
+					ObserverName: obsResp.ObserverName,
 				},
 			)
 			require.NoError(t, err)
@@ -666,22 +662,83 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 
 func TestGetWeekAverageDeltas(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
-	output := seed(t, pgConnString, seedDBParams{
-		NamePrefix: 		"test_get_week_average_deltas",
-		NumLocations:            1,
-		NumForecasters:          1,
-		NumForecastsPerLocation: 500,
-		PgvResolutionMins:       30,
-		ForecastResolutionMins:  30,
-		ForecastLengthHours:     8,
-		PivotTime:               pivotTime,
+	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+	require.NoError(t, err)
+
+	// Create a site to attach the observations to
+	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:  "TEST_GET_WEEK_AVERAGE_DELTAS_SITE",
+		GeometryWkt:   "POINT(-20.25 59.5)",
+		CapacityWatts: 1000000,
+		Metadata:      &structpb.Struct{},
+		EnergySource:  pb.EnergySource_SOLAR,
+		LocationType:  pb.LocationType_SITE,
+		ValidFromUtc:  timestamppb.New(pivotTime.Add(-time.Hour * 12*24)),
 	})
+	require.NoError(t, err)
+
+	// Create an observer to make the observations
+	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
+		Name:   "test_get_week_average_deltas_observer",
+	})
+	require.NoError(t, err)
+
+	// Seed some 30-minutely observations for the site.
+	// The observations cover a 7-day period ending at the pivot time,
+	// and are all equal in value to half the capacity of the site.
+	values := make([]*pb.CreateObservationsRequest_Value, 7*24*60/30)
+	for i := range values {
+		values[i] = &pb.CreateObservationsRequest_Value{
+			TimestampUtc:           timestamppb.New(pivotTime.Add(time.Duration(i*5*-1) * time.Minute)),
+			ValueFraction:           0.5,
+			EffectiveCapacityWatts: siteResp.CapacityWatts,
+		}
+	}
+	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+		LocationUuid: siteResp.LocationUuid,
+		EnergySource: pb.EnergySource_SOLAR,
+		ObserverName: obsResp.ObserverName,
+		Values:       values,
+	})
+	require.NoError(t, err)
+
+	// Create a forecaster to make the forecasts
+	forecasterResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
+		Name:    "test_get_week_average_deltas_forecaster",
+		Version: "v1",
+	})
+	require.NoError(t, err)
+
+	// Create 8, 8 hour-long forecasts, each one day apart, with a resolution of 30 minutes.
+	// The forecast values increase linearly from 0% to 100% of capacity over each forecast.
+	// The last forecast begins at the pivot time.
+	yields := make([]*pb.CreateForecastRequest_ForecastValue, 8*60/30)
+	for i := range yields {
+		yields[i] = &pb.CreateForecastRequest_ForecastValue{
+			HorizonMins: uint32(i * 5),
+			P50Fraction:    float32(i) * float32(100 / len(yields)) / 100.0,
+			P10Fraction:    max(float32(i-1) * float32(100 / len(yields)) / 100.0, 0),
+			P90Fraction:    min(float32(i+1) * float32(100 / len(yields)) / 100.0, 1.1),
+			Metadata:    metadata,
+		}
+	}
+	for i := 7; i >= 0; i-- {
+		req := &pb.CreateForecastRequest{
+			LocationUuid:  siteResp.LocationUuid,
+			Forecaster:    forecasterResp.Forecaster,
+			EnergySource:  pb.EnergySource_SOLAR,
+			InitTimeUtc:   timestamppb.New(pivotTime.Add(time.Duration(-i*24) * time.Hour)),
+			Values: yields,
+		}
+		_, err = dc.CreateForecast(t.Context(), req)
+		require.NoError(t, err)
+	}
 
 	deltaResp, err := dc.GetWeekAverageDeltas(t.Context(), &pb.GetWeekAverageDeltasRequest{
-		LocationUuid: output.LocationUuids[0],
+		LocationUuid: siteResp.LocationUuid,
 		EnergySource: pb.EnergySource_SOLAR,
-		Forecaster:   &pb.Forecaster{ForecasterName: "test_get_week_average_deltas_forecaster", ForecasterVersion: "v1"},
-		ObserverName: "test_get_week_average_deltas_observer",
+		Forecaster:   forecasterResp.Forecaster,
+		ObserverName: obsResp.ObserverName,
 		PivotTime:    timestamppb.New(pivotTime),
 	})
 	require.NoError(t, err)
@@ -689,15 +746,15 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 	require.Len(t, deltaResp.Deltas, 8*60/30) // One per horizon
 }
 
-func TestGetLocationsWithin(t *testing.T) {
+func TestListLocationsWithin(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
 	// Create a GSP with a bounding box between 0 and 5
 	resp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "GSP_OUTER_BOX",
+		LocationName:  "TEST_LIST_LOCATIONS_WITHIN_GSP",
 		EnergySource:  pb.EnergySource_SOLAR,
-		GeometryWkt:   "POLYGON((175 85, 175 90, 180 90, 180 85, 175 85))",
+		GeometryWkt:   "POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))",
 		LocationType:  pb.LocationType_GSP,
 		CapacityWatts: 1000,
 		Metadata:      metadata,
@@ -706,55 +763,40 @@ func TestGetLocationsWithin(t *testing.T) {
 
 	// Create a site within the box
 	lls := []struct {
-		lat float32
 		lon float32
+		lat float32
 	}{
-		{175.1, 85.1},
-		{179, 89},
-		{176, 86},
-		{176, 90},
-		{175, 0},
+		{0.1, 0.1},
+		{4, 4},
+		{3, 4.9},
+		{5, 5},
+		{80, -1},
 	}
 
 	inner_uuids := make([]string, len(lls))
 	for i, ll := range lls {
 		sResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-			LocationName:  fmt.Sprintf("SITE_%d", i),
+			LocationName:  fmt.Sprintf("TEST_LIST_LOCATIONS_WITHIN_INNER_%d", i),
 			EnergySource:  pb.EnergySource_SOLAR,
-			GeometryWkt:   fmt.Sprintf("POINT(%f %f)", ll.lon, ll.lat),
+			GeometryWkt:   fmt.Sprintf("POINT(%.3f %.3f)", ll.lon, ll.lat),
 			LocationType:  pb.LocationType_SITE,
-			CapacityWatts: 50,
+			CapacityWatts: 500,
 			Metadata:      metadata,
 		})
 		require.NoError(t, err)
-		// Make a site in the box with a different owner
-		_, err = dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-			LocationName:  fmt.Sprintf("OTHER_OWNER_SITE_%d", i),
-			EnergySource:  pb.EnergySource_SOLAR,
-			GeometryWkt:   fmt.Sprintf("POINT(%f %f)", ll.lon, ll.lat),
-			LocationType:  pb.LocationType_SITE,
-			CapacityWatts: 50,
-			Metadata:      metadata,
-		})
-		require.NoError(t, err)
-
 		inner_uuids[i] = sResp.LocationUuid
 	}
 
-	result, err := dc.ListLocations(t.Context(), &pb.ListLocationsRequest{
+	result, err := dc.ListLocationsWithin(t.Context(), &pb.ListLocationsWithinRequest{
 		EnergySource:          pb.EnergySource_SOLAR,
-		EnclosingLocationUuid: &resp.LocationUuid,
+		EnclosingLocationUuid: resp.LocationUuid,
 	})
 	require.NoError(t, err)
 
-	expected := []*pb.ListLocationsResponse_LocationData{
-		{LocationUuid: resp.LocationUuid, LocationName: "GSP_OUTER_BOX"},
-		{LocationUuid: inner_uuids[0], LocationName: "SITE_0"},
-		{LocationUuid: inner_uuids[1], LocationName: "SITE_1"},
-		{LocationUuid: inner_uuids[2], LocationName: "SITE_2"},
-	}
-	for _, g := range result.Locations {
-		t.Log("Location:", g.LocationName, "ID:", g.LocationUuid)
+	expected := []*pb.ListLocationsWithinResponse_LocationData{
+		{LocationUuid: inner_uuids[0], LocationName: "TEST_LIST_LOCATIONS_WITHIN_INNER_0"},
+		{LocationUuid: inner_uuids[1], LocationName: "TEST_LIST_LOCATIONS_WITHIN_INNER_1"},
+		{LocationUuid: inner_uuids[2], LocationName: "TEST_LIST_LOCATIONS_WITHIN_INNER_2"},
 	}
 
 	require.Equal(t, expected, result.Locations)
@@ -766,7 +808,7 @@ func TestCreateForecast(t *testing.T) {
 
 	// Create a site to attach the forecast to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "TEST_SITE",
+		LocationName:  "TEST_CREATE_FORECAST_SITE",
 		GeometryWkt:   "POINT(-0.1 51.5)",
 		CapacityWatts: 1000000,
 		Metadata:      metadata,

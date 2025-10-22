@@ -43,70 +43,23 @@ FROM (
     WHERE l.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
 ) AS sl;
 
--- name: GetLocations :many
-/* GetLocations returns all locations.
- */
-SELECT
-    l.location_uuid,
-    l.location_name,
-    ST_Y(l.centroid)::REAL AS latitude,
-    ST_X(l.centroid)::REAL AS longitude
-FROM loc.locations AS l
-ORDER BY l.location_name;
-
-
--- name: GetUserLocations :many
-/* GetUserLocations returns all locations that the service account has access to.
- */
-SELECT
-    l.location_uuid,
-    l.location_name,
-    ulp.source_type_id,
-    ulp.role_name,
-    ST_Y(l.centroid)::REAL AS latitude,
-    ST_X(l.centroid)::REAL AS longitude
-FROM loc.locations AS l
-    INNER JOIN iam.user_location_policies_mv AS ulp USING (location_uuid)
-WHERE ulp.user_uuid = $1
-    AND ulp.role_id IN (1, 2)
-ORDER BY l.location_name;
-
 -- name: GetLocationsWithin :many
 /* GetLocationsWithin returns all locations that are within the geometry of the given location.
  */
 SELECT
     l.location_uuid,
     l.location_name,
+    l.location_type_id,
     ST_Y(l.centroid)::REAL AS latitude,
     ST_X(l.centroid)::REAL AS longitude
 FROM loc.locations AS l
-    INNER JOIN iam.location_policies USING (location_uuid)
     INNER JOIN
         loc.locations AS l_outer ON ST_WITHIN(
             l.geom,
             l_outer.geom
         )
-WHERE l_outer.location_uuid = $1;
-
--- name: GetUserLocationsWithin :many
-/* GetUserLocationsWithin returns all locations that are within the geometry of the given location
- * that the service account has access to.
- */
-SELECT
-    l.location_uuid,
-    l.location_name,
-    ST_Y(l.centroid)::REAL AS latitude,
-    ST_X(l.centroid)::REAL AS longitude
-FROM loc.locations AS l
-    INNER JOIN iam.user_location_policies_mv AS ulp USING (location_uuid)
-    INNER JOIN
-        loc.locations AS l_outer ON ST_WITHIN(
-            l.geom,
-            l_outer.geom
-        )
-WHERE ulp.user_uuid = $1
-    AND ulp.role_id IN (1, 2)
-    AND l_outer.location_uuid = $2;
+WHERE l_outer.location_uuid = $1
+AND l.location_uuid <> $1;
 
 /*- Queries for the sources table -------------------------------------*/
 
