@@ -254,7 +254,7 @@ func (d *DataPlatformDataServiceServerImpl) CreateLocation(
 	return &pb.CreateLocationResponse{
 		LocationUuid:  uuid.New().String(),
 		LocationName:  req.LocationName,
-		CapacityWatts: req.CapacityWatts,
+		EffectiveCapacityWatts: req.EffectiveCapacityWatts,
 	}, nil
 }
 
@@ -289,11 +289,13 @@ func (d *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		sd := determineIrradiance(t, randomUkLngLat())
 
 		values = append(values, &pb.GetForecastAsTimeseriesResponse_Value{
-			TimestampUtc:           timestamppb.New(t),
+			TargetTimestampUtc:     timestamppb.New(t),
 			P50ValueFraction:       float32(sd.normalizedIrradiance()) * 1.00,
 			P10ValueFraction:       float32(sd.normalizedIrradiance()) * 0.95,
 			P90ValueFraction:       float32(sd.normalizedIrradiance()) * 1.05,
 			EffectiveCapacityWatts: 150e6,
+			InitializationTimestampUtc: timestamppb.New(t.Add(-time.Duration(req.HorizonMins) * time.Minute)),
+			CreatedTimestampUtc:        timestamppb.New(t.Add(-time.Duration(req.HorizonMins) * 3 * time.Minute)),
 		})
 		t = t.Add(30 * time.Minute)
 	}
@@ -357,7 +359,7 @@ func (d *DataPlatformDataServiceServerImpl) GetLocation(
 		LocationUuid:  req.LocationUuid,
 		LocationName:  "DummyLocation",
 		Latlng:        &pb.LatLng{Latitude: float32(ll.latDegs), Longitude: float32(ll.lonDegs)},
-		CapacityWatts: 1280e3,
+		EffectiveCapacityWatts: 1280e3,
 		Metadata:      &structpb.Struct{},
 		GeometryWkb:   geometryWkb,
 	}, nil
@@ -482,6 +484,7 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 					P50Fraction: float32(sd.normalizedIrradiance()),
 					P10Fraction: p10,
 					P90Fraction: p90,
+					CreatedTimestampUtc: timestamppb.New(time.Now().UTC()),
 				})
 				if err != nil {
 					return err

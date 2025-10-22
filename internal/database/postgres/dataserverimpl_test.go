@@ -583,7 +583,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 
 			actualValues := make([]float32, len(resp.Values))
 			for i, v := range resp.Values {
-				targetTimes[i] = v.TimestampUtc.AsTime().Unix()
+				targetTimes[i] = v.TargetTimestampUtc.AsTime().Unix()
 				actualValues[i] = v.P50ValueFraction
 			}
 
