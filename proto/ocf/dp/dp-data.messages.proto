@@ -424,7 +424,7 @@ message ListLocationsWithinRequest {
   EnergySource energy_source = 1;
   // The UUID of the enclosing location to search within.
   string enclosing_location_uuid = 2 [
-    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).string.uuid = true
   ];
 }
 
