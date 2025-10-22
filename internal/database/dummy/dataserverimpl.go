@@ -252,8 +252,8 @@ func (d *DataPlatformDataServiceServerImpl) CreateLocation(
 	req *pb.CreateLocationRequest,
 ) (*pb.CreateLocationResponse, error) {
 	return &pb.CreateLocationResponse{
-		LocationUuid:  uuid.New().String(),
-		LocationName:  req.LocationName,
+		LocationUuid:           uuid.New().String(),
+		LocationName:           req.LocationName,
 		EffectiveCapacityWatts: req.EffectiveCapacityWatts,
 	}, nil
 }
@@ -294,8 +294,12 @@ func (d *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			P10ValueFraction:       float32(sd.normalizedIrradiance()) * 0.95,
 			P90ValueFraction:       float32(sd.normalizedIrradiance()) * 1.05,
 			EffectiveCapacityWatts: 150e6,
-			InitializationTimestampUtc: timestamppb.New(t.Add(-time.Duration(req.HorizonMins) * time.Minute)),
-			CreatedTimestampUtc:        timestamppb.New(t.Add(-time.Duration(req.HorizonMins) * 3 * time.Minute)),
+			InitializationTimestampUtc: timestamppb.New(
+				t.Add(-time.Duration(req.HorizonMins) * time.Minute),
+			),
+			CreatedTimestampUtc: timestamppb.New(
+				t.Add(-time.Duration(req.HorizonMins) * 3 * time.Minute),
+			),
 		})
 		t = t.Add(30 * time.Minute)
 	}
@@ -356,12 +360,15 @@ func (d *DataPlatformDataServiceServerImpl) GetLocation(
 	ll := randomUkLngLat()
 
 	return &pb.GetLocationResponse{
-		LocationUuid:  req.LocationUuid,
-		LocationName:  "DummyLocation",
-		Latlng:        &pb.LatLng{Latitude: float32(ll.latDegs), Longitude: float32(ll.lonDegs)},
+		LocationUuid: req.LocationUuid,
+		LocationName: "DummyLocation",
+		Latlng: &pb.LatLng{
+			Latitude:  float32(ll.latDegs),
+			Longitude: float32(ll.lonDegs),
+		},
 		EffectiveCapacityWatts: 1280e3,
-		Metadata:      &structpb.Struct{},
-		GeometryWkb:   geometryWkb,
+		Metadata:               &structpb.Struct{},
+		GeometryWkb:            geometryWkb,
 	}, nil
 }
 
@@ -480,10 +487,10 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 						fc.ForecasterName,
 						fc.ForecasterVersion,
 					),
-					HorizonMins: uint32(h),
-					P50Fraction: float32(sd.normalizedIrradiance()),
-					P10Fraction: p10,
-					P90Fraction: p90,
+					HorizonMins:         uint32(h),
+					P50Fraction:         float32(sd.normalizedIrradiance()),
+					P10Fraction:         p10,
+					P90Fraction:         p90,
 					CreatedTimestampUtc: timestamppb.New(time.Now().UTC()),
 				})
 				if err != nil {

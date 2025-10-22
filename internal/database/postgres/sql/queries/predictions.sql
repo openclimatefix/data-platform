@@ -89,7 +89,10 @@ ORDER BY f.init_time_utc DESC LIMIT 1;
  * between the input times. It does not return forecast values.
  */
 WITH desired_forecaster AS (
-    SELECT forecaster_id, forecaster_name, forecaster_version
+    SELECT
+        forecaster_id,
+        forecaster_name,
+        forecaster_version
     FROM pred.forecasters
     WHERE forecaster_name = sqlc.arg(forecaster_name)::TEXT
         AND forecaster_version = sqlc.arg(forecaster_version)::TEXT
@@ -98,11 +101,11 @@ SELECT
     forecasts.forecast_uuid,
     forecasts.init_time_utc,
     forecasts.location_uuid,
-    UUIDV7_EXTRACT_TIMESTAMP(forecasts.forecast_uuid) AS created_at_utc,
     desired_forecaster.forecaster_name,
-    desired_forecaster.forecaster_version
+    desired_forecaster.forecaster_version,
+    UUIDV7_EXTRACT_TIMESTAMP(forecasts.forecast_uuid) AS created_at_utc
 FROM pred.forecasts AS forecasts
-INNER JOIN desired_forecaster USING (forecaster_id)
+    INNER JOIN desired_forecaster USING (forecaster_id)
 WHERE forecasts.location_uuid = $1
     AND forecasts.source_type_id = $2
     AND forecasts.init_time_utc BETWEEN
@@ -133,7 +136,9 @@ WHERE pg.forecast_uuid = $1;
  */
 WITH relevant_forecasts AS (
     /* Get all the forecasts that fall within the time window for the given location, source, and forecaster */
-    SELECT f.forecast_uuid, f.init_time_utc
+    SELECT
+        f.forecast_uuid,
+        f.init_time_utc
     FROM pred.forecasts AS f
     WHERE f.location_uuid = $1
         AND f.source_type_id = $2
@@ -178,8 +183,8 @@ SELECT
     rp.p90_sip,
     rp.target_time_utc,
     rp.init_time_utc,
-    UUIDV7_EXTRACT_TIMESTAMP(rp.forecast_uuid) AS created_at_utc,
-    rp.metadata
+    rp.metadata,
+    UUIDV7_EXTRACT_TIMESTAMP(rp.forecast_uuid) AS created_at_utc
 FROM ranked_predictions AS rp
 WHERE rp.rn = 1
 ORDER BY rp.target_time_utc ASC;

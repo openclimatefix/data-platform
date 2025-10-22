@@ -454,10 +454,10 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					forecast.ForecasterName,
 					forecast.ForecasterVersion,
 				),
-				HorizonMins: uint32(dbPreds[i].HorizonMins),
-				P50Fraction: float32(dbPreds[i].P50Sip) / 30000.0,
-				P10Fraction: p10,
-				P90Fraction: p90,
+				HorizonMins:         uint32(dbPreds[i].HorizonMins),
+				P50Fraction:         float32(dbPreds[i].P50Sip) / 30000.0,
+				P10Fraction:         p10,
+				P90Fraction:         p90,
 				CreatedTimestampUtc: timestamppb.New(forecast.CreatedAtUtc.Time),
 			})
 			if err != nil {
@@ -1204,10 +1204,10 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
-			TargetTimestampUtc:     timestamppb.New(value.TargetTimeUtc.Time),
-			P50ValueFraction: float32(value.P50Sip) / 30000.0,
-			P10ValueFraction: p10,
-			P90ValueFraction: p90,
+			TargetTimestampUtc: timestamppb.New(value.TargetTimeUtc.Time),
+			P50ValueFraction:   float32(value.P50Sip) / 30000.0,
+			P10ValueFraction:   p10,
+			P90ValueFraction:   p90,
 			EffectiveCapacityWatts: uint64(
 				dbSource.Capacity,
 			) * uint64(

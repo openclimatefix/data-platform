@@ -148,111 +148,111 @@ func TestCreateLocation(t *testing.T) {
 		{
 			name: "Should create solar location",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "GREENWICH_OBSERVATORY",
-				EnergySource:  pb.EnergySource_SOLAR,
-				GeometryWkt:   "POINT(0.0 51.5)",
+				LocationName:           "GREENWICH_OBSERVATORY",
+				EnergySource:           pb.EnergySource_SOLAR,
+				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
-				LocationType:  pb.LocationType_SITE,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_SITE,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Shouldn't create unknown energy source",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "UNKNOWN_ENERGY_SOURCE",
-				EnergySource:  pb.EnergySource_ENERGY_SOURCE_UNSPECIFIED,
-				GeometryWkt:   "POINT(0.0 51.5)",
+				LocationName:           "UNKNOWN_ENERGY_SOURCE",
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_UNSPECIFIED,
+				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
-				LocationType:  pb.LocationType_SITE,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_SITE,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Should create wind location",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "LONDON_EYE",
-				EnergySource:  pb.EnergySource_WIND,
-				GeometryWkt:   "POINT(0.0 51.5)",
+				LocationName:           "LONDON_EYE",
+				EnergySource:           pb.EnergySource_WIND,
+				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 4560,
-				LocationType:  pb.LocationType_SITE,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_SITE,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Shouldn't create unknown location type",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "UNKNOWN_LOCATION_TYPE",
-				EnergySource:  pb.EnergySource_SOLAR,
-				GeometryWkt:   "POINT(0.0 51.5)",
+				LocationName:           "UNKNOWN_LOCATION_TYPE",
+				EnergySource:           pb.EnergySource_SOLAR,
+				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
-				LocationType:  pb.LocationType_LOCATION_TYPE_UNSPECIFIED,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_LOCATION_TYPE_UNSPECIFIED,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Shouldn't create location with empty name",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "",
-				EnergySource:  pb.EnergySource_SOLAR,
-				GeometryWkt:   "POINT(0.0 51.5)",
+				LocationName:           "",
+				EnergySource:           pb.EnergySource_SOLAR,
+				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
-				LocationType:  pb.LocationType_SITE,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_SITE,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Should create location with large capacity",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "OXFORDSHIRE",
-				EnergySource:  pb.EnergySource_SOLAR,
-				GeometryWkt:   "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5))",
+				LocationName:           "OXFORDSHIRE",
+				EnergySource:           pb.EnergySource_SOLAR,
+				GeometryWkt:            "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5))",
 				EffectiveCapacityWatts: 1000e9,
-				LocationType:  pb.LocationType_GSP,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_GSP,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Shouldn't create location with non-closed POLYGON geometry",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "UNCLOSED_POLYGON",
-				EnergySource:  pb.EnergySource_SOLAR,
-				GeometryWkt:   "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0))",
+				LocationName:           "UNCLOSED_POLYGON",
+				EnergySource:           pb.EnergySource_SOLAR,
+				GeometryWkt:            "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0))",
 				EffectiveCapacityWatts: 14e6,
-				LocationType:  pb.LocationType_DNO,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_DNO,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Should create location with closed MULTIPOLYGON geometry",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "CLOSED_MULTIPOLYGON",
-				EnergySource:  pb.EnergySource_WIND,
-				GeometryWkt:   "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0, 2.0 51.5)))",
+				LocationName:           "CLOSED_MULTIPOLYGON",
+				EnergySource:           pb.EnergySource_WIND,
+				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0, 2.0 51.5)))",
 				EffectiveCapacityWatts: 1100e6,
-				LocationType:  pb.LocationType_DNO,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_DNO,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Shouldn't create location with non-closed MULTIPOLYGON geometry",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "UNCLOSED_MULTIPOLYGON",
-				EnergySource:  pb.EnergySource_WIND,
-				GeometryWkt:   "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0)))",
+				LocationName:           "UNCLOSED_MULTIPOLYGON",
+				EnergySource:           pb.EnergySource_WIND,
+				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0)))",
 				EffectiveCapacityWatts: 14e6,
-				LocationType:  pb.LocationType_DNO,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_DNO,
+				Metadata:               metadata,
 			},
 		},
 		{
 			name: "Shouldn't create location with non WSG84 geometry",
 			req: &pb.CreateLocationRequest{
-				LocationName:  "NON_WGS84",
-				EnergySource:  pb.EnergySource_SOLAR,
-				GeometryWkt:   "POINT(1000000 1000000)",
+				LocationName:           "NON_WGS84",
+				EnergySource:           pb.EnergySource_SOLAR,
+				GeometryWkt:            "POINT(1000000 1000000)",
 				EffectiveCapacityWatts: 10289e3,
-				LocationType:  pb.LocationType_SITE,
-				Metadata:      metadata,
+				LocationType:           pb.LocationType_SITE,
+				Metadata:               metadata,
 			},
 		},
 	}
@@ -368,23 +368,23 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "TEST_GET_FORECAST_AT_TIMESTAMP_SITE",
-		GeometryWkt:   "POINT(-0.6 51.8)",
+		LocationName:           "TEST_GET_FORECAST_AT_TIMESTAMP_SITE",
+		GeometryWkt:            "POINT(-0.6 51.8)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:      metadata,
-		EnergySource:  pb.EnergySource_SOLAR,
-		LocationType:  pb.LocationType_SITE,
-		ValidFromUtc:  timestamppb.New(pivotTime.Add(-time.Hour * 1)),
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_SOLAR,
+		LocationType:           pb.LocationType_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
 	})
 	require.NoError(t, err)
 	siteResp2, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "TEST_GET_FORECAST_AT_TIMESTAMP_SITE_2",
-		GeometryWkt:   "POINT(-0.5 58.6)",
+		LocationName:           "TEST_GET_FORECAST_AT_TIMESTAMP_SITE_2",
+		GeometryWkt:            "POINT(-0.5 58.6)",
 		EffectiveCapacityWatts: 2000000,
-		Metadata:      metadata,
-		EnergySource:  pb.EnergySource_SOLAR,
-		LocationType:  pb.LocationType_SITE,
-		ValidFromUtc:  timestamppb.New(pivotTime.Add(-time.Hour * 1)),
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_SOLAR,
+		LocationType:           pb.LocationType_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
 	})
 	require.NoError(t, err)
 
@@ -438,12 +438,16 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 	siteUuids := make([]string, 3)
 	for i := range siteUuids {
 		resp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-			LocationName:  fmt.Sprintf("TESTSITE%02d", i),
-			GeometryWkt:   fmt.Sprintf("POINT(%f %f)", -0.1+float32(i)*0.01, 51.5+float32(i)*0.01),
+			LocationName: fmt.Sprintf("TESTSITE%02d", i),
+			GeometryWkt: fmt.Sprintf(
+				"POINT(%f %f)",
+				-0.1+float32(i)*0.01,
+				51.5+float32(i)*0.01,
+			),
 			EffectiveCapacityWatts: uint64(1000000 + i*100),
-			EnergySource:  pb.EnergySource_SOLAR,
-			Metadata:      &structpb.Struct{},
-			LocationType:  pb.LocationType_SITE,
+			EnergySource:           pb.EnergySource_SOLAR,
+			Metadata:               &structpb.Struct{},
+			LocationType:           pb.LocationType_SITE,
 		})
 		require.NoError(t, err)
 
@@ -470,13 +474,13 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "TEST_GET_FORECAST_AS_TIMESERIES_SITE",
-		GeometryWkt:   "POINT(-60.25 57.5)",
+		LocationName:           "TEST_GET_FORECAST_AS_TIMESERIES_SITE",
+		GeometryWkt:            "POINT(-60.25 57.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:      metadata,
-		EnergySource:  pb.EnergySource_SOLAR,
-		LocationType:  pb.LocationType_SITE,
-		ValidFromUtc:  timestamppb.New(pivotTime.Add(-time.Hour * 49)),
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_SOLAR,
+		LocationType:           pb.LocationType_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 49)),
 	})
 	require.NoError(t, err)
 
@@ -598,13 +602,13 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 
 	// Create a site to attach the observations to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "TEST_GET_OBSERVATIONS_AS_TIMESERIES_SITE",
-		GeometryWkt:   "POINT(-20.25 57.5)",
+		LocationName:           "TEST_GET_OBSERVATIONS_AS_TIMESERIES_SITE",
+		GeometryWkt:            "POINT(-20.25 57.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:      &structpb.Struct{},
-		EnergySource:  pb.EnergySource_SOLAR,
-		LocationType:  pb.LocationType_SITE,
-		ValidFromUtc:  timestamppb.New(pivotTime.Add(-time.Hour * 64)),
+		Metadata:               &structpb.Struct{},
+		EnergySource:           pb.EnergySource_SOLAR,
+		LocationType:           pb.LocationType_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 64)),
 	})
 	require.NoError(t, err)
 
@@ -674,13 +678,13 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 
 	// Create a site to attach the observations to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "TEST_GET_WEEK_AVERAGE_DELTAS_SITE",
-		GeometryWkt:   "POINT(-20.25 59.5)",
+		LocationName:           "TEST_GET_WEEK_AVERAGE_DELTAS_SITE",
+		GeometryWkt:            "POINT(-20.25 59.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:      &structpb.Struct{},
-		EnergySource:  pb.EnergySource_SOLAR,
-		LocationType:  pb.LocationType_SITE,
-		ValidFromUtc:  timestamppb.New(pivotTime.Add(-time.Hour * 12 * 24)),
+		Metadata:               &structpb.Struct{},
+		EnergySource:           pb.EnergySource_SOLAR,
+		LocationType:           pb.LocationType_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 12 * 24)),
 	})
 	require.NoError(t, err)
 
@@ -762,12 +766,12 @@ func TestListLocationsWithin(t *testing.T) {
 
 	// Create a GSP with a bounding box between 0 and 5
 	resp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "TEST_LIST_LOCATIONS_WITHIN_GSP",
-		EnergySource:  pb.EnergySource_SOLAR,
-		GeometryWkt:   "POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))",
-		LocationType:  pb.LocationType_GSP,
+		LocationName:           "TEST_LIST_LOCATIONS_WITHIN_GSP",
+		EnergySource:           pb.EnergySource_SOLAR,
+		GeometryWkt:            "POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))",
+		LocationType:           pb.LocationType_GSP,
 		EffectiveCapacityWatts: 1000,
-		Metadata:      metadata,
+		Metadata:               metadata,
 	})
 	require.NoError(t, err)
 
@@ -786,12 +790,12 @@ func TestListLocationsWithin(t *testing.T) {
 	inner_uuids := make([]string, len(lls))
 	for i, ll := range lls {
 		sResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-			LocationName:  fmt.Sprintf("TEST_LIST_LOCATIONS_WITHIN_INNER_%d", i),
-			EnergySource:  pb.EnergySource_SOLAR,
-			GeometryWkt:   fmt.Sprintf("POINT(%.3f %.3f)", ll.lon, ll.lat),
-			LocationType:  pb.LocationType_SITE,
+			LocationName:           fmt.Sprintf("TEST_LIST_LOCATIONS_WITHIN_INNER_%d", i),
+			EnergySource:           pb.EnergySource_SOLAR,
+			GeometryWkt:            fmt.Sprintf("POINT(%.3f %.3f)", ll.lon, ll.lat),
+			LocationType:           pb.LocationType_SITE,
 			EffectiveCapacityWatts: 500,
-			Metadata:      metadata,
+			Metadata:               metadata,
 		})
 		require.NoError(t, err)
 		inner_uuids[i] = sResp.LocationUuid
@@ -818,12 +822,12 @@ func TestCreateForecast(t *testing.T) {
 
 	// Create a site to attach the forecast to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:  "TEST_CREATE_FORECAST_SITE",
-		GeometryWkt:   "POINT(-0.1 51.5)",
+		LocationName:           "TEST_CREATE_FORECAST_SITE",
+		GeometryWkt:            "POINT(-0.1 51.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:      metadata,
-		EnergySource:  pb.EnergySource_SOLAR,
-		LocationType:  pb.LocationType_SITE,
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_SOLAR,
+		LocationType:           pb.LocationType_SITE,
 	})
 	require.NoError(t, err)
 
