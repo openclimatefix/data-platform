@@ -17,27 +17,27 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
-	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
 var (
-	// Global gRPC clients for use in tests
-	ac pb.DataPlatformAdministrationServiceClient
-	dc pb.DataPlatformDataServiceClient
+	// Global gRPC clients for use in tests.
+	ac           pb.DataPlatformAdministrationServiceClient
+	dc           pb.DataPlatformDataServiceClient
 	pgConnString string
 )
 
-
-// TestMain defines the main entry point for testing
+// TestMain defines the main entry point for testing.
 func TestMain(m *testing.M) {
-    code, err := setupTestMain(context.Background(), m)
-    if err != nil {
-        log.Fatal().Err(err).Msg("Failed to set up testing environment")
-    }
-    // Defer statements do not run past here due to os.Exit terminating the process.
-    os.Exit(code)
+	code, err := setupTestMain(context.Background(), m)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to set up testing environment")
+	}
+	// Defer statements do not run past here due to os.Exit terminating the process.
+	os.Exit(code)
 }
 
 // setupTestMain sets up the test dependencies and eventually executes the tests
@@ -73,6 +73,7 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 		},
 		Name: fmt.Sprintf("dp_testdb_%d", time.Now().Unix()),
 	}
+
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
@@ -84,7 +85,7 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 	if err != nil {
 		return 0, err
 	}
-    defer container.Terminate(ctx)
+	defer container.Terminate(ctx)
 
 	containerPort, err := container.MappedPort(ctx, "5432/tcp")
 	if err != nil {
@@ -101,8 +102,7 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 		net.JoinHostPort(host, containerPort.Port()),
 	)
 
-
-   // --- Set up gRPC clients for the DataPlatform services
+	// --- Set up gRPC clients for the DataPlatform services
 	txInjector := NewTransactionInjector(pgConnString)
 	validator, _ := protovalidate.New()
 	s := grpc.NewServer(
@@ -111,6 +111,7 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 			grpc.UnaryServerInterceptor(txInjector.UnaryServerInterceptor),
 		),
 	)
+
 	lis := bufconn.Listen(1024 * 1024)
 	defer lis.Close()
 
@@ -125,12 +126,14 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 			log.Error().Err(err).Msg("Server exited with error")
 		}
 	}()
+
 	defer s.GracefulStop()
 
 	// Create client using same in-memory listener
 	bufDialer := func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
 	}
+
 	cc, err := grpc.NewClient(
 		"passthrough:///bufnet",
 		grpc.WithContextDialer(bufDialer),
@@ -144,20 +147,18 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 	dc = pb.NewDataPlatformDataServiceClient(cc)
 	ac = pb.NewDataPlatformAdministrationServiceClient(cc)
 
-    // m.Run() executes the regular, user-defined test functions.
-    // Any defer statements that have been made will be run after m.Run()
-    // completes.
-    return m.Run(), nil
+	// m.Run() executes the regular, user-defined test functions.
+	// Any defer statements that have been made will be run after m.Run()
+	// completes.
+	return m.Run(), nil
 }
 
-
-// logConsumer consumes TestContainers logs via zerolog
+// logConsumer consumes TestContainers logs via zerolog.
 type logConsumer struct{}
 
-// Accept implements the LogConsumer interface, only writing NOTICE logs
+// Accept implements the LogConsumer interface, only writing NOTICE logs.
 func (lc *logConsumer) Accept(l testcontainers.Log) {
 	if strings.Contains(string(l.Content), "NOTICE:") {
 		log.Info().Msgf("pgcontainer: %s", l.Content)
 	}
 }
-

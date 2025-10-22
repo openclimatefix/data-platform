@@ -96,8 +96,7 @@ ORDER BY l.location_name;
 /* FilterLocationsByOAuthID returns the intersection of the locations accessible by the user
  * (identified by the given OAuth ID), and the provided list of location UUIDs.
  */
-SELECT
-    location_uuid
+SELECT location_uuid
 FROM iam.user_location_policies_mv
 WHERE user_uuid = $1
     AND role_id = ANY(sqlc.arg(role_id)::TEXT [])

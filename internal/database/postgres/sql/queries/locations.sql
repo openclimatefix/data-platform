@@ -59,7 +59,7 @@ FROM loc.locations AS l
             l_outer.geom
         )
 WHERE l_outer.location_uuid = $1
-AND l.location_uuid <> $1;
+    AND l.location_uuid <> $1;
 
 /*- Queries for the sources table -------------------------------------*/
 

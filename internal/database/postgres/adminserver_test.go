@@ -98,8 +98,8 @@ func TestUpdateOrganisation(t *testing.T) {
 		{
 			name: "Should update organisation name and metadata",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName:    createResp.OrgName,
-				NewName:     "TEST_UPDATE_ORGANISATION_UPDATED",
+				OrgName:  createResp.OrgName,
+				NewName:  "TEST_UPDATE_ORGANISATION_UPDATED",
 				Metadata: metadata2,
 			},
 			expectedName:     "TEST_UPDATE_ORGANISATION_UPDATED",
@@ -108,8 +108,8 @@ func TestUpdateOrganisation(t *testing.T) {
 		{
 			name: "Should update only organisation name if metadata is nil",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName:    "TEST_UPDATE_ORGANISATION_UPDATED",
-				NewName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
+				OrgName:  "TEST_UPDATE_ORGANISATION_UPDATED",
+				NewName:  "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 				Metadata: nil,
 			},
 			expectedName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
@@ -118,7 +118,7 @@ func TestUpdateOrganisation(t *testing.T) {
 		{
 			name: "Should update only metadata if name is empty",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName:    "TEST_UPDATE_ORGANISATION_NAME_ONLY",
+				OrgName:  "TEST_UPDATE_ORGANISATION_NAME_ONLY",
 				Metadata: metadata1,
 			},
 			expectedName:     "TEST_UPDATE_ORGANISATION_NAME_ONLY",
@@ -127,8 +127,8 @@ func TestUpdateOrganisation(t *testing.T) {
 		{
 			name: "Shouldn't update non-existent organisation",
 			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName:    "non_existent_org_id",
-				NewName:     "SHOULD_NOT_UPDATE",
+				OrgName:  "non_existent_org_id",
+				NewName:  "SHOULD_NOT_UPDATE",
 				Metadata: metadata1,
 			},
 		},

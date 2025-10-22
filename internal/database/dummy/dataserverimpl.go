@@ -290,9 +290,9 @@ func (d *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 		values = append(values, &pb.GetForecastAsTimeseriesResponse_Value{
 			TimestampUtc:           timestamppb.New(t),
-			P50ValueFraction:        float32(sd.normalizedIrradiance()) * 1.00,
-			P10ValueFraction:        float32(sd.normalizedIrradiance()) * 0.95,
-			P90ValueFraction:        float32(sd.normalizedIrradiance()) * 1.05,
+			P50ValueFraction:       float32(sd.normalizedIrradiance()) * 1.00,
+			P10ValueFraction:       float32(sd.normalizedIrradiance()) * 0.95,
+			P90ValueFraction:       float32(sd.normalizedIrradiance()) * 1.05,
 			EffectiveCapacityWatts: 150e6,
 		})
 		t = t.Add(30 * time.Minute)
@@ -322,7 +322,7 @@ func (d *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 				Latitude:  float32(ll.latDegs),
 				Longitude: float32(ll.lonDegs),
 			},
-			ValueFraction:           float32(sd.normalizedIrradiance()),
+			ValueFraction:          float32(sd.normalizedIrradiance()),
 			EffectiveCapacityWatts: 150e6,
 		}
 	}
@@ -403,7 +403,7 @@ func (d *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 		values[i] = &pb.GetObservationsAsTimeseriesResponse_Value{
 			TimestampUtc:           timestamppb.New(t),
-			ValueFraction:           float32(sd.normalizedIrradiance()),
+			ValueFraction:          float32(sd.normalizedIrradiance()),
 			EffectiveCapacityWatts: 150e6,
 		}
 	}
@@ -424,7 +424,7 @@ func (d *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	for i := range values {
 		values[i] = &pb.GetWeekAverageDeltasResponse_AverageDelta{
 			HorizonMins:            uint32(i * 30),
-			DeltaFraction:           rand.Float32()*0.1 - 0.05,
+			DeltaFraction:          rand.Float32()*0.1 - 0.05,
 			EffectiveCapacityWatts: 1000e3,
 		}
 	}
@@ -479,9 +479,9 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 						fc.ForecasterVersion,
 					),
 					HorizonMins: uint32(h),
-					P50Fraction:  float32(sd.normalizedIrradiance()),
-					P10Fraction:  p10,
-					P90Fraction:  p90,
+					P50Fraction: float32(sd.normalizedIrradiance()),
+					P10Fraction: p10,
+					P90Fraction: p90,
 				})
 				if err != nil {
 					return err
