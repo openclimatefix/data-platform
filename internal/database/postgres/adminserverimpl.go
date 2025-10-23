@@ -13,7 +13,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -51,7 +51,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 	ctx context.Context,
 	req *pb.CreateLocationPolicyGroupRequest,
 ) (*pb.CreateLocationPolicyGroupResponse, error) {
-	l := log.With().Str("method", "CreateLocationPolicyGroup").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	clpgParams := db.CreateLocationPolicyGroupParams{
@@ -79,7 +79,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
 	ctx context.Context,
 	req *pb.CreateOrganisationRequest,
 ) (*pb.CreateOrganisationResponse, error) {
-	l := log.With().Str("method", "CreateOrganisation").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	metadata, err := req.Metadata.MarshalJSON()
@@ -118,7 +118,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 	ctx context.Context,
 	req *pb.CreateUserRequest,
 ) (*pb.CreateUserResponse, error) {
-	l := log.With().Str("method", "CreateUser").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -174,7 +174,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteLocationPolicyGroup(
 	ctx context.Context,
 	req *pb.DeleteLocationPolicyGroupRequest,
 ) (*pb.DeleteLocationPolicyGroupResponse, error) {
-	l := log.With().Str("method", "DeleteLocationPolicyGroup").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	lpgUuid := uuid.MustParse(req.LocationPolicyGroupId)
@@ -201,7 +201,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
 	ctx context.Context,
 	req *pb.DeleteOrganisationRequest,
 ) (*pb.DeleteOrganisationResponse, error) {
-	l := log.With().Str("method", "DeleteOrganisation").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	orgUuid := uuid.MustParse(req.OrgId)
@@ -228,7 +228,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteUser(
 	ctx context.Context,
 	req *pb.DeleteUserRequest,
 ) (*pb.DeleteUserResponse, error) {
-	l := log.With().Str("method", "DeleteUser").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	userUuid := uuid.MustParse(req.UserId)
@@ -255,7 +255,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 	ctx context.Context,
 	req *pb.GetLocationPolicyGroupRequest,
 ) (*pb.GetLocationPolicyGroupResponse, error) {
-	l := log.With().Str("method", "GetLocationPolicyGroup").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	lpgUuid := uuid.MustParse(req.LocationPolicyGroupId)
@@ -310,7 +310,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 	ctx context.Context,
 	req *pb.GetOrganisationRequest,
 ) (*pb.GetOrganisationResponse, error) {
-	l := log.With().Str("method", "GetOrganisation").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	goParams := db.GetOrgByNameParams{
@@ -354,7 +354,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 	ctx context.Context,
 	req *pb.GetUserRequest,
 ) (*pb.GetUserResponse, error) {
-	l := log.With().Str("method", "GetUser").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	guParams := db.GetUserByOAuthIDParams{
@@ -413,7 +413,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
 	ctx context.Context,
 	req *pb.UpdateLocationPolicyGroupRequest,
 ) (*pb.UpdateLocationPolicyGroupResponse, error) {
-	l := log.With().Str("method", "UpdateLocationPolicyGroup").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location policy group as it currently is
@@ -531,7 +531,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 	ctx context.Context,
 	req *pb.UpdateOrganisationRequest,
 ) (*pb.UpdateOrganisationResponse, error) {
-	l := log.With().Str("method", "UpdateOrganisation").Logger()
+	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 	// Get the org as it currently is
 	goParams := db.GetOrgByNameParams{

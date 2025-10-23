@@ -67,7 +67,8 @@ func main() {
 	} else if strings.HasPrefix(databaseUrl, "postgres") && strings.Contains(databaseUrl, "://") {
 		log.Info().Str("type", "postgresql").Msg("Connecting to database backend")
 
-		txInjector := ix.NewTransactionInjector(databaseUrl, dbpg.Migrations)
+		logInterceptor := ix.NewLoggingInterceptor()
+		txInterceptor := ix.NewTransactionInterceptor(databaseUrl, dbpg.Migrations)
 		dataServerImpl = dbpg.NewDataPlatformDataServiceServerImpl()
 		adminServerImpl = dbpg.NewDataPlatformAdministrationServiceServerImpl()
 
@@ -75,7 +76,13 @@ func main() {
 		s = grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
 				grpc.UnaryServerInterceptor(protovalidate_ix.UnaryServerInterceptor(validator)),
-				grpc.UnaryServerInterceptor(txInjector.UnaryServerInterceptor),
+				grpc.UnaryServerInterceptor(logInterceptor.UnaryServerInterceptor),
+				grpc.UnaryServerInterceptor(txInterceptor.UnaryServerInterceptor),
+			),
+			grpc.ChainStreamInterceptor(
+				grpc.StreamServerInterceptor(protovalidate_ix.StreamServerInterceptor(validator)),
+				grpc.StreamServerInterceptor(logInterceptor.StreamServerInterceptor),
+				grpc.StreamServerInterceptor(txInterceptor.StreamServerInterceptor),
 			),
 		)
 	} else {

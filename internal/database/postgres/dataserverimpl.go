@@ -18,7 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -109,7 +109,7 @@ func jsonbToStruct(data []byte) (*structpb.Struct, error) {
 		return &structpb.Struct{}, nil
 	}
 
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("json.Unmarshal: %w", err)
 	}
@@ -139,7 +139,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	ctx context.Context,
 	req *pb.CreateForecastRequest,
 ) (*pb.CreateForecastResponse, error) {
-	l := log.With().Str("method", "CreateForecast").Logger()
+	l := zerolog.Ctx(ctx)
 
 	if len(req.Values) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "No forecast values provided")
@@ -257,8 +257,6 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 	context.Context,
 	*pb.GetLatestForecastsRequest,
 ) (*pb.GetLatestForecastsResponse, error) {
-	_ = log.With().Str("method", "GetLatestForecasts").Logger()
-
 	panic("unimplemented")
 }
 
@@ -266,7 +264,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 	ctx context.Context,
 	req *pb.CreateForecasterRequest,
 ) (*pb.CreateForecasterResponse, error) {
-	l := log.With().Str("method", "CreateForecaster").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -310,7 +308,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 	ctx context.Context,
 	req *pb.UpdateForecasterRequest,
 ) (*pb.UpdateForecasterResponse, error) {
-	l := log.With().Str("method", "UpdateForecaster").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -355,7 +353,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 	req *pb.StreamForecastDataRequest,
 	stream grpc.ServerStreamingServer[pb.StreamForecastDataResponse],
 ) error {
-	l := log.With().Str("method", "StreamForecastData").Logger()
+	l := zerolog.Ctx(stream.Context())
 
 	querier := db.New(ix.GetTxFromContext(stream.Context()))
 
@@ -474,7 +472,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocationsWithin(
 	ctx context.Context,
 	req *pb.ListLocationsWithinRequest,
 ) (*pb.ListLocationsWithinResponse, error) {
-	l := log.With().Str("method", "ListLocationsWithin").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -509,7 +507,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	ctx context.Context,
 	req *pb.GetWeekAverageDeltasRequest,
 ) (*pb.GetWeekAverageDeltasResponse, error) {
-	l := log.With().Str("method", "GetWeekAverageDeltas").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -612,7 +610,7 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	ctx context.Context,
 	req *pb.GetObservationsAsTimeseriesRequest,
 ) (*pb.GetObservationsAsTimeseriesResponse, error) {
-	l := log.With().Str("method", "GetObservationsAsTimeseries").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 	locationUuid := uuid.MustParse(req.LocationUuid)
@@ -691,7 +689,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	ctx context.Context,
 	req *pb.CreateObservationsRequest,
 ) (*pb.CreateObservationsResponse, error) {
-	l := log.With().Str("method", "CreateObservations").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -755,7 +753,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 		)
 	}
 
-	log.Debug().Msgf(
+	l.Debug().Msgf(
 		"Created %d observations from %s to %s for location '%s' and observer '%s'",
 		count, coParams[0].ObservationTimestampUtc.Time, coParams[len(coParams)-1].ObservationTimestampUtc.Time,
 		dbSource.LocationUuid, req.ObserverName,
@@ -768,7 +766,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 	ctx context.Context,
 	req *pb.CreateObserverRequest,
 ) (*pb.CreateObserverResponse, error) {
-	l := log.With().Str("method", "CreateObserver").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -794,7 +792,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	ctx context.Context,
 	req *pb.GetForecastAtTimestampRequest,
 ) (*pb.GetForecastAtTimestampResponse, error) {
-	l := log.With().Str("method", "GetForecastAtTimestamp").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -913,7 +911,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 	ctx context.Context,
 	req *pb.GetLocationRequest,
 ) (*pb.GetLocationResponse, error) {
-	l := log.With().Str("method", "GetLocation").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -973,7 +971,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	ctx context.Context,
 	req *pb.CreateLocationRequest,
 ) (*pb.CreateLocationResponse, error) {
-	l := log.With().Str("method", "CreateLocation").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -1077,7 +1075,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	ctx context.Context,
 	req *pb.GetLocationsAsGeoJSONRequest,
 ) (resp *pb.GetLocationsAsGeoJSONResponse, err error) {
-	l := log.With().Str("method", "GetLocationsAsGeoJSON").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -1116,7 +1114,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	ctx context.Context,
 	req *pb.GetForecastAsTimeseriesRequest,
 ) (*pb.GetForecastAsTimeseriesResponse, error) {
-	l := log.With().Str("method", "GetForecastAsTimeseries").Logger()
+	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 

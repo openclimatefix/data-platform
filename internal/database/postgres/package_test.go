@@ -104,12 +104,19 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 	)
 
 	// --- Set up gRPC clients for the DataPlatform services
-	txInjector := ix.NewTransactionInjector(pgConnString, Migrations)
+	txInterceptor := ix.NewTransactionInterceptor(pgConnString, Migrations)
+	logInterceptor := ix.NewLoggingInterceptor()
 	validator, _ := protovalidate.New()
 	s := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpc.UnaryServerInterceptor(protovalidate_ix.UnaryServerInterceptor(validator)),
-			grpc.UnaryServerInterceptor(txInjector.UnaryServerInterceptor),
+			grpc.UnaryServerInterceptor(logInterceptor.UnaryServerInterceptor),
+			grpc.UnaryServerInterceptor(txInterceptor.UnaryServerInterceptor),
+		),
+		grpc.ChainStreamInterceptor(
+			grpc.StreamServerInterceptor(protovalidate_ix.StreamServerInterceptor(validator)),
+			grpc.StreamServerInterceptor(logInterceptor.StreamServerInterceptor),
+			grpc.StreamServerInterceptor(txInterceptor.StreamServerInterceptor),
 		),
 	)
 

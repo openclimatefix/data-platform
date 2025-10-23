@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -34,14 +35,17 @@ func GetTxFromContext(ctx context.Context) pgx.Tx {
 	return tx
 }
 
-// TxInjectorInterceptorBuilder defines an interface to inject transactions into the request
+// transactionInterceptorBuilder defines an interface to inject transactions into the request
 // context of gRPC handlers.
 // I've decided this is alright to do because a transaction is fundamentally scoped to the request.
-type TxInjectorInterceptorBuilder struct {
+type transactionInterceptorBuilder struct {
 	pool *pgxpool.Pool
 }
 
-func NewTransactionInjector(connString string, migrations embed.FS) *TxInjectorInterceptorBuilder {
+func NewTransactionInterceptor(
+	connString string,
+	migrations embed.FS,
+) *transactionInterceptorBuilder {
 	pool, err := pgxpool.New(
 		context.Background(), connString,
 	)
@@ -67,16 +71,17 @@ func NewTransactionInjector(connString string, migrations embed.FS) *TxInjectorI
 		log.Fatal().Msgf("Unable to close database connection: %v", err)
 	}
 
-	return &TxInjectorInterceptorBuilder{pool: pool}
+	return &transactionInterceptorBuilder{pool: pool}
 }
 
 // UnaryServerInterceptor is the gRPC interceptor for handling transactions.
-func (ti *TxInjectorInterceptorBuilder) UnaryServerInterceptor(
+func (ti *transactionInterceptorBuilder) UnaryServerInterceptor(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
+	l := zerolog.Ctx(ctx)
 	// Establish a transaction with the database.
 	tx, err := ti.pool.Begin(ctx)
 	if err != nil {
@@ -86,7 +91,7 @@ func (ti *TxInjectorInterceptorBuilder) UnaryServerInterceptor(
 	// If an error occurred, rollback the transaction.
 	defer func() {
 		if err != nil {
-			log.Debug().Msg("Rolling back transaction")
+			l.Debug().Msg("rolling back transaction")
 			_ = tx.Rollback(ctx)
 		} else {
 			_ = tx.Commit(ctx)
@@ -103,4 +108,40 @@ func (ti *TxInjectorInterceptorBuilder) UnaryServerInterceptor(
 	}
 
 	return resp, nil
+}
+
+// StreamServerInterceptor is the gRPC interceptor for handling transactions in streams.
+func (ti *transactionInterceptorBuilder) StreamServerInterceptor(
+	srv any,
+	ss grpc.ServerStream,
+	info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler,
+) error {
+	l := zerolog.Ctx(ss.Context())
+	// Establish a transaction with the database.
+	tx, err := ti.pool.Begin(ss.Context())
+	if err != nil {
+		return status.Error(codes.Internal, "Error communicating with backend")
+	}
+
+	// If an error occurred, rollback the transaction.
+	defer func() {
+		if err != nil {
+			l.Debug().Msg("rolling back transaction")
+			_ = tx.Rollback(ss.Context())
+		} else {
+			_ = tx.Commit(ss.Context())
+		}
+	}()
+
+	// Create a new context with the transaction injected. Returned errors will trigger the defer.
+	txCtx := context.WithValue(ss.Context(), txKey{}, tx)
+
+	// Wrap the ServerStream to inject our new context.
+	err = handler(srv, &wrappedStream{ServerStream: ss, newCtx: txCtx})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
