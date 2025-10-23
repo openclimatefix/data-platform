@@ -51,7 +51,7 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 		FromDockerfile: testcontainers.FromDockerfile{
 			Context:    filepath.Join(".", "infra"),
 			Dockerfile: "Containerfile",
-			KeepImage:  false,
+			KeepImage:  true,
 		},
 		Env: map[string]string{
 			"POSTGRES_USER":     "postgres",
