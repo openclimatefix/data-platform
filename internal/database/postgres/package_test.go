@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"buf.build/go/protovalidate"
-	pvinterceptor "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
+	protovalidate_ix "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -21,6 +21,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
+	ix "github.com/openclimatefix/data-platform/internal/interceptors"
 )
 
 var (
@@ -103,11 +104,11 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 	)
 
 	// --- Set up gRPC clients for the DataPlatform services
-	txInjector := NewTransactionInjector(pgConnString)
+	txInjector := ix.NewTransactionInjector(pgConnString, Migrations)
 	validator, _ := protovalidate.New()
 	s := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
-			grpc.UnaryServerInterceptor(pvinterceptor.UnaryServerInterceptor(validator)),
+			grpc.UnaryServerInterceptor(protovalidate_ix.UnaryServerInterceptor(validator)),
 			grpc.UnaryServerInterceptor(txInjector.UnaryServerInterceptor),
 		),
 	)

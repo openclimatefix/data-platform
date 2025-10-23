@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"buf.build/go/protovalidate"
-	middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
+	protovalidate_ix "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -18,6 +18,7 @@ import (
 
 	dbdy "github.com/openclimatefix/data-platform/internal/database/dummy"
 	dbpg "github.com/openclimatefix/data-platform/internal/database/postgres"
+	ix "github.com/openclimatefix/data-platform/internal/interceptors"
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
@@ -60,20 +61,20 @@ func main() {
 		// For a dummy-backed server, just validate requests
 		s = grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
-				grpc.UnaryServerInterceptor(middleware.UnaryServerInterceptor(validator)),
+				grpc.UnaryServerInterceptor(protovalidate_ix.UnaryServerInterceptor(validator)),
 			),
 		)
 	} else if strings.HasPrefix(databaseUrl, "postgres") && strings.Contains(databaseUrl, "://") {
 		log.Info().Str("type", "postgresql").Msg("Connecting to database backend")
 
-		txInjector := dbpg.NewTransactionInjector(databaseUrl)
+		txInjector := ix.NewTransactionInjector(databaseUrl, dbpg.Migrations)
 		dataServerImpl = dbpg.NewDataPlatformDataServiceServerImpl()
 		adminServerImpl = dbpg.NewDataPlatformAdministrationServiceServerImpl()
 
 		// For a postgres-backed server, validate requests and manage database transactions
 		s = grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
-				grpc.UnaryServerInterceptor(middleware.UnaryServerInterceptor(validator)),
+				grpc.UnaryServerInterceptor(protovalidate_ix.UnaryServerInterceptor(validator)),
 				grpc.UnaryServerInterceptor(txInjector.UnaryServerInterceptor),
 			),
 		)

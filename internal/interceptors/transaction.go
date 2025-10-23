@@ -1,7 +1,5 @@
-// This module defines GRPC interceptors to inject PostgreSQL transactions into request contexts.
-// I've decided this is alright to do because a transaction is fundamentally scoped to the request.
-
-package postgres
+// This module defines custom GRPC interceptors. 
+package interceptors
 
 import (
 	"context"
@@ -17,9 +15,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-//go:embed sql/migrations/*.sql
-var embedMigrations embed.FS
 
 // Establish a private type for the context key to avoid collisions.
 type txKey struct{}
@@ -39,12 +34,14 @@ func GetTxFromContext(ctx context.Context) pgx.Tx {
 	return tx
 }
 
-// TxInjectorInterceptorBuilder defines an interface to inject transactions into gRPC handlers.
+// TxInjectorInterceptorBuilder defines an interface to inject transactions into the request
+// context of gRPC handlers.
+// I've decided this is alright to do because a transaction is fundamentally scoped to the request.
 type TxInjectorInterceptorBuilder struct {
 	pool *pgxpool.Pool
 }
 
-func NewTransactionInjector(connString string) *TxInjectorInterceptorBuilder {
+func NewTransactionInjector(connString string, migrations embed.FS) *TxInjectorInterceptorBuilder {
 	pool, err := pgxpool.New(
 		context.Background(), connString,
 	)
@@ -53,7 +50,7 @@ func NewTransactionInjector(connString string) *TxInjectorInterceptorBuilder {
 	}
 
 	log.Debug().Msg("Running migrations")
-	goose.SetBaseFS(embedMigrations)
+	goose.SetBaseFS(migrations)
 	goose.SetLogger(goose.NopLogger())
 
 	_ = goose.SetDialect("postgres")

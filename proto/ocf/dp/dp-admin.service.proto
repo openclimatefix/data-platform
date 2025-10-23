@@ -12,6 +12,9 @@ service DataPlatformAdministrationService {
   rpc GetUser(GetUserRequest) returns (GetUserResponse) {}
   rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse) {}
 
+  rpc ListUserLocations(ListUserLocationsRequest) returns (ListUserLocationsResponse) {}
+  rpc CheckUserLocationAccess(CheckUserLocationAccessRequest) returns (CheckUserLocationAccessResponse) {}
+
   rpc CreateOrganisation(CreateOrganisationRequest) returns (CreateOrganisationResponse) {}
   rpc GetOrganisation(GetOrganisationRequest) returns (GetOrganisationResponse) {}
   rpc UpdateOrganisation(UpdateOrganisationRequest) returns (UpdateOrganisationResponse) {}

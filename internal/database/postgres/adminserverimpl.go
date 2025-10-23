@@ -20,6 +20,7 @@ import (
 
 	db "github.com/openclimatefix/data-platform/internal/database/postgres/gen"
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
+	ix "github.com/openclimatefix/data-platform/internal/interceptors"
 )
 
 // --- Server Implementation ----------------------------------------------------------------------
@@ -32,12 +33,23 @@ func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministratio
 // It requires the database transaction for the request to be set in the context.
 type DataPlatformAdministrationServiceServerImpl struct{}
 
+func (d *DataPlatformAdministrationServiceServerImpl) CheckUserLocationAccess(
+	ctx context.Context,
+	re *pb.CheckUserLocationAccessRequest,
+) (*pb.CheckUserLocationAccessResponse, error) {
+	panic("unimplemented")
+}
+
+func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(context.Context, *pb.ListUserLocationsRequest) (*pb.ListUserLocationsResponse, error) {
+	panic("unimplemented")
+}
+
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 	ctx context.Context,
 	req *pb.CreateLocationPolicyGroupRequest,
 ) (*pb.CreateLocationPolicyGroupResponse, error) {
 	l := log.With().Str("method", "CreateLocationPolicyGroup").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	clpgParams := db.CreateLocationPolicyGroupParams{
 		LocationPolicyGroupName: req.Name,
@@ -65,7 +77,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
 	req *pb.CreateOrganisationRequest,
 ) (*pb.CreateOrganisationResponse, error) {
 	l := log.With().Str("method", "CreateOrganisation").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	metadata, err := req.Metadata.MarshalJSON()
 	if err != nil {
@@ -105,7 +117,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 ) (*pb.CreateUserResponse, error) {
 	l := log.With().Str("method", "CreateUser").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	goParams := db.GetOrgByNameParams{
 		OrgName: req.Organisation,
@@ -160,7 +172,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteLocationPolicyGroup(
 	req *pb.DeleteLocationPolicyGroupRequest,
 ) (*pb.DeleteLocationPolicyGroupResponse, error) {
 	l := log.With().Str("method", "DeleteLocationPolicyGroup").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	lpgUuid := uuid.MustParse(req.LocationPolicyGroupId)
 	dlpgParams := db.DeleteLocationPolicyGroupParams{
@@ -187,7 +199,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
 	req *pb.DeleteOrganisationRequest,
 ) (*pb.DeleteOrganisationResponse, error) {
 	l := log.With().Str("method", "DeleteOrganisation").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	orgUuid := uuid.MustParse(req.OrgId)
 	doParams := db.DeleteOrgParams{
@@ -214,7 +226,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteUser(
 	req *pb.DeleteUserRequest,
 ) (*pb.DeleteUserResponse, error) {
 	l := log.With().Str("method", "DeleteUser").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	userUuid := uuid.MustParse(req.UserId)
 	duParams := db.DeleteUserParams{
@@ -241,7 +253,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 	req *pb.GetLocationPolicyGroupRequest,
 ) (*pb.GetLocationPolicyGroupResponse, error) {
 	l := log.With().Str("method", "GetLocationPolicyGroup").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	lpgUuid := uuid.MustParse(req.LocationPolicyGroupId)
 	glpgParams := db.GetLocationPolicyGroupByUUIDParams{
@@ -296,7 +308,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 	req *pb.GetOrganisationRequest,
 ) (*pb.GetOrganisationResponse, error) {
 	l := log.With().Str("method", "GetOrganisation").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	goParams := db.GetOrgByNameParams{
 		OrgName: req.OrgName,
@@ -340,7 +352,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 	req *pb.GetUserRequest,
 ) (*pb.GetUserResponse, error) {
 	l := log.With().Str("method", "GetUser").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	guParams := db.GetUserByOAuthIDParams{
 		OauthID: req.OauthId,
@@ -399,7 +411,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
 	req *pb.UpdateLocationPolicyGroupRequest,
 ) (*pb.UpdateLocationPolicyGroupResponse, error) {
 	l := log.With().Str("method", "UpdateLocationPolicyGroup").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location policy group as it currently is
 	lpgUuid := uuid.MustParse(req.LocationPolicyGroupId)
@@ -517,7 +529,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 	req *pb.UpdateOrganisationRequest,
 ) (*pb.UpdateOrganisationResponse, error) {
 	l := log.With().Str("method", "UpdateOrganisation").Logger()
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 	// Get the org as it currently is
 	goParams := db.GetOrgByNameParams{
 		OrgName: req.OrgName,

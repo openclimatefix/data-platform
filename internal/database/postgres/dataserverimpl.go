@@ -27,6 +27,7 @@ import (
 
 	db "github.com/openclimatefix/data-platform/internal/database/postgres/gen"
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
+	ix "github.com/openclimatefix/data-platform/internal/interceptors"
 )
 
 // --- Reuseable Functions for Route Logic -------------------------------------------------------
@@ -144,7 +145,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		return nil, status.Error(codes.InvalidArgument, "No forecast values provided")
 	}
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
@@ -267,7 +268,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 ) (*pb.CreateForecasterResponse, error) {
 	l := log.With().Str("method", "CreateForecaster").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Check if the forecaster already exists and error out if so
 	gpParams := db.GetForecasterElseLatestParams{
@@ -311,7 +312,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 ) (*pb.UpdateForecasterResponse, error) {
 	l := log.With().Str("method", "UpdateForecaster").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Check if the forecaster already exists and error out if not
 	gpParams := db.GetForecasterElseLatestParams{
@@ -356,7 +357,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 ) error {
 	l := log.With().Str("method", "StreamForecastData").Logger()
 
-	querier := db.New(GetTxFromContext(stream.Context()))
+	querier := db.New(ix.GetTxFromContext(stream.Context()))
 
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
@@ -475,7 +476,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocationsWithin(
 ) (*pb.ListLocationsWithinResponse, error) {
 	l := log.With().Str("method", "ListLocationsWithin").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	lwprms := db.GetLocationsWithinParams{
 		LocationUuid: uuid.MustParse(req.EnclosingLocationUuid),
@@ -510,7 +511,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 ) (*pb.GetWeekAverageDeltasResponse, error) {
 	l := log.With().Str("method", "GetWeekAverageDeltas").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
@@ -613,7 +614,7 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 ) (*pb.GetObservationsAsTimeseriesResponse, error) {
 	l := log.With().Str("method", "GetObservationsAsTimeseries").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 	locationUuid := uuid.MustParse(req.LocationUuid)
 
 	stprms := db.GetSourceTypeByNameParams{SourceTypeName: req.EnergySource.String()}
@@ -692,7 +693,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 ) (*pb.CreateObservationsResponse, error) {
 	l := log.With().Str("method", "CreateObservations").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
@@ -769,7 +770,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 ) (*pb.CreateObserverResponse, error) {
 	l := log.With().Str("method", "CreateObserver").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	obParams := db.CreateObserverParams{ObserverName: req.Name}
 
@@ -795,7 +796,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 ) (*pb.GetForecastAtTimestampResponse, error) {
 	l := log.With().Str("method", "GetForecastAtTimestamp").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the relevant forecaster
 	params := db.GetForecasterElseLatestParams{
@@ -914,7 +915,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 ) (*pb.GetLocationResponse, error) {
 	l := log.With().Str("method", "GetLocation").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
@@ -974,7 +975,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 ) (*pb.CreateLocationResponse, error) {
 	l := log.With().Str("method", "CreateLocation").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Create a new location
 	params := db.CreateLocationParams{
@@ -1078,7 +1079,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 ) (resp *pb.GetLocationsAsGeoJSONResponse, err error) {
 	l := log.With().Str("method", "GetLocationsAsGeoJSON").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the locations as GeoJSON
 	var simplificationLevel float32
@@ -1117,7 +1118,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 ) (*pb.GetForecastAsTimeseriesResponse, error) {
 	l := log.With().Str("method", "GetForecastAsTimeseries").Logger()
 
-	querier := db.New(GetTxFromContext(ctx))
+	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location and source
 	gsParams := db.GetLocationSourceAtTimestampParams{
