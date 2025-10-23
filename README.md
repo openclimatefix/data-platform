@@ -52,9 +52,9 @@ with purpose and care.
 ### Database schema
 
 The Data Platform uses a PostgreSQL database to store its data. The schema for this database is
-defined in PostgreSQL's native SQL dialect in the `internal/database/postgres/sql/migrations`
+defined in PostgreSQL's native SQL dialect in the `internal/server/postgres/sql/migrations`
 directory, and access functions to the data are defined in
-`internal/database/postgres/sql/queries`.
+`internal/server/postgres/sql/queries`.
 
 Boilerplate code for using these queries is generated using the `sqlc` tool. This generated code
 provides a strongly typed interface to the database.
@@ -72,7 +72,7 @@ updates to clients using the Data Platform.
 ### Server
 
 The Database Schema is mapped to the External Schema by implementing the server interface generated
-from the Data Contract. This is done in `internal/database/<database>/serverimpl.go`. It isn't much
+from the Data Contract. This is done in `internal/server/<database>/serverimpl.go`. It isn't much
 more than a conversion layer, with the business logic shared between the implemented functions and
 the SQL queries.
 
@@ -143,7 +143,7 @@ so ensure you meet their
 [general system requirements](https://golang.testcontainers.org/system_requirements/).
 
 ### Generating Code
-
+ 
 In order to make changes to the *SQL queries*, or add a new *Database migration*, you will need to
 add or modify the relevant `.sql` files in the `sql` directory. Then, regenerate the Go library
 code to reflect these changes. This can be done using
@@ -152,24 +152,25 @@ code to reflect these changes. This can be done using
 $ make gen
 ```
 
-This will populate the `internal/database/postgres/gen` directory with language-specific bindings
+This will populate the `internal/server/postgres/gen` directory with language-specific bindings
 for implementations of server and client code. Next, update the `serverimpl.go` file for the given
 database to use the newly generated code, and ensure the test suite passes. Since the Data Platform
 container automatically migrates the database on startup, simply re-deploying the container will
 propagate the changes to your deployment environment.
 
-
 In order to change the *Data Contract*, you will need to modify the `.proto` files in the `proto`
-directory. Language specific bindigs are generated as part of the CI pipeline, but can be generated
-manually
+directory, and regenerate the code. GRPC client/server interfaces - and boilerplate code - gets
+generated from these Protocol Buffer definitions. The `make gen` target already handles generating
+the go code used internall in the application, placing generated code in `internal/gen`.
+
+Language-specific client/server bindings for external applications are generated as part of the CI
+pipeline, but can also be generated manually, e.g. for python
 
 ```bash
-$ make gen-ext
-``` 
+$ make gen.proto.python
+```
 
-The resultant server/client code can be copied from the `gen` directory to the relevant client
-projects for development/testing.
-
+This places the generated code in `gen/python`. See the `Makefile` for more external targets.
 
 ## Further Comparisons
 

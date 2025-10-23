@@ -35,7 +35,7 @@ bench:
 	@go test ./...  -bench=. -run=^a -timeout=30m
 
 .PHONY: gen
-gen: gen.db gen.proto
+gen: gen.db gen.proto.go
 
 .PHONY: doctor
 doctor:
@@ -52,7 +52,7 @@ gen.db:
 	@sqlc generate --file internal/database/postgres/.sqlc.yaml
 	@echo " * Success."
 
-.PHONY: gen.proto
+.PHONY: gen.proto.go
 gen.proto: install.protoc
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.9
