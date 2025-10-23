@@ -27,8 +27,8 @@ lint:
 	@golangci-lint fmt
 	@uvx -q sqlfluff fix -q \
 		--disable-progress-bar \
-		--config=internal/database/postgres/sql/.sqlfluff.toml \
-		internal/database/postgres/sql/queries
+		--config=internal/server/postgres/sql/.sqlfluff.toml \
+		internal/server/postgres/sql/queries
 
 .PHONY: bench
 bench:
@@ -49,7 +49,7 @@ doctor:
 gen.db:
 	@go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
 	@echo "Generating internal database code..."
-	@sqlc generate --file internal/database/postgres/.sqlc.yaml
+	@sqlc generate --file internal/server/postgres/.sqlc.yaml
 	@echo " * Success."
 
 .PHONY: gen.proto.go
@@ -143,7 +143,7 @@ run:
 
 .PHONY: run.db # Run an instance of Postgres with the required extensions
 run.db:
-	docker build -f internal/database/postgres/infra/Containerfile internal/database/postgres/infra -t data-platform-pgdb:local
+	docker build -f internal/server/postgres/infra/Containerfile internal/server/postgres/infra -t data-platform-pgdb:local
 	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" data-platform-pgdb:local
 
 .PHONY: run.client # Run a GRPC client to inspect the API

@@ -18,9 +18,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	db "github.com/openclimatefix/data-platform/internal/server/postgres/gen"
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 	ix "github.com/openclimatefix/data-platform/internal/interceptors"
+	db "github.com/openclimatefix/data-platform/internal/server/postgres/gen"
 )
 
 // --- Server Implementation ----------------------------------------------------------------------
