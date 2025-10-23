@@ -40,7 +40,10 @@ func (d *DataPlatformAdministrationServiceServerImpl) CheckUserLocationAccess(
 	panic("unimplemented")
 }
 
-func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(context.Context, *pb.ListUserLocationsRequest) (*pb.ListUserLocationsResponse, error) {
+func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(
+	context.Context,
+	*pb.ListUserLocationsRequest,
+) (*pb.ListUserLocationsResponse, error) {
 	panic("unimplemented")
 }
 

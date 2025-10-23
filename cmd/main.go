@@ -18,8 +18,8 @@ import (
 
 	dbdy "github.com/openclimatefix/data-platform/internal/database/dummy"
 	dbpg "github.com/openclimatefix/data-platform/internal/database/postgres"
-	ix "github.com/openclimatefix/data-platform/internal/interceptors"
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
+	ix "github.com/openclimatefix/data-platform/internal/interceptors"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-// This module defines custom GRPC interceptors. 
+// This module defines custom GRPC interceptors.
 package interceptors
 
 import (

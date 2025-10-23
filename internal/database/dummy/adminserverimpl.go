@@ -26,12 +26,18 @@ func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministratio
 type DataPlatformAdministrationServiceServerImpl struct{}
 
 // CheckUserLocationAccess implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) CheckUserLocationAccess(context.Context, *pb.CheckUserLocationAccessRequest) (*pb.CheckUserLocationAccessResponse, error) {
+func (d *DataPlatformAdministrationServiceServerImpl) CheckUserLocationAccess(
+	context.Context,
+	*pb.CheckUserLocationAccessRequest,
+) (*pb.CheckUserLocationAccessResponse, error) {
 	panic("unimplemented")
 }
 
 // ListUserLocations implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(context.Context, *pb.ListUserLocationsRequest) (*pb.ListUserLocationsResponse, error) {
+func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(
+	context.Context,
+	*pb.ListUserLocationsRequest,
+) (*pb.ListUserLocationsResponse, error) {
 	panic("unimplemented")
 }
 
@@ -98,7 +104,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 	return &pb.GetLocationPolicyGroupResponse{
 		LocationPolicyGroupId: req.LocationPolicyGroupId,
 		Name:                  "Dummy Location Policy Group",
-		LocationPolicies:      []*pb.CreateLocationPolicyGroupRequest_LocationPolicy{
+		LocationPolicies: []*pb.CreateLocationPolicyGroupRequest_LocationPolicy{
 			{
 				LocationId:   uuid.New().String(),
 				EnergySource: pb.EnergySource_SOLAR,
