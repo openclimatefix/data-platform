@@ -44,6 +44,25 @@ ORDER BY org_name;
 DELETE FROM iam.orgs
 WHERE org_uuid = $1;
 
+-- name: AddUserToOrgByOAuthIDAndName :exec
+INSERT INTO iam.users (org_uuid, oauth_id)
+VALUES (
+    (
+        SELECT o.org_uuid FROM iam.orgs AS o
+        WHERE o.org_name = LOWER(sqlc.arg(org_name)::TEXT)
+    ),
+    sqlc.arg(oauth_id)::TEXT
+)
+ON CONFLICT DO NOTHING;
+
+-- name: RemoveUserFromOrgByOAuthIDAndName :exec
+DELETE FROM iam.users
+WHERE org_uuid = (
+        SELECT o.org_uuid FROM iam.orgs AS o
+        WHERE o.org_name = LOWER(sqlc.arg(org_name)::TEXT)
+    )
+    AND oauth_id = sqlc.arg(oauth_id)::TEXT;
+
 /*- Users Table ---------------------------------------------------------------------------------*/
 
 -- name: CreateUser :one
@@ -53,15 +72,6 @@ VALUES (
     $2,
     CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
 )
-RETURNING user_uuid, org_uuid, oauth_id, metadata;
-
--- name: UpdateUser :one
-UPDATE iam.users
-SET
-    org_uuid = $2,
-    oauth_id = $3,
-    metadata = CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
-WHERE user_uuid = $1
 RETURNING user_uuid, org_uuid, oauth_id, metadata;
 
 -- name: GetUserByOAuthID :one
@@ -145,7 +155,7 @@ SELECT
     location_policy_group_uuid,
     location_policy_group_name
 FROM iam.location_policy_groups
-WHERE location_policy_group_name = $1;
+WHERE location_policy_group_name = LOWER(sqlc.arg(location_policy_group_name)::TEXT);
 
 -- name: ListLocationPolicyGroups :many
 SELECT
@@ -158,19 +168,30 @@ ORDER BY location_policy_group_name;
 DELETE FROM iam.location_policy_groups
 WHERE location_policy_group_uuid = $1;
 
--- name: AddLocationPolicyGroupsToOrg :exec
+-- name: AddLocationPolicyGroupToOrgByNames :exec
 INSERT INTO iam.org_location_policy_groups (org_uuid, location_policy_group_uuid)
-SELECT
-    sqlc.arg(org_uuid)::UUID,
-    lpg.location_policy_group_uuid
-FROM UNNEST(ARRAY[sqlc.arg(location_policy_group_uuids)::UUID []]) AS t (location_policy_group_uuid)
-    INNER JOIN iam.location_policy_groups AS lpg USING (location_policy_group_uuid)
+VALUES (
+    (
+        SELECT o.org_uuid FROM iam.orgs AS o
+        WHERE o.org_name = LOWER(sqlc.arg(org_name)::TEXT)
+    ),
+    (
+        SELECT lpg.location_policy_group_uuid FROM iam.location_policy_groups AS lpg
+        WHERE lpg.location_policy_group_name = LOWER(sqlc.arg(location_policy_group_name)::TEXT)
+    )
+)
 ON CONFLICT DO NOTHING;
 
--- name: RemoveLocationPolicyGroupsFromOrg :exec
+-- name: RemoveLocationPolicyGroupFromOrgByNames :exec
 DELETE FROM iam.org_location_policy_groups
-WHERE org_uuid = $1
-    AND location_policy_group_uuid = ANY(sqlc.arg(location_policy_group_uuids)::UUID []);
+WHERE org_uuid = (
+        SELECT o.org_uuid FROM iam.orgs AS o
+        WHERE o.org_name = LOWER(sqlc.arg(org_name)::TEXT)
+    )
+    AND location_policy_group_uuid = (
+        SELECT lpg.location_policy_group_uuid FROM iam.location_policy_groups AS lpg
+        WHERE lpg.location_policy_group_name = LOWER(sqlc.arg(location_policy_group_name)::TEXT)
+    );
 
 /*- Location Policies ---------------------------------------------------------------------------*/
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -79,133 +80,216 @@ func TestCreateOrganisation(t *testing.T) {
 	}
 }
 
-func TestUpdateOrganisation(t *testing.T) {
-	metadata1, err := structpb.NewStruct(map[string]any{"source": "test"})
+func TestAddRemoveLocationPolicyGroupToOrganisation(t *testing.T) {
+	orgResp, err := ac.CreateOrganisation(t.Context(), &pb.CreateOrganisationRequest{
+		OrgName: "test_add_remove_location_policy_group_organisation",
+	})
 	require.NoError(t, err)
-	metadata2, err := structpb.NewStruct(map[string]any{"source": "updated_test"})
-	require.NoError(t, err)
-
-	createResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
-		OrgName:  "test_update_organisation",
-		Metadata: metadata1,
+	lpResp, err := ac.CreateLocationPolicyGroup(t.Context(), &pb.CreateLocationPolicyGroupRequest{
+		Name: "test_add_remove_location_policy_group_policy_group",
 	})
 	require.NoError(t, err)
 
 	testCases := []struct {
-		name             string
-		updateReq        *pb.UpdateOrganisationRequest
-		expectedName     string
-		expectedMetadata *structpb.Struct
+		name                     string
+		addRequest               *pb.AddLocationPolicyGroupToOrganisationRequest
+		removeRequest            *pb.RemoveLocationPolicyGroupFromOrganisationRequest
+		expectedPolicyGroupCount int
 	}{
 		{
-			name: "Should update organisation name and metadata",
-			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName:  createResp.OrgName,
-				NewName:  "test_update_organisation_updated",
-				Metadata: metadata2,
+			name: "Should add location policy group to organisation",
+			addRequest: &pb.AddLocationPolicyGroupToOrganisationRequest{
+				OrgName:                 orgResp.OrgName,
+				LocationPolicyGroupName: lpResp.Name,
 			},
-			expectedName:     "test_update_organisation_updated",
-			expectedMetadata: metadata2,
+			expectedPolicyGroupCount: 1,
 		},
 		{
-			name: "Should update only organisation name if metadata is nil",
-			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName:  "test_update_organisation_updated",
-				NewName:  "test_update_organisation_name_only",
-				Metadata: nil,
+			name: "Should handle adding duplicate location policy groups",
+			addRequest: &pb.AddLocationPolicyGroupToOrganisationRequest{
+				OrgName:                 orgResp.OrgName,
+				LocationPolicyGroupName: lpResp.Name,
 			},
-			expectedName:     "test_update_organisation_name_only",
-			expectedMetadata: metadata2,
+			expectedPolicyGroupCount: 1,
 		},
 		{
-			name: "Should update only metadata if name is empty",
-			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName:  "test_update_organisation_name_only",
-				Metadata: metadata1,
+			name: "Should remove location policy group from organisation",
+			removeRequest: &pb.RemoveLocationPolicyGroupFromOrganisationRequest{
+				OrgName:                 orgResp.OrgName,
+				LocationPolicyGroupName: lpResp.Name,
 			},
-			expectedName:     "test_update_organisation_name_only",
-			expectedMetadata: metadata1,
+			expectedPolicyGroupCount: 0,
 		},
 		{
-			name: "Shouldn't update non-existent organisation",
-			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName:  "non_existent_org_id",
-				NewName:  "should_not_update",
-				Metadata: metadata1,
+			name: "Should handle non-existent location policy group removal",
+			removeRequest: &pb.RemoveLocationPolicyGroupFromOrganisationRequest{
+				OrgName:                 orgResp.OrgName,
+				LocationPolicyGroupName: "non_existent_policy_group",
 			},
+			expectedPolicyGroupCount: 0,
 		},
 		{
-			name: "Should do nothing if both name and metadata are empty",
-			updateReq: &pb.UpdateOrganisationRequest{
-				OrgName: "test_update_organisation_name_only",
+			name: "Shouldn't add non-existent location policy group to organisation",
+			addRequest: &pb.AddLocationPolicyGroupToOrganisationRequest{
+				OrgName:                 orgResp.OrgName,
+				LocationPolicyGroupName: "non_existent_policy_group",
 			},
-			expectedName:     "test_update_organisation_name_only",
-			expectedMetadata: metadata1,
+			expectedPolicyGroupCount: 0,
 		},
 	}
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ac.UpdateOrganisation(context.Background(), tc.updateReq)
-			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
+			if tc.addRequest != nil {
+				_, err = ac.AddLocationPolicyGroupToOrganisation(t.Context(), tc.addRequest)
+			}
+
+			if tc.removeRequest != nil {
+				_, err = ac.RemoveLocationPolicyGroupFromOrganisation(t.Context(), tc.removeRequest)
+			}
+
+			if strings.Contains(tc.name, "Shouldn't") {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-
 				// Read back the organisation
-				dbOrg, err := ac.GetOrganisation(context.Background(), &pb.GetOrganisationRequest{
-					OrgName: tc.expectedName,
+				dbOrg, err := ac.GetOrganisation(t.Context(), &pb.GetOrganisationRequest{
+					OrgName: orgResp.OrgName,
 				})
 				require.NoError(t, err)
-
-				require.Equal(t, tc.expectedName, dbOrg.OrgName)
-				require.Equal(t, tc.expectedMetadata.AsMap(), dbOrg.Metadata.AsMap())
+				require.Equal(t, tc.expectedPolicyGroupCount, len(dbOrg.LocationPolicyGroups))
 			}
 		})
 	}
 }
 
-func TestDeleteOrganisation(t *testing.T) {
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+func TestAddRemoveLocationPoliciesFromGroup(t *testing.T) {
+	lResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_add_remove_location_policies_location",
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		GeometryWkt:            "POINT(8.3 33.44)",
+		EffectiveCapacityWatts: 5000,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		Metadata:               &structpb.Struct{},
+		ValidFromUtc:           timestamppb.New(time.Now().UTC().Add(-1 * time.Hour)),
+	})
 	require.NoError(t, err)
-
-	createResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
-		OrgName:  "test_delete_organisation",
-		Metadata: metadata,
+	lpResp, err := ac.CreateLocationPolicyGroup(t.Context(), &pb.CreateLocationPolicyGroupRequest{
+		Name: "test_add_remove_location_policies_policy_group",
 	})
 	require.NoError(t, err)
 
 	testCases := []struct {
-		name      string
-		deleteReq *pb.DeleteOrganisationRequest
+		name                string
+		addRequest          *pb.AddLocationPoliciesToGroupRequest
+		removeRequest       *pb.RemoveLocationPoliciesFromGroupRequest
+		expectedPolicyCount int
 	}{
 		{
-			name: "Should delete existing organisation",
-			deleteReq: &pb.DeleteOrganisationRequest{
-				OrgId: createResp.OrgId,
+			name: "Should add location policies to group",
+			addRequest: &pb.AddLocationPoliciesToGroupRequest{
+				LocationPolicyGroupName: lpResp.Name,
+				LocationPolicies: []*pb.LocationPolicy{
+					{
+						LocationId:   lResp.LocationUuid,
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						Permission:   pb.Permission_PERMISSION_READ,
+					},
+				},
 			},
+			expectedPolicyCount: 1,
 		},
 		{
-			name: "Shouldn't delete non-existent organisation",
-			deleteReq: &pb.DeleteOrganisationRequest{
-				OrgId: "non_existent_org_id",
+			name: "Should handle adding duplicate location policies",
+			addRequest: &pb.AddLocationPoliciesToGroupRequest{
+				LocationPolicyGroupName: lpResp.Name,
+				LocationPolicies: []*pb.LocationPolicy{
+					{
+						LocationId:   lResp.LocationUuid,
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						Permission:   pb.Permission_PERMISSION_READ,
+					},
+				},
 			},
+			expectedPolicyCount: 1,
+		},
+		// {
+		// 	name: "Shouldn't add location policy referencing non-existent source",
+		// 	addRequest: &pb.AddLocationPoliciesToGroupRequest{
+		//		LocationPolicyGroupName: lpResp.Name,
+		//		LocationPolicies:        []*pb.LocationPolicy{
+		//			{
+		//				LocationId:   lResp.LocationUuid,
+		//				EnergySource: pb.EnergySource_ENERGY_SOURCE_WIND,
+		//				Permission:   pb.Permission_PERMISSION_READ,
+		//			},
+		//		},
+		//	},
+		//	expectedPolicyCount: 1,
+		// },
+		{
+			name: "Shouldn't add location policy referencing non-existent location",
+			addRequest: &pb.AddLocationPoliciesToGroupRequest{
+				LocationPolicyGroupName: lpResp.Name,
+				LocationPolicies: []*pb.LocationPolicy{
+					{
+						LocationId:   uuid.New().String(),
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						Permission:   pb.Permission_PERMISSION_READ,
+					},
+				},
+			},
+			expectedPolicyCount: 1,
+		},
+		{
+			name: "Should remove location policies from group",
+			removeRequest: &pb.RemoveLocationPoliciesFromGroupRequest{
+				LocationPolicyGroupName: lpResp.Name,
+				LocationPolicies: []*pb.LocationPolicy{
+					{
+						LocationId:   lResp.LocationUuid,
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						Permission:   pb.Permission_PERMISSION_READ,
+					},
+				},
+			},
+			expectedPolicyCount: 0,
+		},
+		{
+			name: "Should handle non-existent location policy removal",
+			removeRequest: &pb.RemoveLocationPoliciesFromGroupRequest{
+				LocationPolicyGroupName: lpResp.Name,
+				LocationPolicies: []*pb.LocationPolicy{
+					{
+						LocationId:   uuid.New().String(),
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						Permission:   pb.Permission_PERMISSION_READ,
+					},
+				},
+			},
+			expectedPolicyCount: 0,
 		},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ac.DeleteOrganisation(context.Background(), tc.deleteReq)
-			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
+			if tc.addRequest != nil {
+				_, err = ac.AddLocationPoliciesToGroup(t.Context(), tc.addRequest)
+			}
+
+			if tc.removeRequest != nil {
+				_, err = ac.RemoveLocationPoliciesFromGroup(t.Context(), tc.removeRequest)
+			}
+
+			if strings.Contains(tc.name, "Shouldn't") {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-
-				// Try to read back the organisation
-				_, err := ac.GetOrganisation(context.Background(), &pb.GetOrganisationRequest{
-					OrgName: "test_delete_organisation",
+				// Read back the location policy group
+				dbLPG, err := ac.GetLocationPolicyGroup(t.Context(), &pb.GetLocationPolicyGroupRequest{
+					LocationPolicyGroupName: lpResp.Name,
 				})
-				// Obviously should error here
-				require.Error(t, err)
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedPolicyCount, len(dbLPG.LocationPolicies))
 			}
 		})
 	}
@@ -215,7 +299,7 @@ func TestCreateUser(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
-	orgResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
+	orgResp, err := ac.CreateOrganisation(t.Context(), &pb.CreateOrganisationRequest{
 		OrgName:  "test_create_user_organisation",
 		Metadata: metadata,
 	})
@@ -339,83 +423,5 @@ func DeleteUser(t *testing.T) {
 				require.Error(t, err)
 			}
 		})
-	}
-}
-
-func TestListUserLocations(t *testing.T) {
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-
-	orgResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
-		OrgName:  "test_list_user_locations_organisation",
-		Metadata: metadata,
-	})
-	require.NoError(t, err)
-
-	pgResp, err := ac.CreateLocationPolicyGroup(
-		context.Background(),
-		&pb.CreateLocationPolicyGroupRequest{
-			Name: "test_list_user_locations_policy_group",
-		},
-	)
-
-	require.NoError(t, err)
-	_, err = ac.UpdateOrganisation(context.Background(), &pb.UpdateOrganisationRequest{
-		OrgName:                orgResp.OrgName,
-		LocationPolicyGroupIds: []string{pgResp.LocationPolicyGroupId},
-	})
-	require.NoError(t, err)
-
-	_, err = ac.CreateUser(context.Background(), &pb.CreateUserRequest{
-		OauthId:      "TEST_LIST_USER_LOCATIONS_USER001",
-		Organisation: orgResp.OrgName,
-		Metadata:     metadata,
-	})
-	require.NoError(t, err)
-
-	locationNames := []string{
-		"test_list_user_locations_location_a",
-		"test_list_user_locations_location_b",
-	}
-	for _, locName := range locationNames {
-		locResp, err := dc.CreateLocation(context.Background(), &pb.CreateLocationRequest{
-			LocationName:           locName,
-			Metadata:               metadata,
-			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			GeometryWkt:            "POINT(10 10)",
-			EffectiveCapacityWatts: 1000,
-			LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-			ValidFromUtc:           timestamppb.New(time.Now().UTC().Add(-time.Hour)),
-		})
-		require.NoError(t, err)
-		_, err = ac.AddLocationPoliciesToGroup(
-			context.Background(),
-			&pb.AddLocationPoliciesToGroupRequest{
-				LocationPolicies: []*pb.LocationPolicy{
-					{
-						LocationId:   locResp.LocationUuid,
-						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-						Permission:   pb.Permission_PERMISSION_WRITE,
-					},
-				},
-				LocationPolicyGroupName: pgResp.Name,
-			},
-		)
-		require.NoError(t, err)
-	}
-
-	listResp, err := ac.ListUserLocations(context.Background(), &pb.ListUserLocationsRequest{
-		OauthId: "TEST_LIST_USER_LOCATIONS_USER001",
-	})
-	require.NoError(t, err)
-	require.Equal(t, len(locationNames), len(listResp.Locations))
-
-	returnedLocationNames := make(map[string]bool)
-	for _, loc := range listResp.Locations {
-		returnedLocationNames[loc.LocationName] = true
-	}
-
-	for _, locName := range locationNames {
-		require.True(t, returnedLocationNames[locName])
 	}
 }

@@ -86,23 +86,19 @@ func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPoliciesFrom
 	return &pb.RemoveLocationPoliciesFromGroupResponse{}, nil
 }
 
-// CreateOrganisation implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
+// GetUser implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 	ctx context.Context,
-	req *pb.CreateOrganisationRequest,
-) (*pb.CreateOrganisationResponse, error) {
-	return &pb.CreateOrganisationResponse{
-		OrgId:   uuid.New().String(),
-		OrgName: req.OrgName,
+	req *pb.GetUserRequest,
+) (*pb.GetUserResponse, error) {
+	return &pb.GetUserResponse{
+		UserId:               uuid.New().String(),
+		OauthId:              req.OauthId,
+		Organisation:         "Dummy Organisation",
+		LocationPolicyGroups: []string{"DUMMY_POLICY_GROUP_ID_1", "DUMMY_POLICY_GROUP_ID_2"},
+		CreatedAt:            timestamppb.New(time.Now().UTC()),
+		Metadata:             &structpb.Struct{},
 	}, nil
-}
-
-// DeleteOrganisation implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
-	context.Context,
-	*pb.DeleteOrganisationRequest,
-) (*pb.DeleteOrganisationResponse, error) {
-	return &pb.DeleteOrganisationResponse{}, nil
 }
 
 // CreateUser implements dp.DataPlatformAdministrationServiceServer.
@@ -123,6 +119,17 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteUser(
 	return &pb.DeleteUserResponse{}, nil
 }
 
+// CreateOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
+	ctx context.Context,
+	req *pb.CreateOrganisationRequest,
+) (*pb.CreateOrganisationResponse, error) {
+	return &pb.CreateOrganisationResponse{
+		OrgId:   uuid.New().String(),
+		OrgName: req.OrgName,
+	}, nil
+}
+
 // GetOrganisation implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 	ctx context.Context,
@@ -138,34 +145,36 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 	}, nil
 }
 
-// GetUser implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
-	ctx context.Context,
-	req *pb.GetUserRequest,
-) (*pb.GetUserResponse, error) {
-	return &pb.GetUserResponse{
-		UserId:               uuid.New().String(),
-		OauthId:              req.OauthId,
-		Organisation:         "Dummy Organisation",
-		LocationPolicyGroups: []string{"DUMMY_POLICY_GROUP_ID_1", "DUMMY_POLICY_GROUP_ID_2"},
-		CreatedAt:            timestamppb.New(time.Now().UTC()),
-		Metadata:             &structpb.Struct{},
-	}, nil
+// AddLocationPolicyGroupToOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) AddLocationPolicyGroupToOrganisation(
+	context.Context,
+	*pb.AddLocationPolicyGroupToOrganisationRequest,
+) (*pb.AddLocationPolicyGroupToOrganisationResponse, error) {
+	return &pb.AddLocationPolicyGroupToOrganisationResponse{}, nil
 }
 
-// UpdateOrganisation implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
-	ctx context.Context,
-	req *pb.UpdateOrganisationRequest,
-) (*pb.UpdateOrganisationResponse, error) {
-	return &pb.UpdateOrganisationResponse{
-		OrgId:                uuid.New().String(),
-		OrgName:              req.NewName,
-		Metadata:             req.Metadata,
-		CreatedAt:            timestamppb.New(time.Now().UTC()),
-		LocationPolicyGroups: req.LocationPolicyGroupIds,
-		UserOauthIds:         []string{uuid.New().String()},
-	}, nil
+// AddUserToOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) AddUserToOrganisation(
+	context.Context,
+	*pb.AddUserToOrganisationRequest,
+) (*pb.AddUserToOrganisationResponse, error) {
+	return &pb.AddUserToOrganisationResponse{}, nil
+}
+
+// RemoveLocationPolicyGroupFromOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPolicyGroupFromOrganisation(
+	context.Context,
+	*pb.RemoveLocationPolicyGroupFromOrganisationRequest,
+) (*pb.RemoveLocationPolicyGroupFromOrganisationResponse, error) {
+	return &pb.RemoveLocationPolicyGroupFromOrganisationResponse{}, nil
+}
+
+// RemoveUserFromOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) RemoveUserFromOrganisation(
+	context.Context,
+	*pb.RemoveUserFromOrganisationRequest,
+) (*pb.RemoveUserFromOrganisationResponse, error) {
+	return &pb.RemoveUserFromOrganisationResponse{}, nil
 }
 
 // Compile-time check to ensure the interface is implemented fully.

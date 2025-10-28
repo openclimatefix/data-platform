@@ -216,33 +216,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 	}, nil
 }
 
-// DeleteOrganisation implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
-	ctx context.Context,
-	req *pb.DeleteOrganisationRequest,
-) (*pb.DeleteOrganisationResponse, error) {
-	l := zerolog.Ctx(ctx)
-	querier := db.New(ix.GetTxFromContext(ctx))
-
-	orgUuid := uuid.MustParse(req.OrgId)
-	doParams := db.DeleteOrgParams{
-		OrgUuid: orgUuid,
-	}
-
-	err := querier.DeleteOrg(ctx, doParams)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.DeleteOrg(%+v)", doParams)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"Organisation with ID '%s' not found",
-			req.OrgId,
-		)
-	}
-
-	return &pb.DeleteOrganisationResponse{}, nil
-}
-
 // DeleteUser implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) DeleteUser(
 	ctx context.Context,
@@ -517,143 +490,120 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 	}, nil
 }
 
-// UpdateOrganisation implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
+// AddLocationPolicyGroupToOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) AddLocationPolicyGroupToOrganisation(
 	ctx context.Context,
-	req *pb.UpdateOrganisationRequest,
-) (*pb.UpdateOrganisationResponse, error) {
+	req *pb.AddLocationPolicyGroupToOrganisationRequest,
+) (*pb.AddLocationPolicyGroupToOrganisationResponse, error) {
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
-	// Get the org as it currently is
-	goParams := db.GetOrgByNameParams{
+
+	agprms := db.AddLocationPolicyGroupToOrgByNamesParams{
+		OrgName:                 req.OrgName,
+		LocationPolicyGroupName: req.LocationPolicyGroupName,
+	}
+
+	err := querier.AddLocationPolicyGroupToOrgByNames(ctx, agprms)
+	if err != nil {
+		l.Error().Err(err).Msgf("querier.AddLocationPolicyGroupToOrgByNames(%+v)", agprms)
+
+		return nil, status.Errorf(
+			codes.Internal,
+			"Error adding location policy group '%s' to organisation '%s'. "+
+				"Ensure organisation and location policy group exist.",
+			req.LocationPolicyGroupName,
+			req.OrgName,
+		)
+	}
+
+	return &pb.AddLocationPolicyGroupToOrganisationResponse{}, nil
+}
+
+// RemoveLocationPolicyGroupFromOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPolicyGroupFromOrganisation(
+	ctx context.Context,
+	req *pb.RemoveLocationPolicyGroupFromOrganisationRequest,
+) (*pb.RemoveLocationPolicyGroupFromOrganisationResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	rgprms := db.RemoveLocationPolicyGroupFromOrgByNamesParams{
+		OrgName:                 req.OrgName,
+		LocationPolicyGroupName: req.LocationPolicyGroupName,
+	}
+
+	err := querier.RemoveLocationPolicyGroupFromOrgByNames(ctx, rgprms)
+	if err != nil {
+		l.Error().Err(err).Msgf("querier.RemoveLocationPolicyGroupFromOrgByNames(%+v)", rgprms)
+
+		return nil, status.Errorf(
+			codes.Internal,
+			"Error removing location policy group '%s' from organisation '%s'. "+
+				"Ensure organisation and location policy group exist.",
+			req.LocationPolicyGroupName,
+			req.OrgName,
+		)
+	}
+
+	return &pb.RemoveLocationPolicyGroupFromOrganisationResponse{}, nil
+}
+
+// AddUserToOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) AddUserToOrganisation(
+	ctx context.Context,
+	req *pb.AddUserToOrganisationRequest,
+) (*pb.AddUserToOrganisationResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	auprms := db.AddUserToOrgByOAuthIDAndNameParams{
 		OrgName: req.OrgName,
+		OauthID: req.UserOauthId,
 	}
 
-	dbOrg, err := querier.GetOrgByName(ctx, goParams)
+	err := querier.AddUserToOrgByOAuthIDAndName(ctx, auprms)
 	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetOrgByName(%+v)", goParams)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"Organisation with name '%s' not found",
-			req.OrgName,
-		)
-	}
-
-	// Set the metadata to update, if desired; else keep as is
-	metadata := dbOrg.Metadata
-	if req.Metadata != nil {
-		metadata, err = req.Metadata.MarshalJSON()
-		if err != nil {
-			l.Err(err).Msgf("req.Metadata.MarshalJSON()")
-
-			return nil, status.Error(
-				codes.InvalidArgument,
-				"Invalid metadata. Ensure object is JSON serializable.",
-			)
-		}
-	}
-
-	// Set the name to update, if desired; else keep as is
-	name := dbOrg.OrgName
-	if req.NewName != "" {
-		name = req.NewName
-	}
-
-	// Update the location policy groups, if desired; else keep as is
-	if len(req.LocationPolicyGroupIds) > 0 {
-		// Remove the existing groups
-		rlpgParams := db.RemoveLocationPolicyGroupsFromOrgParams{
-			OrgUuid:                  dbOrg.OrgUuid,
-			LocationPolicyGroupUuids: dbOrg.LocationPolicyGroupUuids,
-		}
-
-		err := querier.RemoveLocationPolicyGroupsFromOrg(ctx, rlpgParams)
-		if err != nil {
-			l.Error().Err(err).Msgf("querier.RemoveLocationPolicyGroupsFromOrg(%+v)", rlpgParams)
-
-			return nil, status.Errorf(
-				codes.Internal,
-				"Error removing existing location policy groups from organisation with ID '%s'",
-				dbOrg.OrgUuid,
-			)
-		}
-
-		// Add the new groups
-		lpgUuids := make([]uuid.UUID, len(req.LocationPolicyGroupIds))
-		for i, id := range req.LocationPolicyGroupIds {
-			lpgUuids[i] = uuid.MustParse(id)
-		}
-		alpgParams := db.AddLocationPolicyGroupsToOrgParams{
-			OrgUuid:                  dbOrg.OrgUuid,
-			LocationPolicyGroupUuids: lpgUuids,
-		}
-
-		err = querier.AddLocationPolicyGroupsToOrg(ctx, alpgParams)
-		if err != nil {
-			l.Error().Err(err).Msgf("querier.AddLocationPolicyGroupsToOrg(%+v)", alpgParams)
-
-			return nil, status.Errorf(
-				codes.Internal,
-				"Error adding location policy groups to organisation '%s'. "+
-					"Ensure all location policy group IDs exist.",
-				req.OrgName,
-			)
-		}
-	}
-
-	uoParams := db.UpdateOrgParams{
-		OrgUuid:    dbOrg.OrgUuid,
-		NewOrgName: name,
-		Metadata:   metadata,
-	}
-
-	_, err = querier.UpdateOrg(ctx, uoParams)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.UpdateOrg(%+v)", uoParams)
+		l.Error().Err(err).Msgf("querier.AddUserToOrgByOAuthIDAndName(%+v)", auprms)
 
 		return nil, status.Errorf(
 			codes.Internal,
-			"Error updating organisation '%s'. Ensure name is unique and metadata is valid JSON.",
+			"Error adding user with OAuth ID '%s' to organisation '%s'. "+
+				"Ensure organisation and user exist.",
+			req.UserOauthId,
 			req.OrgName,
 		)
 	}
 
-	// Get updated org
-	goParams = db.GetOrgByNameParams{
-		OrgName: name,
+	return &pb.AddUserToOrganisationResponse{}, nil
+}
+
+// RemoveUserFromOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) RemoveUserFromOrganisation(
+	ctx context.Context,
+	req *pb.RemoveUserFromOrganisationRequest,
+) (*pb.RemoveUserFromOrganisationResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	ruprms := db.RemoveUserFromOrgByOAuthIDAndNameParams{
+		OrgName: req.OrgName,
+		OauthID: req.UserOauthId,
 	}
 
-	dbOrg, err = querier.GetOrgByName(ctx, goParams)
+	err := querier.RemoveUserFromOrgByOAuthIDAndName(ctx, ruprms)
 	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetOrgByName(%+v)", goParams)
+		l.Error().Err(err).Msgf("querier.RemoveUserFromOrgByOAuthIDAndName(%+v)", ruprms)
 
 		return nil, status.Errorf(
 			codes.Internal,
-			"Error fetching updated organisation '%s'",
+			"Error removing user with OAuth ID '%s' from organisation '%s'. "+
+				"Ensure organisation and user exist.",
+			req.UserOauthId,
 			req.OrgName,
 		)
 	}
 
-	metadata2, err := jsonbToStruct(dbOrg.Metadata)
-	if err != nil {
-		l.Error().Err(err).Msgf("jsonbToStruct(%s)", dbOrg.Metadata)
-
-		return nil, status.Errorf(
-			codes.Internal,
-			"Error parsing metadata for organisation '%s'",
-			req.OrgName,
-		)
-	}
-
-	return &pb.UpdateOrganisationResponse{
-		OrgId:                dbOrg.OrgUuid.String(),
-		OrgName:              dbOrg.OrgName,
-		Metadata:             metadata2,
-		CreatedAt:            timestamppb.New(dbOrg.CreatedAtUtc.Time),
-		LocationPolicyGroups: dbOrg.LocationPolicyGroupNames,
-		UserOauthIds:         dbOrg.OauthIds,
-	}, nil
+	return &pb.RemoveUserFromOrganisationResponse{}, nil
 }
 
 // Compile-time check to ensure the interface is implemented fully.

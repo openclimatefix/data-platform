@@ -140,56 +140,59 @@ message GetOrganisationResponse {
   repeated string user_oauth_ids = 6;
 }
 
-
-message UpdateOrganisationRequest {
+message AddLocationPolicyGroupToOrganisationRequest {
   string org_name = 1 [
     (buf.validate.field).string.min_len = 2,
     (buf.validate.field).string.max_len = 128
   ];
-  // New name for the organisation. Leave empty to keep the current name.
-  string new_name = 2 [
+  string location_policy_group_name = 2 [
+    (buf.validate.field).string.min_len = 2,
     (buf.validate.field).string.max_len = 128
   ];
-  // New metadata for the organisation. Leave empty to keep the current metadata.
-  // Inputs here will override the existing metadata.
-  google.protobuf.Struct metadata = 3;
-  // List of location policy group IDs to associate with the organisation.
-  // Leave empty to keep the current associations.
-  repeated string location_policy_group_ids = 4 [
-    (buf.validate.field).repeated.max_items = 1000,
-    (buf.validate.field).repeated.items = {
-        string: {uuid: true}
-    }
+}
+
+message AddLocationPolicyGroupToOrganisationResponse {}
+
+
+message RemoveLocationPolicyGroupFromOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
   ];
-  // List of user OAuth IDs to associate with the organisation.
-  // An empty list will keep the current set.
-  repeated string user_oauth_ids = 5 [
-    (buf.validate.field).repeated.max_items = 100,
-    (buf.validate.field).repeated.items = {
-        string: {min_len: 5, max_len: 128}
-    }
+  string location_policy_group_name = 2 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
   ];
 }
 
-message UpdateOrganisationResponse {
-  string org_id = 1 [
-    (buf.validate.field).string.uuid = true
+message RemoveLocationPolicyGroupFromOrganisationResponse {}
+
+
+message AddUserToOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
   ];
-  string org_name = 2;
-  google.protobuf.Struct metadata = 3;
-  google.protobuf.Timestamp created_at = 4;
-  repeated string location_policy_groups = 5;
-  repeated string user_oauth_ids = 6;
-}
-
-
-message DeleteOrganisationRequest {
-  string org_id = 1 [
-    (buf.validate.field).string.uuid = true
+  string user_oauth_id = 2 [
+    (buf.validate.field).string.min_len = 5,
+    (buf.validate.field).string.max_len = 128
   ];
 }
 
-message DeleteOrganisationResponse {}
+message AddUserToOrganisationResponse {}
+
+message RemoveUserFromOrganisationRequest {
+  string org_name = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 128
+  ];
+  string user_oauth_id = 2 [
+    (buf.validate.field).string.min_len = 5,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message RemoveUserFromOrganisationResponse {}
 
 
 message CreateLocationPolicyGroupRequest {
