@@ -22,7 +22,7 @@ service DataPlatformAdministrationService {
 
   rpc CreateLocationPolicyGroup(CreateLocationPolicyGroupRequest) returns (CreateLocationPolicyGroupResponse) {}
   rpc GetLocationPolicyGroup(GetLocationPolicyGroupRequest) returns (GetLocationPolicyGroupResponse) {}
-  rpc UpdateLocationPolicyGroup(UpdateLocationPolicyGroupRequest) returns (UpdateLocationPolicyGroupResponse) {}
-  rpc DeleteLocationPolicyGroup(DeleteLocationPolicyGroupRequest) returns (DeleteLocationPolicyGroupResponse) {}
+  rpc AddLocationPoliciesToGroup(AddLocationPoliciesToGroupRequest) returns (AddLocationPoliciesToGroupResponse) {}
+  rpc RemoveLocationPoliciesFromGroup(RemoveLocationPoliciesFromGroupRequest) returns (RemoveLocationPoliciesFromGroupResponse) {}
 
 }

@@ -5,7 +5,7 @@
 -- name: CreateOrg :one
 INSERT INTO iam.orgs (org_name, metadata)
 VALUES (
-    $1,
+    LOWER(sqlc.arg(org_name)::TEXT),
     CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
 )
 RETURNING org_uuid, org_name, metadata;
@@ -13,7 +13,7 @@ RETURNING org_uuid, org_name, metadata;
 -- name: UpdateOrg :one
 UPDATE iam.orgs
 SET
-    org_name = $2,
+    org_name = LOWER(sqlc.arg(new_org_name)::TEXT),
     metadata = CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
 WHERE org_uuid = $1
 RETURNING org_uuid, org_name, metadata;
@@ -29,7 +29,7 @@ SELECT
     od.location_policy_group_names,
     od.metadata
 FROM iam.org_details_v AS od
-WHERE org_name = $1;
+WHERE org_name = LOWER(sqlc.arg(org_name)::TEXT);
 
 -- name: ListOrgs :many
 SELECT
@@ -82,14 +82,15 @@ WHERE u.oauth_id = $1;
 SELECT
     l.location_uuid,
     l.location_name,
+    l.location_type_id,
     ulp.source_type_id,
-    ulp.role_name,
+    ulp.permission_id,
     ST_Y(l.centroid)::REAL AS latitude,
     ST_X(l.centroid)::REAL AS longitude
 FROM loc.locations AS l
     INNER JOIN iam.user_location_policies_mv AS ulp USING (location_uuid)
 WHERE ulp.user_uuid = $1
-    AND ulp.role_id IN (1, 2)
+    AND ulp.permission_id IN (1, 2)
 ORDER BY l.location_name;
 
 -- name: FilterLocationsByUser :many
@@ -99,7 +100,7 @@ ORDER BY l.location_name;
 SELECT location_uuid
 FROM iam.user_location_policies_mv
 WHERE user_uuid = $1
-    AND role_id = ANY(sqlc.arg(role_id)::TEXT [])
+    AND permission_id = ANY(sqlc.arg(permission_id)::TEXT [])
     AND source_type_id = $2
     AND location_uuid = ANY(sqlc.arg(unfiltered_location_uuids)::UUID []);
 
@@ -175,32 +176,26 @@ WHERE org_uuid = $1
 
 -- name: ListLocationPoliciesByGroup :many
 SELECT
-    lp.role_id,
-    r.role_name,
+    lp.permission_id,
+    r.permission_name,
     lp.source_type_id,
     st.source_type_name,
     lp.location_uuid,
     lp.location_policy_group_uuid
 FROM iam.location_policies AS lp
-    INNER JOIN iam.roles AS r USING (role_id)
+    INNER JOIN iam.permissions AS r USING (permission_id)
     INNER JOIN loc.source_types AS st USING (source_type_id)
 WHERE lp.location_policy_group_uuid = $1;
 
 -- name: AddLocationPolicesToGroup :exec
 INSERT INTO iam.location_policies (
-    role_id,
+    permission_id,
     source_type_id,
     location_uuid,
     location_policy_group_uuid
 ) SELECT
-    (
-        SELECT r.role_id FROM iam.roles AS r
-        WHERE r.role_name = sqlc.arg(role_name)::TEXT
-    ),
-    (
-        SELECT st.source_type_id FROM loc.source_types AS st
-        WHERE st.source_type_name = sqlc.arg(source_type_name)::TEXT
-    ),
+    $1,
+    $2,
     loc_uuid,
     (
         SELECT lpg.location_policy_group_uuid FROM iam.location_policy_groups AS lpg
@@ -209,22 +204,15 @@ INSERT INTO iam.location_policies (
 FROM UNNEST(ARRAY[sqlc.arg(location_uuids)::UUID []]) AS t (loc_uuid)
 ON CONFLICT DO NOTHING;
 
--- name: DeleteLocationPoliciesFromGroup :exec
+-- name: RemoveLocationPoliciesFromGroup :exec
 DELETE FROM iam.location_policies
-WHERE location_policy_group_uuid = $1
-    AND location_uuid = ANY($2::UUID [])
-    AND source_type_id = (
-        SELECT st.source_type_id FROM loc.source_types AS st
-        WHERE st.source_type_name = $3
+WHERE location_policy_group_uuid = (
+        SELECT lpg.location_policy_group_uuid FROM iam.location_policy_groups AS lpg
+        WHERE lpg.location_policy_group_name = sqlc.arg(location_policy_group_name)::TEXT
     )
-    AND role_id = (
-        SELECT r.role_id FROM iam.roles AS r
-        WHERE r.role_name = $4
-    );
-
--- name: DeleteAllLocationPoliciesFromGroup :exec
-DELETE FROM iam.location_policies
-WHERE location_policy_group_uuid = $1;
+    AND location_uuid = $1
+    AND source_type_id = $2
+    AND permission_id = $3;
 
 /*- Materialized Views ---------------------------------------------------------------------------*/
 

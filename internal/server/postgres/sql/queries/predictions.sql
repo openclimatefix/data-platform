@@ -2,7 +2,7 @@
 
 -- name: CreateForecaster :one
 INSERT INTO pred.forecasters (forecaster_name, forecaster_version) VALUES (
-    $1, $2
+    LOWER(sqlc.arg(forecaster_name)::TEXT), LOWER(sqlc.arg(forecaster_version)::TEXT)
 ) RETURNING forecaster_id;
 
 -- name: GetForecasterElseLatest :one
@@ -15,7 +15,7 @@ WITH desired_version AS (
         COALESCE(NULLIF(sqlc.arg(forecaster_version)::TEXT, ''), (
             SELECT forecaster_version
             FROM pred.forecasters
-            WHERE forecaster_name = $1
+            WHERE forecaster_name = LOWER(sqlc.arg(forecaster_name)::TEXT)
             ORDER BY created_at_utc DESC
             LIMIT 1
         )) AS forecaster_version
@@ -27,7 +27,7 @@ SELECT
     p.created_at_utc
 FROM pred.forecasters AS p
     INNER JOIN desired_version ON TRUE
-WHERE p.forecaster_name = $1
+WHERE p.forecaster_name = LOWER(sqlc.arg(forecaster_name)::TEXT)
     AND p.forecaster_version = desired_version.forecaster_version;
 
 /* --- Forecasts ------------------------------------------------------------------------------ */
@@ -40,10 +40,11 @@ INSERT INTO pred.forecasts (
     $2,
     (
         SELECT forecaster_id FROM pred.forecasters
-        WHERE forecaster_name = $3 AND forecaster_version = $4
+        WHERE forecaster_name = LOWER(sqlc.arg(forecaster_name)::TEXT)
+            AND forecaster_version = LOWER(sqlc.arg(forecaster_version)::TEXT)
     ),
-    $5,
-    $6
+    $3,
+    $4
 ) RETURNING forecast_uuid, init_time_utc, source_type_id, location_uuid, forecaster_id;
 
 -- name: CreateForecasts :batchone
@@ -94,8 +95,8 @@ WITH desired_forecaster AS (
         forecaster_name,
         forecaster_version
     FROM pred.forecasters
-    WHERE forecaster_name = sqlc.arg(forecaster_name)::TEXT
-        AND forecaster_version = sqlc.arg(forecaster_version)::TEXT
+    WHERE forecaster_name = LOWER(sqlc.arg(forecaster_name)::TEXT)
+        AND forecaster_version = LOWER(sqlc.arg(forecaster_version)::TEXT)
 )
 SELECT
     forecasts.forecast_uuid,
@@ -279,7 +280,7 @@ deltas AS (
     FROM relevant_predicted_values AS rv
         LEFT OUTER JOIN obs.observed_generation_values AS og USING (location_uuid, source_type_id)
     WHERE
-        og.observer_id = $3
+        og.observer_uuid = $3
         AND og.observation_timestamp_utc = rv.target_time_utc
 )
 SELECT

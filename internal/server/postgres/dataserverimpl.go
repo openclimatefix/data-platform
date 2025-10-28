@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -209,7 +208,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	}
 
 	l.Debug().
-		Msgf("Created forecast with ID '%s' and init time %s", dbForecast.ForecastUuid, dbForecast.InitTimeUtc.Time)
+		Msgf("created forecast with ID '%s' and init time %s", dbForecast.ForecastUuid, dbForecast.InitTimeUtc.Time)
 
 	// Create the forecast data
 	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
@@ -297,7 +296,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 		)
 	}
 
-	l.Debug().Msgf("Created forecaster with ID %d", forecasterID)
+	l.Debug().Msgf("created forecaster with ID %d", forecasterID)
 
 	return &pb.CreateForecasterResponse{
 		Forecaster: &pb.Forecaster{ForecasterName: req.Name, ForecasterVersion: req.Version},
@@ -342,7 +341,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 		)
 	}
 
-	l.Debug().Msgf("Created forecaster with ID %d", forecasterID)
+	l.Debug().Msgf("created forecaster with ID %d", forecasterID)
 
 	return &pb.UpdateForecasterResponse{
 		Forecaster: &pb.Forecaster{ForecasterName: req.Name, ForecasterVersion: req.NewVersion},
@@ -494,7 +493,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocationsWithin(
 	for i := range dbLocations {
 		locations[i] = &pb.ListLocationsWithinResponse_LocationData{
 			LocationUuid: dbLocations[i].LocationUuid.String(),
-			LocationName: strings.ToUpper(dbLocations[i].LocationName),
+			LocationName: dbLocations[i].LocationName,
 		}
 	}
 
@@ -568,7 +567,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	avgParams := db.GetWeekAverageDeltasForLocationsParams{
 		SourceTypeID:   dbSource.SourceTypeID,
 		ForecasterID:   dbForecaster.ForecasterID,
-		ObserverID:     dbObserver.ObserverID,
+		ObserverUuid:   dbObserver.ObserverUuid,
 		PivotTimestamp: pgtype.Timestamp{Time: req.PivotTime.AsTime(), Valid: true},
 		LocationUuids:  []uuid.UUID{locationUuid},
 	}
@@ -579,10 +578,10 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 		return nil, status.Errorf(
 			codes.NotFound,
-			"No deltas found for location '%s' with source type '%s' and observer ID %d",
+			"No deltas found for location '%s' with source type '%s' and observer ID '%s'",
 			req.LocationUuid,
 			req.EnergySource,
-			dbObserver.ObserverID,
+			dbObserver.ObserverUuid.String(),
 		)
 	}
 
@@ -615,18 +614,6 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	querier := db.New(ix.GetTxFromContext(ctx))
 	locationUuid := uuid.MustParse(req.LocationUuid)
 
-	stprms := db.GetSourceTypeByNameParams{SourceTypeName: req.EnergySource.String()}
-
-	sourceTypeResp, err := querier.GetSourceTypeByName(ctx, stprms)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceTypeByName(%+v)", stprms)
-
-		return nil, status.Errorf(
-			codes.NotFound, "No source type found for name '%s'.",
-			req.EnergySource,
-		)
-	}
-
 	// Get the observer
 	obParams := db.GetObserverByNameParams{ObserverName: req.ObserverName}
 
@@ -650,8 +637,8 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 	goParams := db.GetObservationsBetweenParams{
 		LocationUuid: locationUuid,
-		SourceTypeID: sourceTypeResp.SourceTypeID,
-		ObserverID:   observerResp.ObserverID,
+		SourceTypeID: int16(req.EnergySource),
+		ObserverUuid: observerResp.ObserverUuid,
 		StartTimeUtc: start,
 		EndTimeUtc:   end,
 	}
@@ -735,7 +722,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	for i, v := range req.Values {
 		coParams[i] = db.CreateObservationsParams{
 			LocationUuid: locationUuid,
-			ObserverID:   dbObserver.ObserverID,
+			ObserverUuid: dbObserver.ObserverUuid,
 			ObservationTimestampUtc: pgtype.Timestamp{
 				Time:  v.TimestampUtc.AsTime(),
 				Valid: true,
@@ -754,7 +741,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	}
 
 	l.Debug().Msgf(
-		"Created %d observations from %s to %s for location '%s' and observer '%s'",
+		"created %d observations from %s to %s for location '%s' and observer '%s'",
 		count, coParams[0].ObservationTimestampUtc.Time, coParams[len(coParams)-1].ObservationTimestampUtc.Time,
 		dbSource.LocationUuid, req.ObserverName,
 	)
@@ -783,7 +770,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 	}
 
 	return &pb.CreateObserverResponse{
-		ObserverId:   dbObserver.ObserverID,
+		ObserverUuid: dbObserver.ObserverUuid.String(),
 		ObserverName: dbObserver.ObserverName,
 	}, nil
 }
@@ -813,7 +800,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	}
 
 	l.Debug().Msgf(
-		"Using forecaster '%s:%s' with ID %d",
+		"using forecaster '%s:%s' with ID %d",
 		dbForecaster.ForecasterName, dbForecaster.ForecasterVersion, dbForecaster.ForecasterID,
 	)
 
@@ -828,7 +815,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	}
 
 	lsParams := db.ListSourcesAtTimestampParams{
-		SourceTypeName: req.EnergySource.String(),
+		SourceTypeID:   int16(req.EnergySource),
 		LocationUuids:  locationUuids,
 		AtTimestampUtc: pgtype.Timestamp{Time: req.TimestampUtc.AsTime(), Valid: true},
 	}
@@ -892,7 +879,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 					math.Pow10(int(value.CapacityUnitPrefixFactor)),
 				),
 				LocationUuid: value.LocationUuid.String(),
-				LocationName: strings.ToUpper(value.LocationName),
+				LocationName: value.LocationName,
 				Latlng: &pb.LatLng{
 					Latitude:  value.Latitude,
 					Longitude: value.Longitude,
@@ -953,7 +940,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 
 	return &pb.GetLocationResponse{
 		LocationUuid: dbSource.LocationUuid.String(),
-		LocationName: strings.ToUpper(dbSource.LocationName),
+		LocationName: dbSource.LocationName,
 		Latlng: &pb.LatLng{
 			Latitude:  dbSource.Latitude,
 			Longitude: dbSource.Longitude,
@@ -977,9 +964,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	// Create a new location
 	params := db.CreateLocationParams{
-		LocationTypeName: strings.ToLower(req.LocationType.String()),
-		LocationName:     strings.ToUpper(req.LocationName),
-		Geom:             req.GeometryWkt,
+		LocationName:   req.LocationName,
+		Geom:           req.GeometryWkt,
+		LocationTypeID: int16(req.LocationType),
 	}
 
 	dbLocation, err := querier.CreateLocation(ctx, params)
@@ -988,21 +975,12 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 		return nil, status.Error(
 			codes.InvalidArgument,
-			"Invalid location. Ensure name is not empty and uppercase, and that geometry is valid, closed,  WGS84.",
+			"Invalid location. Ensure name is not empty, and that geometry is valid, closed, WGS84.",
 		)
 	}
 
 	l.Debug().
-		Msgf("Created location with UUID '%s' and name '%s'", dbLocation.LocationUuid, dbLocation.LocationName)
-
-	// Get the energy source type
-	sParams := db.GetSourceTypeByNameParams{SourceTypeName: req.EnergySource.String()}
-
-	dbSourceType, err := querier.GetSourceTypeByName(ctx, sParams)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceTypeByName(%+v)", sParams)
-		return nil, status.Errorf(codes.NotFound, "Unknown source type '%s'.", req.EnergySource)
-	}
+		Msgf("created location with UUID '%s' and name '%s'", dbLocation.LocationUuid, dbLocation.LocationName)
 
 	// Create a source associated with the location
 	metadata, err := req.Metadata.MarshalJSON()
@@ -1032,7 +1010,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	csParams := db.CreateLocationSourceEntryParams{
 		LocationUuid:             dbLocation.LocationUuid,
-		SourceTypeID:             dbSourceType.SourceTypeID,
+		SourceTypeID:             int16(req.EnergySource),
 		Capacity:                 cp,
 		CapacityUnitPrefixFactor: ex,
 		Metadata:                 metadata,
@@ -1050,7 +1028,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	}
 
 	l.Debug().
-		Msgf("Created source for location UUID '%s' with source type '%s'", dbLocation.LocationUuid, dbSourceType.SourceTypeName)
+		Msgf("created source for location UUID '%s' with source type '%s'", dbLocation.LocationUuid, req.EnergySource.String())
 
 	err = querier.RefreshSourcesMaterializedView(ctx)
 	if err != nil {
@@ -1058,11 +1036,11 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
 	}
 
-	l.Debug().Msg("Refreshed sources materialised view")
+	l.Debug().Msg("refreshed sources materialised view")
 
 	return &pb.CreateLocationResponse{
 		LocationUuid: dbLocation.LocationUuid.String(),
-		LocationName: strings.ToUpper(dbLocation.LocationName),
+		LocationName: dbLocation.LocationName,
 		EffectiveCapacityWatts: uint64(
 			dbSource.Capacity,
 		) * uint64(
@@ -1182,7 +1160,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	}
 
 	l.Debug().Msgf(
-		"Found %d values for location '%s' with horizon %d minutes",
+		"found %d values for location '%s' with horizon %d minutes",
 		len(dbValues), req.LocationUuid, req.HorizonMins,
 	)
 
@@ -1219,7 +1197,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 	return &pb.GetForecastAsTimeseriesResponse{
 		LocationUuid: dbSource.LocationUuid.String(),
-		LocationName: strings.ToUpper(dbSource.LocationName),
+		LocationName: dbSource.LocationName,
 		Values:       values,
 	}, nil
 }

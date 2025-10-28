@@ -41,6 +41,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(
 	panic("unimplemented")
 }
 
+// CreateLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 	ctx context.Context,
 	req *pb.CreateLocationPolicyGroupRequest,
@@ -49,6 +50,40 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 		LocationPolicyGroupId: uuid.New().String(),
 		Name:                  req.Name,
 	}, nil
+}
+
+// GetLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
+	ctx context.Context,
+	req *pb.GetLocationPolicyGroupRequest,
+) (*pb.GetLocationPolicyGroupResponse, error) {
+	return &pb.GetLocationPolicyGroupResponse{
+		LocationPolicyGroupId: uuid.New().String(),
+		Name:                  "Dummy Location Policy Group",
+		LocationPolicies: []*pb.LocationPolicy{
+			{
+				LocationId:   uuid.New().String(),
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Permission:   pb.Permission_PERMISSION_READ,
+			},
+		},
+	}, nil
+}
+
+// AddLocationPoliciesToGroup implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) AddLocationPoliciesToGroup(
+	context.Context,
+	*pb.AddLocationPoliciesToGroupRequest,
+) (*pb.AddLocationPoliciesToGroupResponse, error) {
+	return &pb.AddLocationPoliciesToGroupResponse{}, nil
+}
+
+// RemoveLocationPoliciesFromGroup implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPoliciesFromGroup(
+	context.Context,
+	*pb.RemoveLocationPoliciesFromGroupRequest,
+) (*pb.RemoveLocationPoliciesFromGroupResponse, error) {
+	return &pb.RemoveLocationPoliciesFromGroupResponse{}, nil
 }
 
 // CreateOrganisation implements dp.DataPlatformAdministrationServiceServer.
@@ -62,6 +97,14 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
 	}, nil
 }
 
+// DeleteOrganisation implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
+	context.Context,
+	*pb.DeleteOrganisationRequest,
+) (*pb.DeleteOrganisationResponse, error) {
+	return &pb.DeleteOrganisationResponse{}, nil
+}
+
 // CreateUser implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 	context.Context,
@@ -72,46 +115,12 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 	}, nil
 }
 
-// DeleteLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) DeleteLocationPolicyGroup(
-	context.Context,
-	*pb.DeleteLocationPolicyGroupRequest,
-) (*pb.DeleteLocationPolicyGroupResponse, error) {
-	return &pb.DeleteLocationPolicyGroupResponse{}, nil
-}
-
-// DeleteOrganisation implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
-	context.Context,
-	*pb.DeleteOrganisationRequest,
-) (*pb.DeleteOrganisationResponse, error) {
-	return &pb.DeleteOrganisationResponse{}, nil
-}
-
 // DeleteUser implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) DeleteUser(
 	context.Context,
 	*pb.DeleteUserRequest,
 ) (*pb.DeleteUserResponse, error) {
 	return &pb.DeleteUserResponse{}, nil
-}
-
-// GetLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
-	ctx context.Context,
-	req *pb.GetLocationPolicyGroupRequest,
-) (*pb.GetLocationPolicyGroupResponse, error) {
-	return &pb.GetLocationPolicyGroupResponse{
-		LocationPolicyGroupId: req.LocationPolicyGroupId,
-		Name:                  "Dummy Location Policy Group",
-		LocationPolicies: []*pb.CreateLocationPolicyGroupRequest_LocationPolicy{
-			{
-				LocationId:   uuid.New().String(),
-				EnergySource: pb.EnergySource_SOLAR,
-				Scope:        "OWNER",
-			},
-		},
-	}, nil
 }
 
 // GetOrganisation implements dp.DataPlatformAdministrationServiceServer.
@@ -141,18 +150,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 		LocationPolicyGroups: []string{"DUMMY_POLICY_GROUP_ID_1", "DUMMY_POLICY_GROUP_ID_2"},
 		CreatedAt:            timestamppb.New(time.Now().UTC()),
 		Metadata:             &structpb.Struct{},
-	}, nil
-}
-
-// UpdateLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
-	ctx context.Context,
-	req *pb.UpdateLocationPolicyGroupRequest,
-) (*pb.UpdateLocationPolicyGroupResponse, error) {
-	return &pb.UpdateLocationPolicyGroupResponse{
-		LocationPolicyGroupId: req.LocationPolicyGroupId,
-		Name:                  "Dummy Location Policy Group",
-		LocationPolicies:      req.LocationPolicies,
 	}, nil
 }
 

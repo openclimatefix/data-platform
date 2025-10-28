@@ -18,13 +18,13 @@ CREATE SCHEMA obs;
  * (mostly - looking at you, pvlive...)
 */
 CREATE TABLE obs.observers (
-    observer_id INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    observer_uuid UUID NOT NULL DEFAULT UUIDV7() NOT NULL,
     observer_name TEXT NOT NULL,
     CONSTRAINT observer_name_format_check CHECK (
         LENGTH(observer_name) > 0 AND LENGTH(observer_name) < 128
         AND observer_name = LOWER(observer_name)
     ),
-    PRIMARY KEY (observer_id),
+    PRIMARY KEY (observer_uuid),
     UNIQUE (observer_name)
 );
 
@@ -44,19 +44,19 @@ CREATE TABLE obs.observed_generation_values (
     REFERENCES loc.source_types (source_type_id)
     ON UPDATE CASCADE
     ON DELETE RESTRICT,
-    observer_id INTEGER NOT NULL
-    REFERENCES obs.observers (observer_id)
-    ON UPDATE CASCADE
-    ON DELETE CASCADE,
     observation_timestamp_utc TIMESTAMP NOT NULL,
     CONSTRAINT observation_timestamp_utc_recency_check CHECK (
         observation_timestamp_utc <= CURRENT_TIMESTAMP + MAKE_INTERVAL(days => 31)
     ),
+    observer_uuid UUID NOT NULL
+    REFERENCES obs.observers (observer_uuid)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
     location_uuid UUID NOT NULL
     REFERENCES loc.locations (location_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
-    PRIMARY KEY (location_uuid, source_type_id, observer_id, observation_timestamp_utc)
+    PRIMARY KEY (location_uuid, source_type_id, observer_uuid, observation_timestamp_utc)
 )
 PARTITION BY RANGE (observation_timestamp_utc);
 

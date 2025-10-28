@@ -14,20 +14,23 @@ option go_package = "github.com/openclimatefix/data-platform/internal/protogen/o
 // --- Common message types ----------------------------------------------------------------------
 
 // EnergySource indicates the type of energy generation.
-// NOTE: These enumb numbers are used to find the corresponding entry in the postgres database.
+// NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
 // Do not change without considering this first!
 enum EnergySource {
   ENERGY_SOURCE_UNSPECIFIED = 0;
-  SOLAR = 1;
-  WIND = 2;
+  ENERGY_SOURCE_SOLAR = 1;
+  ENERGY_SOURCE_WIND = 2;
 }
 
+// LocationType indicates the type of location.
+// NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
+// Do not change without considering this first!
 enum LocationType {
   LOCATION_TYPE_UNSPECIFIED = 0;
-  SITE = 1;
-  GSP = 2;
-  DNO = 3;
-  NATION = 4;
+  LOCATION_TYPE_SITE = 1;
+  LOCATION_TYPE_GSP = 2;
+  LOCATION_TYPE_DNO = 3;
+  LOCATION_TYPE_NATION = 4;
 }
 /* LatLng represents a WSG84 coordinate pair.
  * Float precision enables a resolution of about 1cm,
@@ -271,7 +274,7 @@ message CreateForecastRequest {
 }
 
 message CreateForecastResponse {
-  int64 forecast_id = 1;
+  string forecast_uuid = 1;
 }
 
 
@@ -384,7 +387,7 @@ message CreateObserverRequest {
 }
 
 message CreateObserverResponse {
-  int32 observer_id = 1;
+  string observer_uuid = 1;
   string observer_name = 2;
 }
 

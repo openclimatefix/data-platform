@@ -4,31 +4,32 @@
  * Schema and tables to handle access management data.
  *
  * This schema isn't for storing any personally identifiable information; rather for detailing
- * roles and policies for user tokens and resources in the database.
+ * permissions and policies for user tokens and resources in the database.
  *
- * Roles are stored in a lookup table, and are used to determine the allowable
- * actions a user can take on a resource. These roles are then applied to users and
+ * Permissions are stored in a lookup table, and are used to determine the allowable
+ * actions a user can take on a resource. These permissions are then applied to users and
  * resources via policies. These policies are simply matchings between service accounts,
- * resource ids, and roles.
+ * resource ids, and permissions.
  */
 
 CREATE SCHEMA iam;
 
 /*- Lookups --------------------------------------------------------------------------------------*/
 
--- Lookup table to store the possible roles
-CREATE TABLE iam.roles (
-    role_id SMALLINT GENERATED ALWAYS AS IDENTITY NOT NULL,
-    role_name TEXT NOT NULL,
-    CONSTRAINT role_name_format_check CHECK (
-        LENGTH(role_name) > 0
-        AND LENGTH(role_name) <= 64
-        AND role_name = UPPER(role_name)
+-- Lookup table to store the possible permissions
+CREATE TABLE iam.permissions (
+    permission_id SMALLINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    permission_name TEXT NOT NULL,
+    CONSTRAINT permission_name_format_check CHECK (
+        LENGTH(permission_name) > 0
+        AND LENGTH(permission_name) <= 64
+        AND permission_name = LOWER(permission_name)
     ),
-    PRIMARY KEY (role_id),
-    UNIQUE (role_name)
+    PRIMARY KEY (permission_id),
+    UNIQUE (permission_name)
 );
-INSERT INTO iam.roles (role_name) VALUES ('OWNER'), ('VIEWER');
+-- The ordering of these permissions matches the .proto enum definitions. Change with caution!
+INSERT INTO iam.permissions (permission_name) VALUES ('read'), ('write');
 
 /*- Tables --------------------------------------------------------------------------------------*/
 
@@ -42,7 +43,7 @@ CREATE TABLE iam.orgs (
     CONSTRAINT org_name_format_check CHECK (
         LENGTH(org_name) > 0
         AND LENGTH(org_name) <= 128
-        AND org_name = UPPER(org_name)
+        AND org_name = LOWER(org_name)
     ),
     metadata JSONB DEFAULT NULL,
     PRIMARY KEY (org_uuid),
@@ -83,7 +84,7 @@ CREATE TABLE iam.location_policy_groups (
     CONSTRAINT location_policy_group_name_format_check CHECK (
         LENGTH(location_policy_group_name) > 0
         AND LENGTH(location_policy_group_name) <= 128
-        AND location_policy_group_name = UPPER(location_policy_group_name)
+        AND location_policy_group_name = LOWER(location_policy_group_name)
     ),
     PRIMARY KEY (location_policy_group_uuid),
     UNIQUE (location_policy_group_name)
@@ -107,13 +108,13 @@ CREATE TABLE iam.org_location_policy_groups (
 
 /*
  * Pivot table to define location policies.
- * These policies match locations to roles, and each policy is linked to a location group.
- * A location group can only have one role per location and source (can't be an OWNER *and* a
+ * These policies match locations to permissions, and each policy is linked to a location group.
+ * A location group can only have one permission per location and source (can't be an OWNER *and* a
  * VIEWER for UK solar, for instance).
  */
 CREATE TABLE iam.location_policies (
-    role_id SMALLINT NOT NULL
-    REFERENCES iam.roles (role_id)
+    permission_id SMALLINT NOT NULL
+    REFERENCES iam.permissions (permission_id)
     ON UPDATE CASCADE
     ON DELETE RESTRICT,
     source_type_id SMALLINT NOT NULL
@@ -128,7 +129,7 @@ CREATE TABLE iam.location_policies (
     REFERENCES iam.location_policy_groups (location_policy_group_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
-    PRIMARY KEY (location_policy_group_uuid, location_uuid, source_type_id, role_id),
+    PRIMARY KEY (location_policy_group_uuid, location_uuid, source_type_id, permission_id),
     UNIQUE (location_policy_group_uuid, location_uuid, source_type_id)
 );
 
@@ -179,8 +180,7 @@ SELECT
     o.org_uuid,
     o.org_name,
     u.oauth_id,
-    r.role_id,
-    r.role_name,
+    lp.permission_id,
     lp.location_uuid,
     lp.source_type_id
 FROM iam.orgs AS o
@@ -188,9 +188,8 @@ FROM iam.orgs AS o
     INNER JOIN iam.org_location_policy_groups USING (org_uuid)
     INNER JOIN iam.location_policy_groups USING (location_policy_group_uuid)
     INNER JOIN iam.location_policies AS lp USING (location_policy_group_uuid)
-    INNER JOIN iam.roles AS r USING (role_id)
-ORDER BY u.user_uuid, r.role_id, lp.source_type_id, lp.location_uuid;
-CREATE UNIQUE INDEX ON iam.user_location_policies_mv (user_uuid, role_id, source_type_id, location_uuid);
+ORDER BY u.user_uuid, lp.permission_id, lp.source_type_id, lp.location_uuid;
+CREATE UNIQUE INDEX ON iam.user_location_policies_mv (user_uuid, permission_id, source_type_id, location_uuid);
 
 -- +goose Down
 DROP SCHEMA iam CASCADE;

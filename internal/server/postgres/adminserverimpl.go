@@ -31,6 +31,7 @@ func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministratio
 
 // DataPlatformAdministrationServiceServerImpl implements the pb.DataPlatformDataServiceServer interface.
 // It requires the database transaction for the request to be set in the context.
+// It also expects a zerolog logger to be set in the context.
 type DataPlatformAdministrationServiceServerImpl struct{}
 
 func (d *DataPlatformAdministrationServiceServerImpl) CheckUserLocationAccess(
@@ -41,10 +42,56 @@ func (d *DataPlatformAdministrationServiceServerImpl) CheckUserLocationAccess(
 }
 
 func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(
-	context.Context,
-	*pb.ListUserLocationsRequest,
+	ctx context.Context,
+	req *pb.ListUserLocationsRequest,
 ) (*pb.ListUserLocationsResponse, error) {
-	panic("unimplemented")
+	l := zerolog.Ctx(ctx)
+
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	guprms := db.GetUserByOAuthIDParams{
+		OauthID: req.OauthId,
+	}
+
+	dbUser, err := querier.GetUserByOAuthID(ctx, guprms)
+	if err != nil {
+		l.Error().Err(err).Msgf("querier.GetUserByOAuthID(%+v)", guprms)
+
+		return nil, status.Errorf(
+			codes.NotFound,
+			"User with OAuth ID '%s' not found",
+			req.OauthId,
+		)
+	}
+
+	gulprms := db.GetUserLocationsParams{
+		UserUuid: dbUser.UserUuid,
+	}
+
+	dbLocations, err := querier.GetUserLocations(ctx, gulprms)
+	if err != nil {
+		l.Error().Err(err).Msgf("querier.GetUserLocations(%+v)", gulprms)
+
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No locations found for user with OAuth ID '%s'",
+			req.OauthId,
+		)
+	}
+
+	locations := make([]*pb.ListUserLocationsResponse_Location, len(dbLocations))
+	for i, loc := range dbLocations {
+		locations[i] = &pb.ListUserLocationsResponse_Location{
+			LocationUuid: loc.LocationUuid.String(),
+			LocationName: loc.LocationName,
+			LocationType: pb.LocationType(loc.LocationTypeID),
+			Permission:   pb.Permission(loc.PermissionID),
+		}
+	}
+
+	return &pb.ListUserLocationsResponse{
+		Locations: locations,
+	}, nil
 }
 
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
@@ -169,33 +216,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 	}, nil
 }
 
-// DeleteLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) DeleteLocationPolicyGroup(
-	ctx context.Context,
-	req *pb.DeleteLocationPolicyGroupRequest,
-) (*pb.DeleteLocationPolicyGroupResponse, error) {
-	l := zerolog.Ctx(ctx)
-	querier := db.New(ix.GetTxFromContext(ctx))
-
-	lpgUuid := uuid.MustParse(req.LocationPolicyGroupId)
-	dlpgParams := db.DeleteLocationPolicyGroupParams{
-		LocationPolicyGroupUuid: lpgUuid,
-	}
-
-	err := querier.DeleteLocationPolicyGroup(ctx, dlpgParams)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.DeleteLocationPolicyGroup(%+v)", dlpgParams)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"Location policy group with ID '%s' not found",
-			req.LocationPolicyGroupId,
-		)
-	}
-
-	return &pb.DeleteLocationPolicyGroupResponse{}, nil
-}
-
 // DeleteOrganisation implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
 	ctx context.Context,
@@ -258,24 +278,23 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	lpgUuid := uuid.MustParse(req.LocationPolicyGroupId)
-	glpgParams := db.GetLocationPolicyGroupByUUIDParams{
-		LocationPolicyGroupUuid: lpgUuid,
+	gprms := db.GetLocationPolicyGroupByNameParams{
+		LocationPolicyGroupName: req.LocationPolicyGroupName,
 	}
 
-	dbGroup, err := querier.GetLocationPolicyGroupByUUID(ctx, glpgParams)
+	dbGroup, err := querier.GetLocationPolicyGroupByName(ctx, gprms)
 	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetLocationPolicyGroupByUUID(%+v)", glpgParams)
+		l.Error().Err(err).Msgf("querier.GetLocationPolicyGroupByName(%+v)", gprms)
 
 		return nil, status.Errorf(
 			codes.NotFound,
-			"Location policy group with ID '%s' not found",
-			req.LocationPolicyGroupId,
+			"No location policy group found with name '%s'",
+			req.LocationPolicyGroupName,
 		)
 	}
 
 	llpParams := db.ListLocationPoliciesByGroupParams{
-		LocationPolicyGroupUuid: lpgUuid,
+		LocationPolicyGroupUuid: dbGroup.LocationPolicyGroupUuid,
 	}
 
 	dbPolicies, err := querier.ListLocationPoliciesByGroup(ctx, llpParams)
@@ -285,16 +304,16 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No location policy group found with ID '%s'",
-			req.LocationPolicyGroupId,
+			dbGroup.LocationPolicyGroupUuid,
 		)
 	}
 
-	policies := make([]*pb.CreateLocationPolicyGroupRequest_LocationPolicy, len(dbPolicies))
+	policies := make([]*pb.LocationPolicy, len(dbPolicies))
 	for i, p := range dbPolicies {
-		policies[i] = &pb.CreateLocationPolicyGroupRequest_LocationPolicy{
+		policies[i] = &pb.LocationPolicy{
 			LocationId:   p.LocationUuid.String(),
-			EnergySource: pb.EnergySource(pb.EnergySource_value[p.SourceTypeName]),
-			Scope:        p.RoleName,
+			EnergySource: pb.EnergySource(p.SourceTypeID),
+			Permission:   pb.Permission(p.PermissionID),
 		}
 	}
 
@@ -303,6 +322,96 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 		Name:                  dbGroup.LocationPolicyGroupName,
 		LocationPolicies:      policies,
 	}, nil
+}
+
+// AddLocationPoliciesToGroup implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) AddLocationPoliciesToGroup(
+	ctx context.Context,
+	req *pb.AddLocationPoliciesToGroupRequest,
+) (*pb.AddLocationPoliciesToGroupResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	for _, p := range req.LocationPolicies {
+		locUuid := uuid.MustParse(p.LocationId)
+		apParams := db.AddLocationPolicesToGroupParams{
+			PermissionID:            int16(p.Permission),
+			SourceTypeID:            int16(p.EnergySource),
+			LocationPolicyGroupName: req.LocationPolicyGroupName,
+			LocationUuids:           []uuid.UUID{locUuid},
+		}
+
+		err := querier.AddLocationPolicesToGroup(ctx, apParams)
+		if err != nil {
+			l.Error().Err(err).Msgf("querier.AddLocationPolicesToGroup(%+v)", apParams)
+
+			return nil, status.Errorf(
+				codes.Internal,
+				"No location policy group found with name '%s'",
+				req.LocationPolicyGroupName,
+			)
+		}
+	}
+
+	// Refresh the user policies materialised view
+	err := querier.RefreshUserLocationPoliciesMaterializedView(ctx)
+	if err != nil {
+		l.Error().Err(err).Msgf("querier.RefreshUserLocationPoliciesMaterializedView()")
+
+		return nil, status.Error(
+			codes.Internal,
+			"Error refreshing user location policies materialised view",
+		)
+	}
+
+	l.Debug().Msgf("refreshed user location policies materialised view")
+
+	return &pb.AddLocationPoliciesToGroupResponse{}, nil
+}
+
+// RemoveLocationPoliciesFromGroup implements dp.DataPlatformAdministrationServiceServer.
+func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPoliciesFromGroup(
+	ctx context.Context,
+	req *pb.RemoveLocationPoliciesFromGroupRequest,
+) (*pb.RemoveLocationPoliciesFromGroupResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	for _, p := range req.LocationPolicies {
+		locUuid := uuid.MustParse(p.LocationId)
+		rpParams := db.RemoveLocationPoliciesFromGroupParams{
+			PermissionID:            int16(p.Permission),
+			SourceTypeID:            int16(p.EnergySource),
+			LocationPolicyGroupName: req.LocationPolicyGroupName,
+			LocationUuid:            locUuid,
+		}
+
+		err := querier.RemoveLocationPoliciesFromGroup(ctx, rpParams)
+		if err != nil {
+			l.Error().Err(err).Msgf("querier.RemoveLocationPoliciesFromGroup(%+v)", rpParams)
+
+			return nil, status.Errorf(
+				codes.Internal,
+				"No location policy group found with name '%s'",
+				req.LocationPolicyGroupName,
+			)
+		}
+	}
+
+	// Refresh the user policies materialised view
+	err := querier.RefreshUserLocationPoliciesMaterializedView(ctx)
+	if err != nil {
+		l.Error().Err(err).Msgf("querier.RefreshUserLocationPoliciesMaterializedView()")
+
+		return nil, status.Error(
+			codes.Internal,
+			"Error refreshing user location policies materialised view",
+		)
+	}
+
+	l.Debug().Msgf("refreshed user location policies materialised view")
+
+	return &pb.RemoveLocationPoliciesFromGroupResponse{}, nil
 }
 
 // GetOrganisation implements dp.DataPlatformAdministrationServiceServer.
@@ -408,124 +517,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 	}, nil
 }
 
-// UpdateLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) UpdateLocationPolicyGroup(
-	ctx context.Context,
-	req *pb.UpdateLocationPolicyGroupRequest,
-) (*pb.UpdateLocationPolicyGroupResponse, error) {
-	l := zerolog.Ctx(ctx)
-	querier := db.New(ix.GetTxFromContext(ctx))
-
-	// Get the location policy group as it currently is
-	lpgUuid := uuid.MustParse(req.LocationPolicyGroupId)
-	ggParams := db.GetLocationPolicyGroupByUUIDParams{
-		LocationPolicyGroupUuid: lpgUuid,
-	}
-
-	dbLpg, err := querier.GetLocationPolicyGroupByUUID(ctx, ggParams)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetLocationPolicyGroupByUUID(%+v)", ggParams)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"Location policy group with ID '%s' not found",
-			req.LocationPolicyGroupId,
-		)
-	}
-
-	// Update the name, if desired
-	if req.Name != "" {
-		ugParams := db.UpdateLocationPolicyGroupParams{
-			LocationPolicyGroupUuid: lpgUuid,
-			LocationPolicyGroupName: req.Name,
-		}
-
-		dbLpg, err = querier.UpdateLocationPolicyGroup(ctx, ugParams)
-		if err != nil {
-			l.Error().Err(err).Msgf("querier.UpdateLocationPolicyGroup(%+v)", ugParams)
-
-			return nil, status.Errorf(
-				codes.Internal,
-				"Error updating location policy group with ID '%s'",
-				req.LocationPolicyGroupId,
-			)
-		}
-	}
-
-	// Update the policies, if desired
-	if len(req.LocationPolicies) > 0 {
-		// First, remove all existing policies
-		daParams := db.DeleteAllLocationPoliciesFromGroupParams{
-			LocationPolicyGroupUuid: lpgUuid,
-		}
-
-		err := querier.DeleteAllLocationPoliciesFromGroup(ctx, daParams)
-		if err != nil {
-			l.Error().Err(err).Msgf("querier.DeleteAllLocationPoliciesFromGroup(%+v)", daParams)
-
-			return nil, status.Errorf(
-				codes.Internal,
-				"Error removing existing policies from location policy group with ID '%s'",
-				req.LocationPolicyGroupId,
-			)
-		}
-
-		// Then, add the new policies
-		for _, p := range req.LocationPolicies {
-			locUuid := uuid.MustParse(p.LocationId)
-			apParams := db.AddLocationPolicesToGroupParams{
-				RoleName:                p.Scope,
-				SourceTypeName:          p.EnergySource.String(),
-				LocationPolicyGroupName: dbLpg.LocationPolicyGroupName,
-				LocationUuids:           []uuid.UUID{locUuid},
-			}
-
-			err = querier.AddLocationPolicesToGroup(ctx, apParams)
-			if err != nil {
-				l.Error().Err(err).Msgf("querier.AddLocationPolicesToGroup(%+v)", apParams)
-
-				return nil, status.Errorf(
-					codes.Internal,
-					"Error adding policy for location '%s' to location policy group with ID '%s'",
-					p.LocationId,
-					req.LocationPolicyGroupId,
-				)
-			}
-		}
-	}
-
-	// Fetch the policies
-	llpParams := db.ListLocationPoliciesByGroupParams{
-		LocationPolicyGroupUuid: lpgUuid,
-	}
-
-	dbPolicies, err := querier.ListLocationPoliciesByGroup(ctx, llpParams)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.ListLocationPoliciesByGroup(%+v)", llpParams)
-
-		return nil, status.Errorf(
-			codes.Internal,
-			"Error fetching updated policies for location policy group with ID '%s'",
-			req.LocationPolicyGroupId,
-		)
-	}
-
-	policies := make([]*pb.CreateLocationPolicyGroupRequest_LocationPolicy, len(dbPolicies))
-	for i, p := range dbPolicies {
-		policies[i] = &pb.CreateLocationPolicyGroupRequest_LocationPolicy{
-			LocationId:   p.LocationUuid.String(),
-			EnergySource: pb.EnergySource(pb.EnergySource_value[p.SourceTypeName]),
-			Scope:        p.RoleName,
-		}
-	}
-
-	return &pb.UpdateLocationPolicyGroupResponse{
-		LocationPolicyGroupId: lpgUuid.String(),
-		Name:                  dbLpg.LocationPolicyGroupName,
-		LocationPolicies:      policies,
-	}, nil
-}
-
 // UpdateOrganisation implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 	ctx context.Context,
@@ -612,9 +603,9 @@ func (d *DataPlatformAdministrationServiceServerImpl) UpdateOrganisation(
 	}
 
 	uoParams := db.UpdateOrgParams{
-		OrgUuid:  dbOrg.OrgUuid,
-		OrgName:  name,
-		Metadata: metadata,
+		OrgUuid:    dbOrg.OrgUuid,
+		NewOrgName: name,
+		Metadata:   metadata,
 	}
 
 	_, err = querier.UpdateOrg(ctx, uoParams)

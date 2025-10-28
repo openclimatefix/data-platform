@@ -1,22 +1,12 @@
 /*- Queries for the locations table ------------------------------ */
 
--- name: GetSourceTypeByName :one
-SELECT
-    source_type_id,
-    source_type_name
-FROM loc.source_types
-WHERE source_type_name = $1;
-
 -- name: CreateLocation :one
 INSERT INTO loc.locations AS l (
     location_name, geom, location_type_id
 ) VALUES (
-    UPPER(sqlc.arg(location_name)::TEXT),
+    LOWER(sqlc.arg(location_name)::TEXT),
     ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326), --Ensure in WSG84
-    (
-        SELECT location_type_id FROM loc.location_types AS lt
-        WHERE lt.location_type_name = UPPER(sqlc.arg(location_type_name)::TEXT)
-    )
+    $1
 ) RETURNING l.location_uuid, l.location_name;
 
 -- name: GetLocationGeoJSON :one
@@ -36,10 +26,9 @@ FROM (
     SELECT
         l.location_uuid,
         l.location_name,
-        lt.location_type_name,
+        l.location_type_id,
         ST_SIMPLIFYPRESERVETOPOLOGY(l.geom, sqlc.arg(simplification_level)::REAL) AS geom_simple
     FROM loc.locations AS l
-        INNER JOIN loc.location_types AS lt USING (location_type_id)
     WHERE l.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
 ) AS sl;
 
@@ -100,10 +89,9 @@ SELECT
     ST_Y(l.centroid)::REAL AS latitude
 FROM loc.sources_mv AS s
     INNER JOIN loc.locations AS l USING (location_uuid)
-    INNER JOIN loc.source_types AS st USING (source_type_id)
 WHERE
     l.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
-    AND st.source_type_name = $1
+    AND s.source_type_id = $1
     AND s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP;
 
 -- name: CreateLocationSourceEntry :one
@@ -151,7 +139,7 @@ INSERT INTO loc.sources_history (
     NULL
 FROM iam.user_location_policies_mv AS ulp
 WHERE ulp.user_uuid = $3
-    AND ulp.role_id = 1 -- Have to be owner to decommission a source
+    AND ulp.permission_id = 1 -- Have to be owner to decommission a source
     AND ulp.location_uuid = $1;
 
 -- name: GetLocationSourceHistoryTimeseries :many

@@ -24,7 +24,7 @@ BEGIN
     INSERT INTO loc.locations
       (location_name, location_type_id, geom)
     SELECT
-        UPPER(name_prefix) || '_TESTLOCATION' || i AS location_name,
+        LOWER(name_prefix) || '_testlocation' || i AS location_name,
         (SELECT location_type_id FROM loc.location_types WHERE location_type_name = 'SITE'),
         ST_SetSRID(ST_MakePoint(random() * 355 - 180, random() * 175 - 90), 4326)
     FROM generate_series(0, num_locations - 1) as i;

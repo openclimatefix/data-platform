@@ -229,7 +229,7 @@ func (d *DataPlatformDataServiceServerImpl) CreateForecast(
 	req *pb.CreateForecastRequest,
 ) (*pb.CreateForecastResponse, error) {
 	return &pb.CreateForecastResponse{
-		ForecastId: 1,
+		ForecastUuid: uuid.New().String(),
 	}, nil
 }
 
@@ -272,7 +272,7 @@ func (d *DataPlatformDataServiceServerImpl) CreateObserver(
 	req *pb.CreateObserverRequest,
 ) (*pb.CreateObserverResponse, error) {
 	return &pb.CreateObserverResponse{
-		ObserverId:   0,
+		ObserverUuid: uuid.New().String(),
 		ObserverName: req.Name,
 	}, nil
 }
