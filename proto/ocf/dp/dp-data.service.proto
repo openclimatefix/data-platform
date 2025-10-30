@@ -8,26 +8,28 @@ option go_package = "github.com/openclimatefix/data-platform/internal/protogen/o
 
 service DataPlatformDataService {
 
-  /* GetForecastTimeseries fetches a horizontal slice of predicted data: many points in time for a
-   * single location. Since individually created forecasts can have overlapping time ranges,
-   * identically-timestamped values are discarded, excepting the one with the lowest allowable lead
-   * time.
+  /* GetForecastTimeseries fetches a horizontal slice of predicted data.
+   * (i.e. many points in time for a single location). Since individually created forecasts can
+   * have overlapping time ranges, identically-timestamped values are discarded, excepting the one
+   * with the lowest allowable lead time (horizon).
    */
   rpc GetForecastAsTimeseries(GetForecastAsTimeseriesRequest) returns (GetForecastAsTimeseriesResponse) {}
-  /* GetForecastAtTimestamp fetches a vertical slice of predicted data i.e. many locations at a
-   * single point in time. This is handy for display on a map, for instance.
+  /* GetForecastAtTimestamp fetches a vertical slice of predicted data.
+   * (i.e. many locations, at a single point in time). This is handy for e.g. display on a map.
    */
   rpc GetForecastAtTimestamp(GetForecastAtTimestampRequest) returns (GetForecastAtTimestampResponse) {}
-  /* GetObservationsAsTimeseries fetches a horizontal slice of observed data: many points in time for a
-   * single location.
+  /* GetObservationsAsTimeseries fetches a horizontal slice of observed data.
+   * (i.e. many points in time, one single location).
    */
   rpc GetObservationsAsTimeseries(GetObservationsAsTimeseriesRequest) returns (GetObservationsAsTimeseriesResponse) {}
 
-  // --- Crud ---------------------------------------------------------------------
 
+  /* GetLocation fetches detailed information about a specific location. */
   rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
-  rpc ListLocationsWithin(ListLocationsWithinRequest) returns (ListLocationsWithinResponse) {}
+  /* CreateLocation registers a new location in which to log or forecast generation. */
   rpc CreateLocation(CreateLocationRequest) returns (CreateLocationResponse) {}
+  /* ListLocations fetches a list of registered locations that match the supplied filters. */
+  rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse) {}
 
   rpc CreateForecaster(CreateForecasterRequest) returns (CreateForecasterResponse) {}
   rpc UpdateForecaster(UpdateForecasterRequest) returns (UpdateForecasterResponse) {}

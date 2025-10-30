@@ -5,16 +5,9 @@ package ocf.dp;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "buf/validate/validate.proto";
-import "ocf/dp/dp-data.messages.proto";
-
+import "ocf/dp/dp.common.proto";
 
 option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
-
-enum Permission {
-  PERMISSION_UNSPECIFIED = 0;
-  PERMISSION_READ = 1;
-  PERMISSION_WRITE = 2;
-}
 
 
 message LocationPolicy {
@@ -62,41 +55,6 @@ message GetUserResponse {
   google.protobuf.Struct metadata = 6;
 }
 
-
-message ListUserLocationsRequest {
-  string oauth_id = 1 [
-    (buf.validate.field).string.min_len = 5,
-    (buf.validate.field).string.max_len = 128
-  ];
-  EnergySource energy_source = 2;
-}
-
-message ListUserLocationsResponse {
-  message Location {
-    string location_uuid = 1;
-    string location_name = 2;
-    LocationType location_type = 3;
-    Permission permission = 4;
-  }
-
-  repeated Location locations = 1;
-}
-
-
-message CheckUserLocationAccessRequest {
-  string oauth_id = 1 [
-    (buf.validate.field).string.min_len = 5,
-    (buf.validate.field).string.max_len = 128
-  ];
-  string location_id = 2 [
-    (buf.validate.field).string.uuid = true
-  ];
-  EnergySource energy_source = 3;
-}
-
-message CheckUserLocationAccessResponse {
-  bool has_access = 1;
-}
 
 message DeleteUserRequest {
   string user_id = 1 [

@@ -32,24 +32,6 @@ FROM (
     WHERE l.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
 ) AS sl;
 
--- name: GetLocationsWithin :many
-/* GetLocationsWithin returns all locations that are within the geometry of the given location.
- */
-SELECT
-    l.location_uuid,
-    l.location_name,
-    l.location_type_id,
-    ST_Y(l.centroid)::REAL AS latitude,
-    ST_X(l.centroid)::REAL AS longitude
-FROM loc.locations AS l
-    INNER JOIN
-        loc.locations AS l_outer ON ST_WITHIN(
-            l.geom,
-            l_outer.geom
-        )
-WHERE l_outer.location_uuid = $1
-    AND l.location_uuid <> $1;
-
 /*- Queries for the sources table -------------------------------------*/
 
 -- name: GetLocationSourceAtTimestamp :one
@@ -118,8 +100,8 @@ INSERT INTO loc.sources_history (
 -- name: RefreshSourcesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;
 
--- name: DecommissionUserSource :exec
-/* DecommissionUserSource creates a new source entry for a given location and source type with 0 capacity.
+-- name: DecommissionSource :exec
+/* DecommissionSource creates a new source entry for a given location and source type with 0 capacity.
  */
 INSERT INTO loc.sources_history (
     location_uuid,
@@ -129,18 +111,15 @@ INSERT INTO loc.sources_history (
     capacity_limit_sip,
     valid_from_utc,
     metadata
-) SELECT
-    ulp.location_uuid,
+) VALUES (
+    $1,
     $2,
     0,
     0,
     NULL,
-    CURRENT_TIMESTAMP,
+    DATE_TRUNC('minute', CURRENT_TIMESTAMP),
     NULL
-FROM iam.user_location_policies_mv AS ulp
-WHERE ulp.user_uuid = $3
-    AND ulp.permission_id = 1 -- Have to be owner to decommission a source
-    AND ulp.location_uuid = $1;
+);
 
 -- name: GetLocationSourceHistoryTimeseries :many
 /* GetLocationSourceHistoryTimeseries shows all the historical records for a given location and source type. */
@@ -152,3 +131,68 @@ SELECT
 FROM loc.sources_history AS sh
 WHERE sh.location_uuid = $1 AND sh.source_type_id = $2
 ORDER BY valid_from_utc DESC;
+
+/*- Compound Queries for locations and policies -------------------------------------------------*/
+
+-- name: GetLocationsByFilters :many
+/* GetLocationsByFilters returns all locations that match the given filters.
+ */
+SELECT
+    u.oauth_id,
+    lp.permission_id,
+    lp.source_type_id,
+    lp.location_uuid,
+    l.location_name,
+    l.location_type_id,
+    s.capacity_unit_prefix_factor,
+    s.capacity,
+    ST_X(l.centroid)::REAL AS longitude,
+    ST_Y(l.centroid)::REAL AS latitude
+FROM iam.users AS u
+    INNER JOIN iam.org_location_policy_groups USING (org_uuid)
+    INNER JOIN iam.location_policies AS lp USING (location_policy_group_uuid)
+    RIGHT OUTER JOIN loc.locations AS l USING (location_uuid)
+    INNER JOIN loc.sources_mv AS s USING (location_uuid, source_type_id)
+WHERE (s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP)
+    AND (sqlc.narg(oauth_id)::TEXT IS NULL) OR (u.oauth_id = sqlc.arg(oauth_id)::TEXT)
+    AND (ARRAY_LENGTH(sqlc.arg(location_uuids)::UUID [], 1) IS NULL)
+    OR (lp.location_uuid = ANY(sqlc.arg(location_uuids)::UUID []))
+    AND (sqlc.narg(permission_id)::SMALLINT IS NULL) OR (lp.permission_id = sqlc.narg(permission_id)::SMALLINT)
+    AND (sqlc.narg(source_type_id)::SMALLINT IS NULL) OR (lp.source_type_id = sqlc.narg(source_type_id)::SMALLINT)
+    AND (sqlc.narg(location_type_id)::SMALLINT IS NULL) OR (l.location_type_id = ANY(sqlc.arg(location_type_id)::SMALLINT));
+
+-- name: GetLocationsByFiltersWithinLocation :many
+/* GetLocationsByFiltersWithinLocation returns all locations that match the given filters
+ * and are within the geometry of the given location.
+ */
+SELECT
+    u.oauth_id,
+    lp.permission_id,
+    lp.source_type_id,
+    lp.location_uuid,
+    l.location_name,
+    l.location_type_id,
+    s.capacity_unit_prefix_factor,
+    s.capacity,
+    ST_X(l.centroid)::REAL AS longitude,
+    ST_Y(l.centroid)::REAL AS latitude
+FROM iam.users AS u
+    INNER JOIN iam.org_location_policy_groups USING (org_uuid)
+    INNER JOIN iam.location_policies AS lp USING (location_policy_group_uuid)
+    RIGHT OUTER JOIN loc.locations AS l USING (location_uuid)
+    INNER JOIN
+        loc.locations AS l_outer ON ST_WITHIN(
+            l.geom,
+            l_outer.geom
+        )
+    INNER JOIN loc.sources_mv AS s USING (location_uuid, source_type_id)
+WHERE (s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP)
+    AND (sqlc.narg(oauth_id)::TEXT IS NULL) OR (u.oauth_id = sqlc.arg(oauth_id)::TEXT)
+    AND (ARRAY_LENGTH(sqlc.arg(location_uuids)::UUID [], 1) IS NULL)
+    OR (lp.location_uuid = ANY(sqlc.arg(location_uuids)::UUID []))
+    AND (sqlc.narg(permission_id)::SMALLINT IS NULL) OR (lp.permission_id = sqlc.narg(permission_id)::SMALLINT)
+    AND (sqlc.narg(source_type_id)::SMALLINT IS NULL) OR (lp.source_type_id = sqlc.narg(source_type_id)::SMALLINT)
+    AND (sqlc.narg(location_type_id)::SMALLINT IS NULL)
+    OR (l.location_type_id = ANY(sqlc.arg(location_type_id)::SMALLINT))
+    AND l_outer.location_uuid = $1
+    AND l.location_uuid <> $1;

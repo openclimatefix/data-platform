@@ -86,46 +86,6 @@ FROM iam.orgs AS o
     INNER JOIN iam.users AS u USING (org_uuid)
 WHERE u.oauth_id = $1;
 
--- name: GetUserLocations :many
-/* GetUserLocations returns all locations that the service account has access to.
- */
-SELECT
-    l.location_uuid,
-    l.location_name,
-    l.location_type_id,
-    ulp.source_type_id,
-    ulp.permission_id,
-    ST_Y(l.centroid)::REAL AS latitude,
-    ST_X(l.centroid)::REAL AS longitude
-FROM loc.locations AS l
-    INNER JOIN iam.user_location_policies_mv AS ulp USING (location_uuid)
-WHERE ulp.user_uuid = $1
-    AND ulp.permission_id IN (1, 2)
-ORDER BY l.location_name;
-
--- name: FilterLocationsByUser :many
-/* FilterLocationsByOAuthID returns the intersection of the locations accessible by the user
- * (identified by the given OAuth ID), and the provided list of location UUIDs.
- */
-SELECT location_uuid
-FROM iam.user_location_policies_mv
-WHERE user_uuid = $1
-    AND permission_id = ANY(sqlc.arg(permission_id)::TEXT [])
-    AND source_type_id = $2
-    AND location_uuid = ANY(sqlc.arg(unfiltered_location_uuids)::UUID []);
-
--- name: ListUsers :many
-SELECT
-    u.user_uuid,
-    o.org_uuid,
-    o.org_name,
-    UUIDV7_EXTRACT_TIMESTAMP(u.user_uuid)::TIMESTAMP AS created_at_utc,
-    u.oauth_id,
-    u.metadata
-FROM iam.users AS u
-    INNER JOIN iam.orgs AS o USING (org_uuid)
-ORDER BY o.org_name;
-
 -- name: DeleteUser :exec
 DELETE FROM iam.users
 WHERE user_uuid = $1;
@@ -234,8 +194,3 @@ WHERE location_policy_group_uuid = (
     AND location_uuid = $1
     AND source_type_id = $2
     AND permission_id = $3;
-
-/*- Materialized Views ---------------------------------------------------------------------------*/
-
--- name: RefreshUserLocationPoliciesMaterializedView :exec
-REFRESH MATERIALIZED VIEW CONCURRENTLY iam.user_location_policies_mv;

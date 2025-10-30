@@ -760,62 +760,6 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 	require.Len(t, deltaResp.Deltas, 8*60/30) // One per horizon
 }
 
-func TestListLocationsWithin(t *testing.T) {
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-
-	// Create a GSP with a bounding box between 0 and 5
-	resp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_list_locations_within_gsp",
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		GeometryWkt:            "POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))",
-		LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
-		EffectiveCapacityWatts: 1000,
-		Metadata:               metadata,
-	})
-	require.NoError(t, err)
-
-	// Create a site within the box
-	lls := []struct {
-		lon float32
-		lat float32
-	}{
-		{0.1, 0.1},
-		{4, 4},
-		{3, 4.9},
-		{5, 5},
-		{80, -1},
-	}
-
-	inner_uuids := make([]string, len(lls))
-	for i, ll := range lls {
-		sResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-			LocationName:           fmt.Sprintf("test_list_locations_within_inner_%d", i),
-			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			GeometryWkt:            fmt.Sprintf("POINT(%.3f %.3f)", ll.lon, ll.lat),
-			LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-			EffectiveCapacityWatts: 500,
-			Metadata:               metadata,
-		})
-		require.NoError(t, err)
-		inner_uuids[i] = sResp.LocationUuid
-	}
-
-	result, err := dc.ListLocationsWithin(t.Context(), &pb.ListLocationsWithinRequest{
-		EnergySource:          pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		EnclosingLocationUuid: resp.LocationUuid,
-	})
-	require.NoError(t, err)
-
-	expected := []*pb.ListLocationsWithinResponse_LocationData{
-		{LocationUuid: inner_uuids[0], LocationName: "test_list_locations_within_inner_0"},
-		{LocationUuid: inner_uuids[1], LocationName: "test_list_locations_within_inner_1"},
-		{LocationUuid: inner_uuids[2], LocationName: "test_list_locations_within_inner_2"},
-	}
-
-	require.Equal(t, expected, result.Locations)
-}
-
 func TestCreateForecast(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)

@@ -25,22 +25,6 @@ func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministratio
 
 type DataPlatformAdministrationServiceServerImpl struct{}
 
-// CheckUserLocationAccess implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) CheckUserLocationAccess(
-	context.Context,
-	*pb.CheckUserLocationAccessRequest,
-) (*pb.CheckUserLocationAccessResponse, error) {
-	panic("unimplemented")
-}
-
-// ListUserLocations implements dp.DataPlatformAdministrationServiceServer.
-func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(
-	context.Context,
-	*pb.ListUserLocationsRequest,
-) (*pb.ListUserLocationsResponse, error) {
-	panic("unimplemented")
-}
-
 // CreateLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 	ctx context.Context,

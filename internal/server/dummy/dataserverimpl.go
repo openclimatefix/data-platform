@@ -372,30 +372,20 @@ func (d *DataPlatformDataServiceServerImpl) GetLocation(
 	}, nil
 }
 
+// ListLocations implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) ListLocations(
+	context.Context,
+	*pb.ListLocationsRequest,
+) (*pb.ListLocationsResponse, error) {
+	panic("unimplemented")
+}
+
 // GetLocationsAsGeoJSON implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	context.Context,
 	*pb.GetLocationsAsGeoJSONRequest,
 ) (*pb.GetLocationsAsGeoJSONResponse, error) {
 	panic("unimplemented")
-}
-
-// GetLocationsWithin implements dp.DataPlatformDataServiceServer.
-func (d *DataPlatformDataServiceServerImpl) ListLocationsWithin(
-	ctx context.Context,
-	req *pb.ListLocationsWithinRequest,
-) (*pb.ListLocationsWithinResponse, error) {
-	locations := make([]*pb.ListLocationsWithinResponse_LocationData, 5)
-	for i := range locations {
-		locations[i] = &pb.ListLocationsWithinResponse_LocationData{
-			LocationUuid: uuid.New().String(),
-			LocationName: fmt.Sprintf("DummyLocation%d", i),
-		}
-	}
-
-	return &pb.ListLocationsWithinResponse{
-		Locations: locations,
-	}, nil
 }
 
 // GetObservationsAsTimeseries implements dp.DataPlatformDataServiceServer.

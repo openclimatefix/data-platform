@@ -34,66 +34,6 @@ func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministratio
 // It also expects a zerolog logger to be set in the context.
 type DataPlatformAdministrationServiceServerImpl struct{}
 
-func (d *DataPlatformAdministrationServiceServerImpl) CheckUserLocationAccess(
-	ctx context.Context,
-	re *pb.CheckUserLocationAccessRequest,
-) (*pb.CheckUserLocationAccessResponse, error) {
-	panic("unimplemented")
-}
-
-func (d *DataPlatformAdministrationServiceServerImpl) ListUserLocations(
-	ctx context.Context,
-	req *pb.ListUserLocationsRequest,
-) (*pb.ListUserLocationsResponse, error) {
-	l := zerolog.Ctx(ctx)
-
-	querier := db.New(ix.GetTxFromContext(ctx))
-
-	guprms := db.GetUserByOAuthIDParams{
-		OauthID: req.OauthId,
-	}
-
-	dbUser, err := querier.GetUserByOAuthID(ctx, guprms)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetUserByOAuthID(%+v)", guprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"User with OAuth ID '%s' not found",
-			req.OauthId,
-		)
-	}
-
-	gulprms := db.GetUserLocationsParams{
-		UserUuid: dbUser.UserUuid,
-	}
-
-	dbLocations, err := querier.GetUserLocations(ctx, gulprms)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.GetUserLocations(%+v)", gulprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No locations found for user with OAuth ID '%s'",
-			req.OauthId,
-		)
-	}
-
-	locations := make([]*pb.ListUserLocationsResponse_Location, len(dbLocations))
-	for i, loc := range dbLocations {
-		locations[i] = &pb.ListUserLocationsResponse_Location{
-			LocationUuid: loc.LocationUuid.String(),
-			LocationName: loc.LocationName,
-			LocationType: pb.LocationType(loc.LocationTypeID),
-			Permission:   pb.Permission(loc.PermissionID),
-		}
-	}
-
-	return &pb.ListUserLocationsResponse{
-		Locations: locations,
-	}, nil
-}
-
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 	ctx context.Context,
 	req *pb.CreateLocationPolicyGroupRequest,
@@ -326,19 +266,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) AddLocationPoliciesToGroup
 		}
 	}
 
-	// Refresh the user policies materialised view
-	err := querier.RefreshUserLocationPoliciesMaterializedView(ctx)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.RefreshUserLocationPoliciesMaterializedView()")
-
-		return nil, status.Error(
-			codes.Internal,
-			"Error refreshing user location policies materialised view",
-		)
-	}
-
-	l.Debug().Msgf("refreshed user location policies materialised view")
-
 	return &pb.AddLocationPoliciesToGroupResponse{}, nil
 }
 
@@ -370,19 +297,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPoliciesFrom
 			)
 		}
 	}
-
-	// Refresh the user policies materialised view
-	err := querier.RefreshUserLocationPoliciesMaterializedView(ctx)
-	if err != nil {
-		l.Error().Err(err).Msgf("querier.RefreshUserLocationPoliciesMaterializedView()")
-
-		return nil, status.Error(
-			codes.Internal,
-			"Error refreshing user location policies materialised view",
-		)
-	}
-
-	l.Debug().Msgf("refreshed user location policies materialised view")
 
 	return &pb.RemoveLocationPoliciesFromGroupResponse{}, nil
 }

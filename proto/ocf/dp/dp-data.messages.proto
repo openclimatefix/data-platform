@@ -8,45 +8,11 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "buf/validate/validate.proto";
 import "ocf/dp/dp.rules.proto";
+import "ocf/dp/dp.common.proto";
 
 option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
 
 // --- Common message types ----------------------------------------------------------------------
-
-// EnergySource indicates the type of energy generation.
-// NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
-// Do not change without considering this first!
-enum EnergySource {
-  ENERGY_SOURCE_UNSPECIFIED = 0;
-  ENERGY_SOURCE_SOLAR = 1;
-  ENERGY_SOURCE_WIND = 2;
-}
-
-// LocationType indicates the type of location.
-// NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
-// Do not change without considering this first!
-enum LocationType {
-  LOCATION_TYPE_UNSPECIFIED = 0;
-  LOCATION_TYPE_SITE = 1;
-  LOCATION_TYPE_GSP = 2;
-  LOCATION_TYPE_DNO = 3;
-  LOCATION_TYPE_NATION = 4;
-}
-/* LatLng represents a WSG84 coordinate pair.
- * Float precision enables a resolution of about 1cm,
- * which is more precise than we'll ever have data for.
- */
-message LatLng {
-  float latitude = 1[
-    (buf.validate.field).float.lte = 90,
-    (buf.validate.field).float.gte = -90
-  ];
-  float longitude = 2 [
-    (buf.validate.field).float.lte = 180,
-    (buf.validate.field).float.gte = -180
-  ];
-}
-
 message Forecaster {
   /* The name of the forecaster to use.
    * The name must be at least 3 characters long, and cannot be changed once set.
@@ -431,22 +397,41 @@ message GetWeekAverageDeltasResponse {
   ];
 }
 
-message ListLocationsWithinRequest {
-  EnergySource energy_source = 1;
-  // The UUID of the enclosing location to search within.
-  string enclosing_location_uuid = 2 [
-    (buf.validate.field).string.uuid = true
+message ListLocationsRequest {
+  // Optional filter to only return locations of a specific energy source.
+  optional EnergySource energy_source_filter = 1;
+  // Optional filter to only return locations of a specific location type.
+  optional LocationType location_type_filter = 2;
+  // Optional filter to only return locations from a given set.
+  repeated string location_uuids_filter = 3 [
+    (buf.validate.field).repeated.max_items = 1000,
+    (buf.validate.field).repeated.items = {
+      string: {uuid: true}
+    }
   ];
+  // Optional filter to only return locations belonging to a specific user.
+  optional string user_oauth_id_filter = 4 [
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Optional filter to only return locations for which the user has a specific permission.
+  optional Permission permission_filter = 5;
+  // Optional filter to only return locations enclosed within a specific location.
+  optional string enclosing_location_uuid_filter = 6;
 }
 
-message ListLocationsWithinResponse {
-  message LocationData {
+message ListLocationsResponse {
+  message LocationSummary {
     string location_uuid = 1;
     string location_name = 2;
+    EnergySource energy_source = 3;
+    LocationType location_type = 4;
+    uint64 effective_capacity_watts = 5;
+    LatLng latlng = 6;
   }
 
-  repeated ListLocationsWithinResponse.LocationData locations = 1;
+  repeated LocationSummary locations = 1;
 }
+
 
 message StreamForecastDataRequest {
   string location_uuid = 1 [

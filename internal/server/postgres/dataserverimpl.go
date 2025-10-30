@@ -467,41 +467,6 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 	return nil
 }
 
-func (s *DataPlatformDataServiceServerImpl) ListLocationsWithin(
-	ctx context.Context,
-	req *pb.ListLocationsWithinRequest,
-) (*pb.ListLocationsWithinResponse, error) {
-	l := zerolog.Ctx(ctx)
-
-	querier := db.New(ix.GetTxFromContext(ctx))
-
-	lwprms := db.GetLocationsWithinParams{
-		LocationUuid: uuid.MustParse(req.EnclosingLocationUuid),
-	}
-
-	dbLocations, err := querier.GetLocationsWithin(ctx, lwprms)
-	if err != nil {
-		l.Err(err).Msgf("querier.GetLocationsWithin(%+v)", lwprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No locations found within the specified location '%s'", req.EnclosingLocationUuid,
-		)
-	}
-
-	locations := make([]*pb.ListLocationsWithinResponse_LocationData, len(dbLocations))
-	for i := range dbLocations {
-		locations[i] = &pb.ListLocationsWithinResponse_LocationData{
-			LocationUuid: dbLocations[i].LocationUuid.String(),
-			LocationName: dbLocations[i].LocationName,
-		}
-	}
-
-	return &pb.ListLocationsWithinResponse{
-		Locations: locations,
-	}, nil
-}
-
 func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	ctx context.Context,
 	req *pb.GetWeekAverageDeltasRequest,
@@ -660,7 +625,9 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 			ValueFraction: float32(obs.ValueSip) / 30000.0,
 			TimestampUtc:  timestamppb.New(obs.ObservationTimestampUtc.Time),
 			EffectiveCapacityWatts: uint64(
-				float64(obs.EffectiveCapacity) * math.Pow10(int(obs.CapacityUnitPrefixFactor)),
+				obs.EffectiveCapacity,
+			) * uint64(
+				math.Pow10(int(obs.CapacityUnitPrefixFactor)),
 			),
 		}
 	}
@@ -1199,6 +1166,111 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		LocationUuid: dbSource.LocationUuid.String(),
 		LocationName: dbSource.LocationName,
 		Values:       values,
+	}, nil
+}
+
+// ListLocationsWithin implements dp.DataPlatformDataServiceServer.
+func (s *DataPlatformDataServiceServerImpl) ListLocations(
+	ctx context.Context,
+	req *pb.ListLocationsRequest,
+) (*pb.ListLocationsResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	parsedUuids := make([]uuid.UUID, len(req.LocationUuidsFilter))
+	for i, id := range req.LocationUuidsFilter {
+		parsedUuids[i] = uuid.MustParse(id)
+	}
+
+	var permissionId *int16
+	if req.PermissionFilter != nil {
+		pid := int16(req.PermissionFilter.Number())
+		permissionId = &pid
+	}
+
+	var sourceTypeId *int16
+	if req.EnergySourceFilter != nil {
+		stid := int16(req.EnergySourceFilter.Number())
+		sourceTypeId = &stid
+	}
+
+	var locationTypeId *int16
+	if req.LocationTypeFilter != nil {
+		ltid := int16(req.LocationTypeFilter.Number())
+		locationTypeId = &ltid
+	}
+
+	var locations []*pb.ListLocationsResponse_LocationSummary
+
+	if req.EnclosingLocationUuidFilter == nil {
+		params := db.GetLocationsByFiltersParams{
+			OauthID:        req.UserOauthIdFilter,
+			LocationUuids:  parsedUuids,
+			AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			PermissionID:   permissionId,
+			SourceTypeID:   sourceTypeId,
+			LocationTypeID: locationTypeId,
+		}
+
+		glResp, err := querier.GetLocationsByFilters(ctx, params)
+		if err != nil {
+			l.Err(err).Msgf("querier.GetLocationsByFilters(%+v)", params)
+		} else {
+			for _, loc := range glResp {
+				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
+					LocationUuid: loc.LocationUuid.String(),
+					LocationName: loc.LocationName,
+					Latlng: &pb.LatLng{
+						Latitude:  loc.Latitude,
+						Longitude: loc.Longitude,
+					},
+					EffectiveCapacityWatts: uint64(
+						loc.Capacity,
+					) * uint64(
+						math.Pow10(int(loc.CapacityUnitPrefixFactor)),
+					),
+					EnergySource: pb.EnergySource(loc.SourceTypeID),
+					LocationType: pb.LocationType(loc.LocationTypeID),
+				})
+			}
+		}
+	} else {
+		params := db.GetLocationsByFiltersWithinLocationParams{
+			LocationUuid:   uuid.MustParse(*req.EnclosingLocationUuidFilter),
+			AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			OauthID:        req.UserOauthIdFilter,
+			LocationUuids:  parsedUuids,
+			PermissionID:   permissionId,
+			SourceTypeID:   sourceTypeId,
+			LocationTypeID: locationTypeId,
+		}
+
+		glResp, err := querier.GetLocationsByFiltersWithinLocation(ctx, params)
+		if err != nil {
+			l.Err(err).Msgf("querier.GetLocationsByFilters(%+v)", params)
+		} else {
+			for _, loc := range glResp {
+				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
+					LocationUuid: loc.LocationUuid.String(),
+					LocationName: loc.LocationName,
+					Latlng: &pb.LatLng{
+						Latitude:  loc.Latitude,
+						Longitude: loc.Longitude,
+					},
+					EffectiveCapacityWatts: uint64(
+						loc.Capacity,
+					) * uint64(
+						math.Pow10(int(loc.CapacityUnitPrefixFactor)),
+					),
+					EnergySource: pb.EnergySource(loc.SourceTypeID),
+					LocationType: pb.LocationType(loc.LocationTypeID),
+				})
+			}
+		}
+	}
+
+	return &pb.ListLocationsResponse{
+		Locations: locations,
 	}, nil
 }
 
