@@ -40,9 +40,9 @@ SELECT
 FROM iam.orgs
 ORDER BY org_name;
 
--- name: DeleteOrg :exec
+-- name: DeleteOrgByName :exec
 DELETE FROM iam.orgs
-WHERE org_uuid = $1;
+WHERE org_name = LOWER(sqlc.arg(org_name)::TEXT);
 
 -- name: AddUserToOrgByOAuthIDAndName :exec
 INSERT INTO iam.users (org_uuid, oauth_id)

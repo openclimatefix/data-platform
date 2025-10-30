@@ -71,7 +71,6 @@ CREATE TABLE iam.users (
     PRIMARY KEY (user_uuid),
     UNIQUE (oauth_id)
 );
-CREATE INDEX ON iam.users (oauth_id);
 CREATE INDEX ON iam.users (org_uuid);
 
 /*

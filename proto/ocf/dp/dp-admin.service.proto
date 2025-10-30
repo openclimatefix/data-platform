@@ -14,6 +14,7 @@ service DataPlatformAdministrationService {
 
   rpc CreateOrganisation(CreateOrganisationRequest) returns (CreateOrganisationResponse) {}
   rpc GetOrganisation(GetOrganisationRequest) returns (GetOrganisationResponse) {}
+  rpc DeleteOrganisation(DeleteOrganisationRequest) returns (DeleteOrganisationResponse) {}
   rpc AddUserToOrganisation(AddUserToOrganisationRequest) returns (AddUserToOrganisationResponse) {}
   rpc RemoveUserFromOrganisation(RemoveUserFromOrganisationRequest) returns (RemoveUserFromOrganisationResponse) {}
   rpc AddLocationPolicyGroupToOrganisation(AddLocationPolicyGroupToOrganisationRequest) returns (AddLocationPolicyGroupToOrganisationResponse) {}

@@ -25,6 +25,13 @@ func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministratio
 
 type DataPlatformAdministrationServiceServerImpl struct{}
 
+func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
+	ctx context.Context,
+	req *pb.DeleteOrganisationRequest,
+) (*pb.DeleteOrganisationResponse, error) {
+	return &pb.DeleteOrganisationResponse{}, nil
+}
+
 // CreateLocationPolicyGroup implements dp.DataPlatformAdministrationServiceServer.
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 	ctx context.Context,

@@ -34,6 +34,30 @@ func NewDataPlatformAdministrationServiceServerImpl() *DataPlatformAdministratio
 // It also expects a zerolog logger to be set in the context.
 type DataPlatformAdministrationServiceServerImpl struct{}
 
+func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
+	ctx context.Context,
+	req *pb.DeleteOrganisationRequest,
+) (*pb.DeleteOrganisationResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	dobnParams := db.DeleteOrgByNameParams{
+		OrgName: req.OrgName,
+	}
+
+	err := querier.DeleteOrgByName(ctx, dobnParams)
+	if err != nil {
+		l.Error().Err(err).Msgf("querier.DeleteOrgByName(%+v)", dobnParams)
+
+		return nil, status.Error(
+			codes.Internal,
+			"Encountered database error. Check application logs.",
+		)
+	}
+
+	return &pb.DeleteOrganisationResponse{}, nil
+}
+
 func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 	ctx context.Context,
 	req *pb.CreateLocationPolicyGroupRequest,

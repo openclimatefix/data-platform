@@ -80,6 +80,51 @@ func TestCreateOrganisation(t *testing.T) {
 	}
 }
 
+func TestDeleteOrganisation(t *testing.T) {
+	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+	require.NoError(t, err)
+
+	orgResp, err := ac.CreateOrganisation(context.Background(), &pb.CreateOrganisationRequest{
+		OrgName:  "test_delete_organisation_1",
+		Metadata: metadata,
+	})
+
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name      string
+		deleteReq *pb.DeleteOrganisationRequest
+	}{
+		{
+			name: "Should delete existing organisation",
+			deleteReq: &pb.DeleteOrganisationRequest{
+				OrgName: orgResp.OrgName,
+			},
+		},
+		{
+			name: "Should handle deleting a non-existent organisation",
+			deleteReq: &pb.DeleteOrganisationRequest{
+				OrgName: "non_existent_delete_organisation",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ac.DeleteOrganisation(t.Context(), tc.deleteReq)
+			if strings.Contains(tc.name, "Shouldn't") {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				_, err := ac.GetOrganisation(t.Context(), &pb.GetOrganisationRequest{
+					OrgName: tc.deleteReq.OrgName,
+				})
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
 func TestAddRemoveLocationPolicyGroupToOrganisation(t *testing.T) {
 	orgResp, err := ac.CreateOrganisation(t.Context(), &pb.CreateOrganisationRequest{
 		OrgName: "test_add_remove_location_policy_group_organisation",
