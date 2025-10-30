@@ -930,4 +930,3 @@ func BenchmarkPostgresClient(b *testing.B) {
 		})
 	}
 }
-
