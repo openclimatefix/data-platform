@@ -229,7 +229,7 @@ func (d *DataPlatformDataServiceServerImpl) CreateForecast(
 	req *pb.CreateForecastRequest,
 ) (*pb.CreateForecastResponse, error) {
 	return &pb.CreateForecastResponse{
-		ForecastId: 1,
+		ForecastUuid: uuid.New().String(),
 	}, nil
 }
 
@@ -252,9 +252,9 @@ func (d *DataPlatformDataServiceServerImpl) CreateLocation(
 	req *pb.CreateLocationRequest,
 ) (*pb.CreateLocationResponse, error) {
 	return &pb.CreateLocationResponse{
-		LocationUuid:  uuid.New().String(),
-		LocationName:  req.LocationName,
-		CapacityWatts: req.CapacityWatts,
+		LocationUuid:           uuid.New().String(),
+		LocationName:           req.LocationName,
+		EffectiveCapacityWatts: req.EffectiveCapacityWatts,
 	}, nil
 }
 
@@ -272,7 +272,7 @@ func (d *DataPlatformDataServiceServerImpl) CreateObserver(
 	req *pb.CreateObserverRequest,
 ) (*pb.CreateObserverResponse, error) {
 	return &pb.CreateObserverResponse{
-		ObserverId:   0,
+		ObserverUuid: uuid.New().String(),
 		ObserverName: req.Name,
 	}, nil
 }
@@ -289,11 +289,17 @@ func (d *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		sd := determineIrradiance(t, randomUkLngLat())
 
 		values = append(values, &pb.GetForecastAsTimeseriesResponse_Value{
-			TimestampUtc:           timestamppb.New(t),
-			P50ValuePercent:        float32(sd.normalizedIrradiance()) * 100,
-			P10ValuePercent:        float32(sd.normalizedIrradiance()) * 95,
-			P90ValuePercent:        float32(sd.normalizedIrradiance()) * 105,
+			TargetTimestampUtc:     timestamppb.New(t),
+			P50ValueFraction:       float32(sd.normalizedIrradiance()) * 1.00,
+			P10ValueFraction:       float32(sd.normalizedIrradiance()) * 0.95,
+			P90ValueFraction:       float32(sd.normalizedIrradiance()) * 1.05,
 			EffectiveCapacityWatts: 150e6,
+			InitializationTimestampUtc: timestamppb.New(
+				t.Add(-time.Duration(req.HorizonMins) * time.Minute),
+			),
+			CreatedTimestampUtc: timestamppb.New(
+				t.Add(-time.Duration(req.HorizonMins) * 3 * time.Minute),
+			),
 		})
 		t = t.Add(30 * time.Minute)
 	}
@@ -322,7 +328,7 @@ func (d *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 				Latitude:  float32(ll.latDegs),
 				Longitude: float32(ll.lonDegs),
 			},
-			ValuePercent:           float32(sd.normalizedIrradiance()) * 100,
+			ValueFraction:          float32(sd.normalizedIrradiance()),
 			EffectiveCapacityWatts: 150e6,
 		}
 	}
@@ -354,13 +360,24 @@ func (d *DataPlatformDataServiceServerImpl) GetLocation(
 	ll := randomUkLngLat()
 
 	return &pb.GetLocationResponse{
-		LocationUuid:  req.LocationUuid,
-		LocationName:  "DummyLocation",
-		Latlng:        &pb.LatLng{Latitude: float32(ll.latDegs), Longitude: float32(ll.lonDegs)},
-		CapacityWatts: 1280e3,
-		Metadata:      &structpb.Struct{},
-		GeometryWkb:   geometryWkb,
+		LocationUuid: req.LocationUuid,
+		LocationName: "DummyLocation",
+		Latlng: &pb.LatLng{
+			Latitude:  float32(ll.latDegs),
+			Longitude: float32(ll.lonDegs),
+		},
+		EffectiveCapacityWatts: 1280e3,
+		Metadata:               &structpb.Struct{},
+		GeometryWkb:            geometryWkb,
 	}, nil
+}
+
+// ListLocations implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) ListLocations(
+	context.Context,
+	*pb.ListLocationsRequest,
+) (*pb.ListLocationsResponse, error) {
+	panic("unimplemented")
 }
 
 // GetLocationsAsGeoJSON implements dp.DataPlatformDataServiceServer.
@@ -369,24 +386,6 @@ func (d *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	*pb.GetLocationsAsGeoJSONRequest,
 ) (*pb.GetLocationsAsGeoJSONResponse, error) {
 	panic("unimplemented")
-}
-
-// GetLocationsWithin implements dp.DataPlatformDataServiceServer.
-func (d *DataPlatformDataServiceServerImpl) ListLocations(
-	ctx context.Context,
-	req *pb.ListLocationsRequest,
-) (*pb.ListLocationsResponse, error) {
-	locations := make([]*pb.ListLocationsResponse_LocationData, 5)
-	for i := range locations {
-		locations[i] = &pb.ListLocationsResponse_LocationData{
-			LocationUuid: uuid.New().String(),
-			LocationName: fmt.Sprintf("DummyLocation%d", i),
-		}
-	}
-
-	return &pb.ListLocationsResponse{
-		Locations: locations,
-	}, nil
 }
 
 // GetObservationsAsTimeseries implements dp.DataPlatformDataServiceServer.
@@ -403,7 +402,7 @@ func (d *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 		values[i] = &pb.GetObservationsAsTimeseriesResponse_Value{
 			TimestampUtc:           timestamppb.New(t),
-			ValuePercent:           float32(sd.normalizedIrradiance()) * 100,
+			ValueFraction:          float32(sd.normalizedIrradiance()),
 			EffectiveCapacityWatts: 150e6,
 		}
 	}
@@ -424,7 +423,7 @@ func (d *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	for i := range values {
 		values[i] = &pb.GetWeekAverageDeltasResponse_AverageDelta{
 			HorizonMins:            uint32(i * 30),
-			DeltaPercent:           rand.Float32()*10 - 5,
+			DeltaFraction:          rand.Float32()*0.1 - 0.05,
 			EffectiveCapacityWatts: 1000e3,
 		}
 	}
@@ -464,8 +463,8 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 					p10 *float32
 				)
 
-				p90val := float32(sd.normalizedIrradiance()) * 105
-				p10val := float32(sd.normalizedIrradiance()) * 95
+				p90val := float32(sd.normalizedIrradiance()) * 1.05
+				p10val := float32(sd.normalizedIrradiance()) * 0.95
 
 				p90 = &p90val
 				p10 = &p10val
@@ -478,10 +477,11 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 						fc.ForecasterName,
 						fc.ForecasterVersion,
 					),
-					HorizonMins: uint32(h),
-					P50Percent:  float32(sd.normalizedIrradiance()) * 100,
-					P10Percent:  p10,
-					P90Percent:  p90,
+					HorizonMins:         uint32(h),
+					P50Fraction:         float32(sd.normalizedIrradiance()),
+					P10Fraction:         p10,
+					P90Fraction:         p90,
+					CreatedTimestampUtc: timestamppb.New(time.Now().UTC()),
 				})
 				if err != nil {
 					return err

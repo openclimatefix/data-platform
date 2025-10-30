@@ -25,12 +25,13 @@ CREATE TABLE loc.source_types (
     CONSTRAINT source_type_name_format_check CHECK (
         LENGTH(source_type_name) > 0
         AND LENGTH(source_type_name) <= 48
-        AND source_type_name = UPPER(source_type_name)
+        AND source_type_name = LOWER(source_type_name)
     ),
     PRIMARY KEY (source_type_id),
     UNIQUE (source_type_name)
 );
-INSERT INTO loc.source_types (source_type_name) VALUES ('SOLAR'), ('WIND'), ('HYDRO'), ('BATTERY');
+-- The ordering of insertion here matches the .proto enum definitions. Change with caution!
+INSERT INTO loc.source_types (source_type_name) VALUES ('solar'), ('wind'), ('hydro'), ('battery');
 
 -- Lookup table to store different location types
 CREATE TABLE loc.location_types (
@@ -39,12 +40,13 @@ CREATE TABLE loc.location_types (
     CONSTRAINT location_type_name_format_check CHECK (
         LENGTH(location_type_name) > 0
         AND LENGTH(location_type_name) <= 24
-        AND location_type_name = UPPER(location_type_name)
+        AND location_type_name = LOWER(location_type_name)
     ),
     PRIMARY KEY (location_type_id),
     UNIQUE (location_type_name)
 );
-INSERT INTO loc.location_types (location_type_name) VALUES ('SITE'), ('GSP'), ('DNO'), ('NATION');
+-- The ordering of insertion here matches the .proto enum definitions. Change with caution!
+INSERT INTO loc.location_types (location_type_name) VALUES ('site'), ('gsp'), ('dno'), ('nation');
 
 
 /*- Tables ----------------------------------------------------------------------------------*/
@@ -55,7 +57,7 @@ CREATE TABLE loc.locations (
     location_name TEXT NOT NULL,
     CONSTRAINT location_name_check CHECK (
         LENGTH(location_name) > 0
-        AND location_name = UPPER(location_name)
+        AND location_name = LOWER(location_name)
     ),
     geom GEOMETRY (GEOMETRY, 4326) NOT NULL,
     CONSTRAINT geom_validity_check CHECK (
@@ -72,6 +74,7 @@ CREATE TABLE loc.locations (
     ON DELETE RESTRICT,
     centroid GEOMETRY (POINT, 4326) GENERATED ALWAYS AS (ST_CENTROID(geom)) STORED,
     geom_hash TEXT GENERATED ALWAYS AS (MD5(ST_ASBINARY(geom))) STORED,
+    metadata JSONB DEFAULT NULL,
     PRIMARY KEY (location_uuid),
     UNIQUE (location_name, geom_hash)
 );

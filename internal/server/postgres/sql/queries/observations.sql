@@ -1,16 +1,18 @@
 -- name: CreateObserver :one
-INSERT INTO obs.observers (observer_name) VALUES ($1) RETURNING observer_id;
+INSERT INTO obs.observers (observer_name) VALUES (LOWER(sqlc.arg(observer_name)::TEXT)) RETURNING
+    observer_uuid, observer_name;
 
 -- name: ListObservers :many
 SELECT
-    observer_id,
+    observer_uuid,
     observer_name
 FROM obs.observers;
 
 -- name: GetObserverByName :one
 SELECT
-    o.observer_id,
-    o.observer_name
+    o.observer_uuid,
+    o.observer_name,
+    UUIDV7_EXTRACT_TIMESTAMP(o.observer_uuid)::TIMESTAMP AS created_at_utc
 FROM obs.observers AS o
 WHERE o.observer_name = $1;
 
@@ -21,7 +23,7 @@ WHERE o.observer_name = $1;
  * and 30000 representing 100% of capacity.
  */
 INSERT INTO obs.observed_generation_values (
-    location_uuid, source_type_id, observer_id, observation_timestamp_utc, value_sip
+    location_uuid, source_type_id, observer_uuid, observation_timestamp_utc, value_sip
 ) VALUES (
     $1, $2, $3, $4, $5
 );
@@ -46,6 +48,6 @@ FROM obs.observed_generation_values AS og
 WHERE
     og.location_uuid = $1
     AND og.source_type_id = $2
-    AND og.observer_id = $3
+    AND og.observer_uuid = $3
     AND og.observation_timestamp_utc BETWEEN sqlc.arg(start_time_utc)::TIMESTAMP AND sqlc.arg(end_time_utc)::TIMESTAMP
     AND sh.sys_period @> og.observation_timestamp_utc;

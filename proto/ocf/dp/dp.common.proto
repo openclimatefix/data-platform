@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package ocf.dp;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
+
+/* EnergySource indicates the type of energy generation.
+ * NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
+ * Do not change without considering this first!
+ */
+enum EnergySource {
+  ENERGY_SOURCE_UNSPECIFIED = 0;
+  ENERGY_SOURCE_SOLAR = 1;
+  ENERGY_SOURCE_WIND = 2;
+}
+
+/* LocationType indicates the type of location.
+ * NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
+ * Do not change without considering this first!
+ */
+enum LocationType {
+  LOCATION_TYPE_UNSPECIFIED = 0;
+  LOCATION_TYPE_SITE = 1;
+  LOCATION_TYPE_GSP = 2;
+  LOCATION_TYPE_DNO = 3;
+  LOCATION_TYPE_NATION = 4;
+}
+
+/* Permission indicates the level of access a user has to a resource.
+ * NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
+ * Do not change without considering this first!
+ */
+enum Permission {
+  PERMISSION_UNSPECIFIED = 0;
+  PERMISSION_READ = 1;
+  PERMISSION_WRITE = 2;
+}
+
+
+/* LatLng represents a WSG84 coordinate pair.
+ * Float precision enables a resolution of about 1cm,
+ * which is more precise than we'll ever have data for.
+ */
+message LatLng {
+  float latitude = 1[
+    (buf.validate.field).float.lte = 90,
+    (buf.validate.field).float.gte = -90
+  ];
+  float longitude = 2 [
+    (buf.validate.field).float.lte = 180,
+    (buf.validate.field).float.gte = -180
+  ];
+}
+
