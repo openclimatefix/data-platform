@@ -170,21 +170,6 @@ FROM iam.orgs AS o
     LEFT JOIN aggregated_users AS au USING (org_uuid)
 ORDER BY o.org_name;
 
-/*
- * Materialized view that denormalizes location sources according to user access.
- */
-CREATE MATERIALIZED VIEW iam.user_locations_mv AS
-SELECT
-    u.user_uuid,
-    u.oauth_id,
-    lp.permission_id,
-    lp.location_uuid,
-    lp.source_type_id
-FROM iam.users AS u
-    INNER JOIN iam.org_location_policy_groups AS olpg USING (org_uuid)
-    INNER JOIN iam.location_policies AS lp USING (location_policy_group_uuid)
-ORDER BY u.user_uuid, lp.permission_id, lp.source_type_id, lp.location_uuid;
-CREATE UNIQUE INDEX ON iam.user_location_policies_mv (user_uuid, permission_id, source_type_id, location_uuid);
 
 -- +goose Down
 DROP SCHEMA iam CASCADE;
