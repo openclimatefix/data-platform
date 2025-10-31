@@ -79,6 +79,10 @@ the SQL queries.
 
 ## Usage
 
+### Running the server
+
+See [Running the API Server](#running-the-api-server) in the [Development](#development) section.
+
 ### Python Notebook Client
 
 There is an example Python notebook, written with [Marimo](https://docs.marimo.io/), demonstrating
@@ -120,10 +124,16 @@ This will fetch the dependencies, and install the git hooks required for develop
 
 ### Running the API Server
 
-The server can br run locally with no database connection via a fake database implementation:
+The server can be run locally with no database connection via a fake database implementation:
 
 ```bash
 $ DATABASE_URL=fake go run cmd/main.go
+```
+
+or via the equivalent Makefile target:
+
+```bash
+$ make run
 ```
 
 This will start the Data Platform API GRPC's server on `localhost:50051`. The RPCs can then be

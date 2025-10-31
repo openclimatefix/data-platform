@@ -319,7 +319,6 @@ message CreateObservationsRequest {
   message Value {
     google.protobuf.Timestamp timestamp_utc = 1;
     float value_fraction = 2 [
-      (buf.validate.field).required = true,
       (buf.validate.field).float.gte = 0,
       (buf.validate.field).float.lte = 1.1
     ];

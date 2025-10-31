@@ -764,7 +764,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 			TimestampUtc: timestamppb.New(
 				pivotTime.Add(time.Duration(i*5*-1) * time.Minute),
 			),
-			ValueFraction:          0.5,
+			ValueFraction:          rand.Float32(),
 			EffectiveCapacityWatts: siteResp.EffectiveCapacityWatts,
 		}
 	}
