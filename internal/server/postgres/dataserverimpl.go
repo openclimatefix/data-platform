@@ -732,7 +732,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 
 		return nil, status.Error(
 			codes.InvalidArgument,
-			"Invalid observer name. Ensure it is not empty and is lowercase",
+			"Invalid observer name. Ensure it is not empty, unique, and lowercase",
 		)
 	}
 
@@ -942,7 +942,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 		return nil, status.Error(
 			codes.InvalidArgument,
-			"Invalid location. Ensure name is not empty, and that geometry is valid, closed, WGS84.",
+			"Invalid location. Ensure name is not empty, and that geometry is valid, closed, unique WGS84.",
 		)
 	}
 

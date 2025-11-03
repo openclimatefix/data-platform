@@ -79,11 +79,25 @@ the SQL queries.
 
 ## Usage
 
-### Python Notebook Client
+### Running the server
+
+The Data Platform gRPC API server is packaged for portability as a container. This can be run using
+a container orchestration tool, e.g. with Docker:
+
+```bash
+$ docker run -p 50051:50051 ghcr.io/openclimatefix/data-platform
+```
+
+Alternatively, it can be run locally using Go. See
+[Running the API Server](#running-the-api-server) in the [Development](#development) section.
+
+Once running, the server RPCs can be investigated using a gRPC client tool.
+
+### Running a client
 
 There is an example Python notebook, written with [Marimo](https://docs.marimo.io/), demonstrating
-using the Data Platform as a data analysis tool. It shows an how an analysis workflow would use the
-generated python library code. To run it, ensure first that the Data Platform Server is running on
+how to use the Python bindings in a client to a Data Platform server. The example runs through a
+data analysis workflow. To run it, ensure first that the Data Platform Server is running on
 `localhost:50051` (see [Getting Started](#getting-started)); and that the python bindings have been
 generated (see [Generating Code](#generating-code)). Then use
 [uvx](https://docs.astral.sh/uv/reference/cli/#uv-tool-run) to run the notebook:
@@ -105,6 +119,12 @@ $ make run.notebook
 ### Getting Started
 
 This project requires the [Go Toolchain](https://go.dev/doc/install) to be installed.
+
+> [!Note]
+> This project uses Go modules for dependency management. Ensure that your `PATH` environment
+> variable has been updated to include the Go binary installation location, as per the instructions
+> linked above, otherwise you may see errors.
+
 Clone the repository, then run
 
 ```bash
@@ -120,10 +140,16 @@ This will fetch the dependencies, and install the git hooks required for develop
 
 ### Running the API Server
 
-The server can br run locally with no database connection via a fake database implementation:
+The server can be run locally with no database connection via a fake database implementation:
 
 ```bash
 $ DATABASE_URL=fake go run cmd/main.go
+```
+
+or via the equivalent Makefile target:
+
+```bash
+$ make run
 ```
 
 This will start the Data Platform API GRPC's server on `localhost:50051`. The RPCs can then be
@@ -131,9 +157,10 @@ investigated using a tool such as [grpcurl](https://github.com/fullstorydev/grpc
 [grpcui](https://fullstorydev/grpcui). In this testing mode, the data returned by the server is
 entirely generated and has little bearing on the request objects themselves.
 
-To connect to a real PostgresSQL database and have retention in the platform data, there is an
-example Docker compose file in `examples/docker-compose.yml`. This runs the Data Platform API
-server in a container, backed by Postgres, and includes a GRPC UI for testing.
+To connect to a real PostgresSQL database and have retention in the platform data, the
+`DATABASE_URL` environment variable must be set to an accessible Postgres instance. There is an
+example Docker compose file in `examples/docker-compose.yml`, which runs the Data Platform API
+server in a container, backed by Postgres, and which also includes a GRPC UI for testing.
 
 ### Testing
 

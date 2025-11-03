@@ -6,12 +6,13 @@ init:
 	if ! echo "$${PATH}" | grep -q "$${GO_BIN}"; then \
 		export PATH="$${PATH}:$${GO_BIN}"; \
 	fi
+	@echo "Generating code..."
+	@make gen
 	@echo "Installing Go dependencies..."
 	@go get ./...
 	@echo " * Success."
 	@echo "Adding git hooks..."
 	@git config --local core.hooksPath .github/hooks
-	@make gen
 
 .PHONY: test
 test:
