@@ -258,6 +258,18 @@ func (d *DataPlatformDataServiceServerImpl) CreateLocation(
 	}, nil
 }
 
+// UpdateLocationCapacity implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
+	ctx context.Context,
+	req *pb.UpdateLocationCapacityRequest,
+) (*pb.UpdateLocationCapacityResponse, error) {
+	return &pb.UpdateLocationCapacityResponse{
+		LocationUuid:           req.LocationUuid,
+		EffectiveCapacityWatts: req.NewEffectiveCapacityWatts,
+		LocationName:           "DummyLocation",
+	}, nil
+}
+
 // CreateObservations implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) CreateObservations(
 	ctx context.Context,
@@ -428,7 +440,6 @@ func (d *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 	return &pb.GetObservationsAsTimeseriesResponse{
 		LocationUuid: req.LocationUuid,
-		LocationName: "DummyLocation",
 		Values:       values,
 	}, nil
 }

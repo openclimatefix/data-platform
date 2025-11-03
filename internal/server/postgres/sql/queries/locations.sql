@@ -64,8 +64,9 @@ WHERE
  */
 SELECT
     COALESCE(
-        sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
-    )::REAL AS effective_capacity,
+        s.capacity_limit_sip::REAL * s.capacity / 30000.0, s.capacity::REAL
+    )::REAL AS capacity_inc_limit,
+    s.capacity,
     s.capacity_unit_prefix_factor,
     s.source_type_id,
     s.metadata AS metadata_jsonb,

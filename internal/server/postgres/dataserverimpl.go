@@ -593,20 +593,6 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 		)
 	}
 
-	// Get the location
-	locParams := db.GetLocationsByFiltersParams{
-		LocationUuids: []uuid.UUID{locationUuid},
-	}
-	locResp, err := querier.GetLocationsByFilters(ctx, locParams)
-	if err != nil || len(locResp) != 1{
-		l.Err(err).Msgf("querier.GetLocationsByFilters(%+v)", locParams)
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No location found for UUID '%s'.",
-			req.LocationUuid,
-		)
-	}
-
 	start, end, err := timeWindowToPgWindow(req.TimeWindow)
 	if err != nil {
 		l.Err(err).Msgf("timeWindowToPgWindow(%+v)", req.TimeWindow)
@@ -647,7 +633,6 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 	return &pb.GetObservationsAsTimeseriesResponse{
 		LocationUuid: locationUuid.String(),
-		LocationName: locResp[0].LocationName,
 		Values:       values,
 	}, nil
 }
@@ -802,7 +787,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	dbSources, err := querier.ListSourcesAtTimestamp(ctx, lsParams)
 	if err != nil || len(dbSources) == 0 {
-		l.Err(err).Msgf("querier.ListUserLocationSourcesAtTimestamp(%+v)", lsParams)
+		l.Err(err).Msgf("querier.ListSourcesAtTimestamp(%+v)", lsParams)
 
 		return nil, status.Errorf(
 			codes.NotFound,
@@ -854,7 +839,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 			values = append(values, &pb.GetForecastAtTimestampResponse_Value{
 				ValueFraction: float32(dbCrossSection[idx].P50Sip) / 30000.0,
 				EffectiveCapacityWatts: uint64(
-					value.EffectiveCapacity,
+					value.CapacityIncLimit,
 				) * uint64(
 					math.Pow10(int(value.CapacityUnitPrefixFactor)),
 				),
@@ -1036,7 +1021,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	if (req.ValidFromUtc.AsTime() == time.Time{}) {
+	if (req.ValidFromUtc.AsTime().Equal(time.Time{})) {
 		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
 	}
 
@@ -1046,14 +1031,17 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
 		SourceTypeID:   int16(req.EnergySource.Number()),
 		AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
 	}
-	dbSource,  err := querier.GetLocationSourceAtTimestamp(ctx, lsParams)
+
+	dbSource, err := querier.GetLocationSourceAtTimestamp(ctx, lsParams)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetLocationSourceAtTimestamp(%+v)", lsParams)
+
 		return nil, status.Errorf(
 			codes.NotFound,
 			"Location does not exist. Create the location before attempting to update capacity.",
 		)
 	}
+
 	cp, ex, err := capacityToValueMultiplier(req.NewEffectiveCapacityWatts)
 	if err != nil {
 		l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.NewEffectiveCapacityWatts)
@@ -1073,6 +1061,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
 		ValidFromUtc:             pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
 		Metadata:                 dbSource.MetadataJsonb,
 	}
+
 	_, err = querier.CreateLocationSourceEntry(ctx, csprms)
 	if err != nil {
 		l.Err(err).Msgf("querier.CreateLocationSourceEntry(%+v)", csprms)
@@ -1088,6 +1077,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
 		l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
 		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
 	}
+
 	l.Debug().Msg("refreshed sources materialised view")
 
 	return &pb.UpdateLocationCapacityResponse{

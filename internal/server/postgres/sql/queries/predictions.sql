@@ -189,15 +189,15 @@ SELECT
     rp.target_time_utc,
     rp.init_time_utc,
     rp.metadata,
-    UUIDV7_EXTRACT_TIMESTAMP(rp.forecast_uuid) AS created_at_utc,
     COALESCE(
         sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
     )::REAL AS effective_capacity,
-    sh.capacity_unit_prefix_factor
+    sh.capacity_unit_prefix_factor,
+    UUIDV7_EXTRACT_TIMESTAMP(rp.forecast_uuid) AS created_at_utc
 FROM ranked_predictions AS rp
-INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
+    INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
 WHERE rp.rn = 1
-AND sh.sys_period @> rp.target_time_utc
+    AND sh.sys_period @> rp.target_time_utc
 ORDER BY rp.target_time_utc ASC;
 
 -- name: ListPredictionsAtTimeForLocations :many
@@ -247,7 +247,7 @@ FROM pred.predicted_generation_values AS pg
     INNER JOIN latest_relevant_forecasts AS rf USING (forecast_uuid)
     INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
 WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::INTEGER
-AND sh.sys_period @> pg.target_time_utc;
+    AND sh.sys_period @> pg.target_time_utc;
 
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed generation values

@@ -107,8 +107,7 @@ message GetObservationsAsTimeseriesResponse {
   }
 
   string location_uuid = 1;
-  string location_name = 2;
-  repeated Value values = 3;
+  repeated Value values = 2;
 }
 
 

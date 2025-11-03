@@ -316,25 +316,25 @@ func TestUpdateLocationCapacity(t *testing.T) {
 
 	require.NoError(t, err)
 
-	testcases := []struct{
-		name                   string
-		req *pb.UpdateLocationCapacityRequest
+	testcases := []struct {
+		name string
+		req  *pb.UpdateLocationCapacityRequest
 	}{
 		{
 			name: "Should update capacity to higher value",
 			req: &pb.UpdateLocationCapacityRequest{
-				LocationUuid:          createResp.LocationUuid,
-				EnergySource:          pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				LocationUuid:              createResp.LocationUuid,
+				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				NewEffectiveCapacityWatts: 2000000,
 			},
 		},
 		{
 			name: "Shouldn't update capacity with invalid location uuid",
 			req: &pb.UpdateLocationCapacityRequest{
-				LocationUuid:          "invalid-uuid",
-				EnergySource:          pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				LocationUuid:              "invalid-uuid",
+				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				NewEffectiveCapacityWatts: 1500000,
-				ValidFromUtc: 		 timestamppb.New(pivotTime.Add(3 * time.Hour)),
+				ValidFromUtc:              timestamppb.New(pivotTime.Add(3 * time.Hour)),
 			},
 		},
 	}
@@ -659,7 +659,8 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				actualValues[i] = v.P50ValueFraction
 
 				// Assert that the capacity change has been picked up
-				if v.TargetTimestampUtc.AsTime().After(pivotTime.Add(-1*time.Hour).Add(-1*time.Second)) {
+				if v.TargetTimestampUtc.AsTime().
+					After(pivotTime.Add(-1 * time.Hour).Add(-1 * time.Second)) {
 					require.Equal(t, 1500000, int(v.EffectiveCapacityWatts))
 				} else {
 					require.Equal(t, 1000000, int(v.EffectiveCapacityWatts))
