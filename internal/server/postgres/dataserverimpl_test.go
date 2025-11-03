@@ -298,6 +298,61 @@ func TestCreateLocation(t *testing.T) {
 	})
 }
 
+func TestUpdateLocationCapacity(t *testing.T) {
+	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+	require.NoError(t, err)
+
+	pivotTime := time.Now().Truncate(time.Minute)
+
+	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_update_location_capacity_site",
+		GeometryWkt:            "POINT(-0.1 51.5)",
+		EffectiveCapacityWatts: 1000000,
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-1 * time.Hour)),
+	})
+
+	require.NoError(t, err)
+
+	testcases := []struct {
+		name string
+		req  *pb.UpdateLocationCapacityRequest
+	}{
+		{
+			name: "Should update capacity to higher value",
+			req: &pb.UpdateLocationCapacityRequest{
+				LocationUuid:              createResp.LocationUuid,
+				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				NewEffectiveCapacityWatts: 2000000,
+			},
+		},
+		{
+			name: "Shouldn't update capacity with invalid location uuid",
+			req: &pb.UpdateLocationCapacityRequest{
+				LocationUuid:              "invalid-uuid",
+				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				NewEffectiveCapacityWatts: 1500000,
+				ValidFromUtc:              timestamppb.New(pivotTime.Add(3 * time.Hour)),
+			},
+		},
+	}
+
+	for _, tt := range testcases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := dc.UpdateLocationCapacity(t.Context(), tt.req)
+
+			if strings.Split(tt.name, " ")[0] == "Shouldn't" {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				// TODO: Can't test this worked without putting a time into GetLocation request
+			}
+		})
+	}
+}
+
 func TestCreateUpdateForecaster(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -488,6 +543,14 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 49)),
 	})
 	require.NoError(t, err)
+	// Update the capacity of the site to check it is reflected in the values
+	_, err = dc.UpdateLocationCapacity(t.Context(), &pb.UpdateLocationCapacityRequest{
+		LocationUuid:              siteResp.LocationUuid,
+		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		NewEffectiveCapacityWatts: 1500000,
+		ValidFromUtc:              timestamppb.New(pivotTime.Add(-time.Hour * 1)),
+	})
+	require.NoError(t, err)
 
 	// Create a forecaster to make the forecasts
 	forecasterResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
@@ -594,6 +657,14 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			for i, v := range resp.Values {
 				targetTimes[i] = v.TargetTimestampUtc.AsTime().Unix()
 				actualValues[i] = v.P50ValueFraction
+
+				// Assert that the capacity change has been picked up
+				if v.TargetTimestampUtc.AsTime().
+					After(pivotTime.Add(-1 * time.Hour).Add(-1 * time.Second)) {
+					require.Equal(t, 1500000, int(v.EffectiveCapacityWatts))
+				} else {
+					require.Equal(t, 1000000, int(v.EffectiveCapacityWatts))
+				}
 			}
 
 			require.IsIncreasing(t, targetTimes)

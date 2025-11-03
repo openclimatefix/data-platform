@@ -139,6 +139,8 @@ WITH relevant_forecasts AS (
     /* Get all the forecasts that fall within the time window for the given location, source, and forecaster */
     SELECT
         f.forecast_uuid,
+        f.location_uuid,
+        f.source_type_id,
         f.init_time_utc
     FROM pred.forecasts AS f
     WHERE f.location_uuid = $1
@@ -160,7 +162,9 @@ filtered_predictions AS (
         pg.target_time_utc,
         pg.metadata,
         relevant_forecasts.init_time_utc,
-        relevant_forecasts.forecast_uuid
+        relevant_forecasts.forecast_uuid,
+        relevant_forecasts.location_uuid,
+        relevant_forecasts.source_type_id
     FROM pred.predicted_generation_values AS pg
         INNER JOIN relevant_forecasts USING (forecast_uuid)
     WHERE pg.target_time_utc BETWEEN
@@ -185,9 +189,15 @@ SELECT
     rp.target_time_utc,
     rp.init_time_utc,
     rp.metadata,
+    COALESCE(
+        sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
+    )::REAL AS effective_capacity,
+    sh.capacity_unit_prefix_factor,
     UUIDV7_EXTRACT_TIMESTAMP(rp.forecast_uuid) AS created_at_utc
 FROM ranked_predictions AS rp
+    INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
 WHERE rp.rn = 1
+    AND sh.sys_period @> rp.target_time_utc
 ORDER BY rp.target_time_utc ASC;
 
 -- name: ListPredictionsAtTimeForLocations :many
@@ -200,6 +210,7 @@ WITH relevant_forecasts AS (
     SELECT
         f.forecast_uuid,
         f.location_uuid,
+        f.source_type_id,
         f.init_time_utc,
         ROW_NUMBER() OVER (PARTITION BY f.location_uuid ORDER BY f.init_time_utc DESC) AS rn
     FROM pred.forecasts AS f
@@ -213,21 +224,30 @@ latest_relevant_forecasts AS (
     SELECT
         rf.forecast_uuid,
         rf.location_uuid,
+        rf.source_type_id,
         rf.init_time_utc
     FROM relevant_forecasts AS rf
     WHERE rf.rn = 1
 )
 SELECT
+    rf.forecast_uuid,
     rf.location_uuid,
+    rf.source_type_id,
     pg.horizon_mins,
     pg.p10_sip,
     pg.p50_sip,
     pg.p90_sip,
     pg.target_time_utc,
-    pg.metadata
+    pg.metadata,
+    COALESCE(
+        sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
+    )::REAL AS effective_capacity,
+    sh.capacity_unit_prefix_factor
 FROM pred.predicted_generation_values AS pg
     INNER JOIN latest_relevant_forecasts AS rf USING (forecast_uuid)
-WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::INTEGER;
+    INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
+WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::INTEGER
+    AND sh.sys_period @> pg.target_time_utc;
 
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed generation values

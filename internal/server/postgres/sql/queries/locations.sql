@@ -40,8 +40,11 @@ FROM (
  */
 SELECT
     s.capacity,
-    s.capacity_unit_prefix_factor,
     s.capacity_limit_sip,
+    s.capacity_unit_prefix_factor,
+    COALESCE(
+        s.capacity_limit_sip::REAL * s.capacity / 30000.0, s.capacity::REAL
+    )::REAL AS capacity_inc_limit,
     s.source_type_id,
     s.metadata AS metadata_jsonb,
     s.location_uuid,
@@ -60,9 +63,11 @@ WHERE
  * If just querying for one source, it will be faster to use GetLocationSourceAtTimestamp.
  */
 SELECT
+    COALESCE(
+        s.capacity_limit_sip::REAL * s.capacity / 30000.0, s.capacity::REAL
+    )::REAL AS capacity_inc_limit,
     s.capacity,
     s.capacity_unit_prefix_factor,
-    s.capacity_limit_sip,
     s.source_type_id,
     s.metadata AS metadata_jsonb,
     s.location_uuid,
