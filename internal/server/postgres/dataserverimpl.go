@@ -557,10 +557,10 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 			DeltaFraction: float32(delta.AvgDeltaSip) / 30000.0,
 			HorizonMins:   uint32(delta.HorizonMins),
 			EffectiveCapacityWatts: uint64(
-				dbSource.Capacity,
+				dbSource.CapacityIncLimit,
 			) * uint64(
 				math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
-			), // TODO: Do this over time
+			), // Should this be done over time? I'm not sure how important this is to the response
 		}
 	}
 
@@ -593,7 +593,20 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 		)
 	}
 
-	// Get the observations
+	// Get the location
+	locParams := db.GetLocationsByFiltersParams{
+		LocationUuids: []uuid.UUID{locationUuid},
+	}
+	locResp, err := querier.GetLocationsByFilters(ctx, locParams)
+	if err != nil || len(locResp) != 1{
+		l.Err(err).Msgf("querier.GetLocationsByFilters(%+v)", locParams)
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No location found for UUID '%s'.",
+			req.LocationUuid,
+		)
+	}
+
 	start, end, err := timeWindowToPgWindow(req.TimeWindow)
 	if err != nil {
 		l.Err(err).Msgf("timeWindowToPgWindow(%+v)", req.TimeWindow)
@@ -634,7 +647,7 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 	return &pb.GetObservationsAsTimeseriesResponse{
 		LocationUuid: locationUuid.String(),
-		LocationName: "", // TODO
+		LocationName: locResp[0].LocationName,
 		Values:       values,
 	}, nil
 }
@@ -841,7 +854,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 			values = append(values, &pb.GetForecastAtTimestampResponse_Value{
 				ValueFraction: float32(dbCrossSection[idx].P50Sip) / 30000.0,
 				EffectiveCapacityWatts: uint64(
-					value.Capacity,
+					value.EffectiveCapacity,
 				) * uint64(
 					math.Pow10(int(value.CapacityUnitPrefixFactor)),
 				),
@@ -913,7 +926,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 			Longitude: dbSource.Longitude,
 		},
 		EffectiveCapacityWatts: uint64(
-			dbSource.Capacity,
+			dbSource.CapacityIncLimit,
 		) * uint64(
 			math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
 		),
@@ -1013,6 +1026,74 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		) * uint64(
 			math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
 		),
+	}, nil
+}
+
+func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
+	ctx context.Context,
+	req *pb.UpdateLocationCapacityRequest,
+) (*pb.UpdateLocationCapacityResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	if (req.ValidFromUtc.AsTime() == time.Time{}) {
+		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
+	}
+
+	// Get the location source
+	lsParams := db.GetLocationSourceAtTimestampParams{
+		LocationUuid:   uuid.MustParse(req.LocationUuid),
+		SourceTypeID:   int16(req.EnergySource.Number()),
+		AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+	}
+	dbSource,  err := querier.GetLocationSourceAtTimestamp(ctx, lsParams)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetLocationSourceAtTimestamp(%+v)", lsParams)
+		return nil, status.Errorf(
+			codes.NotFound,
+			"Location does not exist. Create the location before attempting to update capacity.",
+		)
+	}
+	cp, ex, err := capacityToValueMultiplier(req.NewEffectiveCapacityWatts)
+	if err != nil {
+		l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.NewEffectiveCapacityWatts)
+
+		return nil, status.Error(
+			codes.InvalidArgument,
+			"Invalid capacity. Ensure capacity is non-negative.",
+		)
+	}
+
+	csprms := db.CreateLocationSourceEntryParams{
+		LocationUuid:             dbSource.LocationUuid,
+		SourceTypeID:             dbSource.SourceTypeID,
+		Capacity:                 cp,
+		CapacityUnitPrefixFactor: ex,
+		CapacityLimitSip:         dbSource.CapacityLimitSip, // TODO: Enable updating this
+		ValidFromUtc:             pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
+		Metadata:                 dbSource.MetadataJsonb,
+	}
+	_, err = querier.CreateLocationSourceEntry(ctx, csprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.CreateLocationSourceEntry(%+v)", csprms)
+
+		return nil, status.Error(
+			codes.InvalidArgument,
+			"Invalid location source. Ensure metadata is NULL or a non-empty JSON object.",
+		)
+	}
+
+	err = querier.RefreshSourcesMaterializedView(ctx)
+	if err != nil {
+		l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
+		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
+	}
+	l.Debug().Msg("refreshed sources materialised view")
+
+	return &pb.UpdateLocationCapacityResponse{
+		LocationUuid:           req.LocationUuid,
+		LocationName:           dbSource.LocationName,
+		EffectiveCapacityWatts: req.NewEffectiveCapacityWatts,
 	}, nil
 }
 
@@ -1153,10 +1234,10 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			P10ValueFraction:   p10,
 			P90ValueFraction:   p90,
 			EffectiveCapacityWatts: uint64(
-				dbSource.Capacity,
+				value.EffectiveCapacity,
 			) * uint64(
-				math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
-			), // TODO: Capacity over time
+				math.Pow10(int(value.CapacityUnitPrefixFactor)),
+			),
 			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
 		}
