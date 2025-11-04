@@ -1288,6 +1288,12 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			l.Err(err).Msgf("querier.GetLocationsByFilters(%+v)", params)
 		} else {
 			for _, loc := range glResp {
+				metadata, err := jsonbToStruct(loc.SourceMetadata)
+				if err != nil {
+					l.Err(err).Msgf("jsonbToStruct(%s)", loc.SourceMetadata)
+					metadata = nil
+				}
+
 				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
 					LocationUuid: loc.LocationUuid.String(),
 					LocationName: loc.LocationName,
@@ -1302,6 +1308,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 					),
 					EnergySource: pb.EnergySource(loc.SourceTypeID),
 					LocationType: pb.LocationType(loc.LocationTypeID),
+					Metadata:     metadata,
 				})
 			}
 		}
@@ -1321,6 +1328,12 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			l.Err(err).Msgf("querier.GetLocationsByFilters(%+v)", params)
 		} else {
 			for _, loc := range glResp {
+				metadata, err := jsonbToStruct(loc.SourceMetadata)
+				if err != nil {
+					l.Err(err).Msgf("jsonbToStruct(%s)", loc.SourceMetadata)
+					metadata = nil
+				}
+
 				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
 					LocationUuid: loc.LocationUuid.String(),
 					LocationName: loc.LocationName,
@@ -1335,6 +1348,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 					),
 					EnergySource: pb.EnergySource(loc.SourceTypeID),
 					LocationType: pb.LocationType(loc.LocationTypeID),
+					Metadata:     metadata,
 				})
 			}
 		}

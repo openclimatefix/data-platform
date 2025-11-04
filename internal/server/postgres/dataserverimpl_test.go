@@ -675,6 +675,8 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 
 func TestListLocationsLocationFilters(t *testing.T) {
 	pivotTime := time.Now().Truncate(time.Minute)
+	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+	require.NoError(t, err)
 
 	// Create a bunch of locations
 	var locationUuids []string
@@ -693,7 +695,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 					EnergySource:           energySource,
 					LocationType:           locType,
 					ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
-					Metadata:               &structpb.Struct{},
+					Metadata:               metadata,
 				})
 				require.NoError(t, err)
 
@@ -800,6 +802,10 @@ func TestListLocationsLocationFilters(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tt.expectedCount, len(resp.Locations))
+
+				for _, loc := range resp.Locations {
+					require.Equal(t, metadata.AsMap(), loc.Metadata.AsMap())
+				}
 			}
 		})
 	}

@@ -155,7 +155,9 @@ WITH all_locations AS (
         l.location_name,
         l.location_type_id,
         ST_X(l.centroid)::REAL AS longitude,
-        ST_Y(l.centroid)::REAL AS latitude
+        ST_Y(l.centroid)::REAL AS latitude,
+        l.metadata AS location_metadata,
+        ls.metadata AS source_metadata
     FROM loc.sources_mv AS ls
         INNER JOIN loc.locations AS l USING (location_uuid)
         LEFT OUTER JOIN iam.location_policies AS lp USING (location_uuid, source_type_id)
@@ -185,7 +187,8 @@ WITH contained_locations AS (
         l.location_name,
         l.location_type_id,
         l.geom,
-        l.centroid
+        l.centroid,
+        l.metadata
     FROM loc.locations AS l
         INNER JOIN
             loc.locations AS l_outer ON ST_WITHIN(
@@ -205,7 +208,9 @@ all_locations AS (
         l.location_name,
         l.location_type_id,
         ST_X(l.centroid)::REAL AS longitude,
-        ST_Y(l.centroid)::REAL AS latitude
+        ST_Y(l.centroid)::REAL AS latitude,
+        l.metadata AS location_metadata,
+        ls.metadata AS source_metadata
     FROM loc.sources_mv AS ls
         INNER JOIN contained_locations AS l USING (location_uuid)
         LEFT OUTER JOIN iam.location_policies AS lp USING (location_uuid, source_type_id)
