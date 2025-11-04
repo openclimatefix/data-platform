@@ -51,10 +51,18 @@ with purpose and care.
 
 ### Database schema
 
-The Data Platform uses a PostgreSQL database to store its data. The schema for this database is
-defined in PostgreSQL's native SQL dialect in the `internal/server/postgres/sql/migrations`
-directory, and access functions to the data are defined in
-`internal/server/postgres/sql/queries`.
+The Data Platform can be configured to use different database backends. Each backend has a server
+implementation that inherits the External Schema. The currently supported backends are:
+
+- PostgreSQL
+- Dummy (a memoryless databse for quick testing)
+
+and are selected according to the relevant environment variables (see the
+[Configration](#configuration) section). 
+
+The schema for the PostgreSQL backend is defined using PostgreSQL's native SQL dialect in the
+`internal/server/postgres/sql/migrations` directory, and access functions to the data are defined
+in `internal/server/postgres/sql/queries`.
 
 Boilerplate code for using these queries is generated using the `sqlc` tool. This generated code
 provides a strongly typed interface to the database.
@@ -68,6 +76,11 @@ to be optimal with regards to its indexes.
 
 These changes can be made without having to update the data contract, and so will not require
 updates to clients using the Data Platform.
+
+> [!Note]
+> If using PostgreSQL as a backend, it is recommended that you tune your database instance
+> according to the specifications of said instance (available CPU and RAM etc). This will ensure
+> optimal performance for the Data Platform server.
 
 ### Server
 
@@ -89,9 +102,24 @@ $ docker run -p 50051:50051 ghcr.io/openclimatefix/data-platform
 ```
 
 Alternatively, it can be run locally using Go. See
-[Running the API Server](#running-the-api-server) in the [Development](#development) section.
+[Local Running](#local-running) in the [Development](#development) section.
 
 Once running, the server RPCs can be investigated using a gRPC client tool.
+
+### Configuration
+
+To connect to a backend database and have retention in the platform data, the server must be
+appropriately configured via environment variables. All available options are defined via the
+configuration file in `cmd/server.conf`.
+
+> [!Important]
+> Whilst the configuration is held in a file, this is NOT intended to be overwritten or modified in
+> order to configure the Data Platform. Configuration should always be handled via environment
+> variables; the config file is simply provided as a version-controlled single point of reference
+> for what those variables might be.
+
+The available configuration may differ between versions of the Data Platform. Ensure you check the
+correct version of the configuration file for your deployment.
 
 ### Running a client
 
@@ -138,12 +166,12 @@ This will fetch the dependencies, and install the git hooks required for develop
 > code up to date, and as such running `make init` is a necessary step towards a smooth development
 > experience.
 
-### Running the API Server
+### Local running
 
 The server can be run locally with no database connection via a fake database implementation:
 
 ```bash
-$ DATABASE_URL=fake go run cmd/main.go
+$ go run cmd/main.go
 ```
 
 or via the equivalent Makefile target:
@@ -157,10 +185,9 @@ investigated using a tool such as [grpcurl](https://github.com/fullstorydev/grpc
 [grpcui](https://fullstorydev/grpcui). In this testing mode, the data returned by the server is
 entirely generated and has little bearing on the request objects themselves.
 
-To connect to a real PostgresSQL database and have retention in the platform data, the
-`DATABASE_URL` environment variable must be set to an accessible Postgres instance. There is an
-example Docker compose file in `examples/docker-compose.yml`, which runs the Data Platform API
-server in a container, backed by Postgres, and which also includes a GRPC UI for testing.
+There is also an example Docker compose file in `examples/docker-compose.yml`, which runs the Data
+Platform API server in a container, backed by Postgres, and which also includes a GRPC UI for
+testing.
 
 ### Testing
 

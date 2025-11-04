@@ -138,9 +138,10 @@ gen.proto.openapi: install.protoc
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
 
 .PHONY: run # Run the Data Platform GRPC API.
-# Set DATABASE_URL="postgresql://postgres:postgres@localhost:5400/postgres" in env to connect to instance spawned with `make run.db`
+# NOTE: use `make DATABASE_URL="postgresql://postgres:postgres@localhost:5400/postgres run"
+# to connect to database instance spawned with `make run.db`
 run:
-	DATABASE_URL=${DATABASE_URL} LOGLEVEL=DEBUG go run cmd/main.go
+	go run cmd/main.go
 
 .PHONY: run.db # Run an instance of Postgres with the required extensions
 run.db:
