@@ -448,6 +448,7 @@ message ListLocationsResponse {
     LocationType location_type = 4;
     uint64 effective_capacity_watts = 5;
     LatLng latlng = 6;
+    google.protobuf.Struct metadata = 7;
   }
 
   repeated LocationSummary locations = 1;
