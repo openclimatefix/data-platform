@@ -168,13 +168,9 @@ This will fetch the dependencies, and install the git hooks required for develop
 
 ### Local running
 
-The server can be run locally with no database connection via a fake database implementation:
-
-```bash
-$ go run cmd/main.go
-```
-
-or via the equivalent Makefile target:
+The server can be run locally with no database connection via a fake database implementation via
+a Make target. This is recommended as it will ensure that code generation is up to date and that
+the running version has been embedded into the built binary.
 
 ```bash
 $ make run
