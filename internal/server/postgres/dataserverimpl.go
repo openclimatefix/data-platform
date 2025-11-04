@@ -156,7 +156,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	gsParams := db.GetLocationSourceAtTimestampParams{
 		LocationUuid:   locationUuid,
 		SourceTypeID:   int16(req.EnergySource.Number()),
-		AtTimestampUtc: pgtype.Timestamp{Time: req.InitTimeUtc.AsTime(), Valid: true},
+		AtTimestampUtc: pgtype.Timestamp{Time: req.InitTimeUtc.AsTime().UTC(), Valid: true},
 	}
 
 	dbSource, err := querier.GetLocationSourceAtTimestamp(ctx, gsParams)
@@ -253,10 +253,48 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
-	context.Context,
-	*pb.GetLatestForecastsRequest,
+	ctx context.Context,
+	req *pb.GetLatestForecastsRequest,
 ) (*pb.GetLatestForecastsResponse, error) {
-	panic("unimplemented")
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	if req.PivotTimestampUtc == nil {
+		req.PivotTimestampUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
+	}
+
+	glfprms := db.GetLatestForecastsAtHorizonSincePivotParams{
+		LocationUuid:   uuid.MustParse(req.LocationUuid),
+		SourceTypeID:   int16(req.EnergySource),
+		PivotTimestamp: pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true},
+	}
+
+	dbListForecasts, err := querier.GetLatestForecastsAtHorizonSincePivot(ctx, glfprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetLatestForecastsAtHorizonSincePivot(%+v)", glfprms)
+
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No forecasts found for location '%s'. Ensure location exists.",
+			req.LocationUuid,
+		)
+	}
+
+	forecasts := make([]*pb.GetLatestForecastsResponse_Forecast, len(dbListForecasts))
+	for i, fc := range dbListForecasts {
+		forecasts[i] = &pb.GetLatestForecastsResponse_Forecast{
+			InitializationTimestampUtc: timestamppb.New(fc.InitTimeUtc.Time),
+			Forecaster: &pb.Forecaster{
+				ForecasterName:    fc.ForecasterName,
+				ForecasterVersion: fc.ForecasterVersion,
+			},
+			LocationUuid: fc.LocationUuid.String(),
+		}
+	}
+
+	return &pb.GetLatestForecastsResponse{
+		Forecasts: forecasts,
+	}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) CreateForecaster(

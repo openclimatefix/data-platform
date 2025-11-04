@@ -384,10 +384,36 @@ func (d *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 // GetLatestForecasts implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) GetLatestForecasts(
-	context.Context,
-	*pb.GetLatestForecastsRequest,
+	ctx context.Context,
+	req *pb.GetLatestForecastsRequest,
 ) (*pb.GetLatestForecastsResponse, error) {
-	panic("unimplemented")
+	forecasts := make([]*pb.GetLatestForecastsResponse_Forecast, 5)
+
+	if req.PivotTimestampUtc == nil {
+		req.PivotTimestampUtc = timestamppb.New(time.Now().UTC())
+	}
+
+	for i := range forecasts {
+		forecasts[i] = &pb.GetLatestForecastsResponse_Forecast{
+			InitializationTimestampUtc: timestamppb.New(
+				req.PivotTimestampUtc.AsTime().Add(-time.Duration(i) * time.Hour),
+			),
+			CreatedTimestampUtc: timestamppb.New(
+				req.PivotTimestampUtc.AsTime().
+					Add(-time.Duration(i) * time.Hour).
+					Truncate(time.Hour),
+			),
+			Forecaster: &pb.Forecaster{
+				ForecasterName:    "DummyForecaster",
+				ForecasterVersion: "v1.0.0",
+			},
+			LocationUuid: uuid.New().String(),
+		}
+	}
+
+	return &pb.GetLatestForecastsResponse{
+		Forecasts: forecasts,
+	}, nil
 }
 
 // GetLocation implements dp.DataPlatformDataServiceServer.

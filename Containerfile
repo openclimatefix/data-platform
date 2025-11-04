@@ -27,5 +27,5 @@ RUN \
 FROM gcr.io/distroless/static-debian11 AS app
 
 COPY --from=build /go/src/app/bin/dp-server /
-CMD ["/dp-server"]
+ENTRYPOINT ["/dp-server"]
 
