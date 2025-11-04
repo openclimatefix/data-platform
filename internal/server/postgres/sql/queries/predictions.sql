@@ -31,18 +31,33 @@ WHERE p.forecaster_name = LOWER(sqlc.arg(forecaster_name)::TEXT)
     AND p.forecaster_version = desired_version.forecaster_version;
 
 -- name: GetForecastersByFilters :many
-/* GetForecastersByFilters retrieves forecasters filtered by optional name.
- * If no filters are provided, all forecasters are returned.
+/* GetForecastersByFilters retrieves forecasters according to a few filters.
+ * This may well deprecate the above query...
 */
+WITH ranked_forecasters AS (
+    SELECT
+        forecaster_id,
+        forecaster_name,
+        forecaster_version,
+        created_at_utc,
+        ROW_NUMBER() OVER(
+            PARTITION BY forecaster_name 
+            ORDER BY created_at_utc DESC
+        ) as rn
+    FROM pred.forecasters
+)
 SELECT
     forecaster_id,
     forecaster_name,
     forecaster_version,
     created_at_utc
-FROM pred.forecasters
+FROM ranked_forecasters
 WHERE (
     ARRAY_LENGTH(sqlc.arg(forecaster_names)::TEXT [], 1) IS NULL
     OR forecaster_name = ANY(sqlc.arg(forecaster_names)::TEXT [])
+)
+AND (
+    NOT sqlc.arg(latest_version_only)::BOOLEAN OR rn = 1
 )
 ORDER BY forecaster_name ASC, created_at_utc DESC;
 

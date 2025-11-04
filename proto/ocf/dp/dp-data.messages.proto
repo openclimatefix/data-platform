@@ -208,6 +208,8 @@ message ListForecastersRequest {
   // Optional filter to only return forecasters from a given set.
   // If empty, all forecasters will be returned.
   repeated string forecaster_names_filter = 1;
+  // If true, only the latest version of each forecaster will be returned.
+  bool latest_versions_only = 2;
 }
 
 message ListForecastersResponse {

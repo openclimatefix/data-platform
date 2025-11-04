@@ -457,11 +457,22 @@ func TestListForecasters(t *testing.T) {
 			expectedCount: 2 * 5,
 		},
 		{
-			name: "Should list only filtered forecasters",
+			name: "Should list only forecasters with filtered names",
 			req: &pb.ListForecastersRequest{
 				ForecasterNamesFilter: []string{"test_list_forecaster_1"},
 			},
 			expectedCount: 5,
+		},
+		{
+			name: "Should list only the latest versions when asked",
+			req: &pb.ListForecastersRequest{
+				ForecasterNamesFilter: []string{
+					"test_list_forecaster_1",
+					"test_list_forecaster_2",
+				},
+				LatestVersionsOnly: true,
+			},
+			expectedCount: 2,
 		},
 	}
 

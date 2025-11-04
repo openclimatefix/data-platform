@@ -256,13 +256,18 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 		forecaster_names = req.ForecasterNamesFilter
 	}
 
-	forecasters := make([]*pb.Forecaster, 5*len(forecaster_names))
+	num_versions := 5
+	if req.LatestVersionsOnly {
+		num_versions = 1
+	}
+
+	forecasters := make([]*pb.Forecaster, num_versions*len(forecaster_names))
 
 	for _, name := range forecaster_names {
-		for i := range 5 {
+		for i := range num_versions {
 			forecasters = append(forecasters, &pb.Forecaster{
 				ForecasterName:    name,
-				ForecasterVersion: fmt.Sprintf("v1.%d.0", i),
+				ForecasterVersion: fmt.Sprintf("v1.%d.0", num_versions - i),
 			})
 		}
 	}
