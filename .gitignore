@@ -12,6 +12,10 @@
 protogen
 genproto
 gen
+*.stamp
+
+# Built binary
+bin/
 
 # Test binary, built with `go test -c`
 *.test

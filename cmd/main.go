@@ -1,11 +1,11 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"net"
 	"slices"
 	"strings"
-	_ "embed"
 
 	"buf.build/go/protovalidate"
 	protovalidate_ix "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
@@ -24,11 +24,10 @@ import (
 	dbpg "github.com/openclimatefix/data-platform/internal/server/postgres"
 )
 
-
 //go:embed server.conf
 var confString string
 
-// Overwritten at build time
+// Overwritten at build time.
 var version string = "local"
 
 func main() {
@@ -36,6 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("error parsing configuration")
 	}
+
 	log.Debug().RawJSON("config", []byte(conf.String())).Msg("loaded configuration")
 
 	// Setup logging
@@ -43,6 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msgf("invalid log level: %s", conf.GetString("loglevel"))
 	}
+
 	zerolog.SetGlobalLevel(logLevel)
 
 	// Create a TCP listener on the specified port
@@ -59,7 +60,7 @@ func main() {
 		adminServerImpl pb.DataPlatformAdministrationServiceServer
 		s               *grpc.Server
 	)
-	
+
 	// Create a validator to use with protovalidate interceptor
 	validator, err := protovalidate.New()
 	if err != nil {

@@ -1,33 +1,60 @@
-OUT := bin/dp-server
+# --- CONFIGURATION ----------------------------------------------------------------------- #
+# Use GOPATH/bin or GOBIN, default to ~/go/bin
+GOPATH ?= $(shell go env GOPATH)
+GOBIN  := $(shell go env GOBIN)
+ifeq ($(GOBIN),)
+	GOBIN := $(GOPATH)/bin
+endif
 VERSION := $(shell git describe --tags --always --long --dirty)
+OUT := bin/dp-server
 
-# --- DEVELOPMENT TARGETS ------------------------------------------------------------------- #
+# --- Binaries and Tools ---
+PROTOC  := $(GOBIN)/protoc
+SQLC    := $(GOBIN)/sqlc
+LINTER  := $(GOBIN)/golangci-lint
+TESTSUM := $(GOBIN)/gotestsum
+PROTOC_GEN_GO    := $(GOBIN)/protoc-gen-go
+PROTOC_GEN_GRPC := $(GOBIN)/protoc-gen-go-grpc
+
+TOOLS := $(SQLC) $(LINTER) $(TESTSUM) $(PROTOC_GEN_GO) $(PROTOC_GEN_GRPC) $(PROTOC)
+
+# --- Sources ---
+GO_SOURCES := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
+PROTO_SOURCES := $(shell find proto/ocf/dp -name '*.proto')
+PROTO_STAMP_FILE := internal/gen/.protoc.stamp
+SQLC_SOURCES := $(shell find internal/server/postgres/sql -name '*.sql')
+SQLC_SOURCE_CONFIG := internal/server/postgres/.sqlc.yaml
+SQLC_STAMP_FILE := internal/server/postgres/.sqlc.stamp
+
+# --- MAIN TARGETS ------------------------------------------------------------------- #
+
+# Build the binary
+${OUT}: ${GO_SOURCES} ${PROTO_STAMP_FILE} ${SQLC_STAMP_FILE}
+	@go build -v -o=${OUT} -ldflags="-X 'main.version=${VERSION}'" cmd/main.go
+
+.PHONY: build
+build: ${OUT}
+
+.PHONY: run
+run: ${OUT}
+	@./${OUT}
 
 .PHONY: init
-init:
-	@GO_BIN="$${GOPATH:-$${HOME}/go}/bin"; \
-	if ! echo "$${PATH}" | grep -q "$${GO_BIN}"; then \
-		export PATH="$${PATH}:$${GO_BIN}"; \
-	fi
-	@echo "Generating code..."
-	@make gen
-	@echo "Installing Go dependencies..."
-	@go get ./...
-	@echo " * Success."
-	@echo "Adding git hooks..."
+init: tools gen
+	@go mod tidy
 	@git config --local core.hooksPath .github/hooks
 
-test:
-	go run gotest.tools/gotestsum@latest --format=testname --junitfile unit-tests.xml
+.PHONY: test
+test: ${TESTSUM}
+	@${TESTSUM} --format=testname --junitfile unit-tests.xml
 
 .PHONY: lint
-lint:
-	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
+lint: ${LINTER}
 	@go mod tidy
-	@golangci-lint run \
-	   --show-stats=false --fix
+	@${LINTER} run \
+		--show-stats=false --fix
 	@gofmt -l . # Lists files that are likely to be changed by the next command
-	@golangci-lint fmt
+	@${LINTER} fmt
 	@uvx -q sqlfluff fix -q \
 		--disable-progress-bar \
 		--config=internal/server/postgres/sql/.sqlfluff.toml \
@@ -37,16 +64,82 @@ lint:
 bench:
 	@go test ./...  -bench=. -run=^a -timeout=30m
 
+.PHONY: clean
+clean:
+	@echo "Cleaning up..."
+	@rm -f ${OUT}
+	@rm -f ${SQLC_STAMP_FILE}
+	@rm -rf internal/gen
+	@rm -f unit-tests.xml
 
-build:
-	go build -v -o=${OUT} -ldflags="-X 'main.version=${VERSION}'" cmd/main.go
+# --- Code Generation Targets ------------------------------------------------------------- #
 
-run: build
-	./${OUT}
+.PHONY: gen
+gen: ${PROTO_STAMP_FILE} ${SQLC_STAMP_FILE}
 
-gen: gen.db gen.proto.go
+.PHONY: gen.db
+gen.db: ${SQLC_STAMP_FILE}
+
+.PHONY: gen.proto.go
+gen.proto.go: ${PROTO_STAMP_FILE}
+
+# Depends on the sqlc binary, the config, and all .sql files.
+${SQLC_STAMP_FILE}: ${SQLC} ${SQLC_SOURCES} ${SQLC_SOURCE_CONFIG}
+	@echo "Generating internal database code..."
+	@${SQLC} generate --file ${SQLC_SOURCE_CONFIG}
+	@touch ${SQLC_STAMP_FILE}
+	@echo " * Success."
+
+# Depends on the protoc binary, plugins, and all .proto source files.
+${PROTO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SOURCES}
+	@echo "Generating internal protobuf code..."
+	@rm -rf internal/gen && mkdir -p internal/gen
+	@${PROTOC} \
+		${PROTO_SOURCES} \
+		-I=proto \
+		--go_out=internal/gen \
+		--go_opt=paths=source_relative \
+		--go-grpc_out=require_unimplemented_servers=false:internal/gen \
+		--go-grpc_opt=paths=source_relative
+	@touch ${PROTO_STAMP_FILE}
+	@echo " * Success."
 
 # --- SUPPLEMENTARY TARGETS ---------------------------------------------------------------------- #
+
+.PHONY: tools
+tools: ${TOOLS}
+
+${PROTOC}:
+	@echo "Installing protoc..."
+	@PB_REL="https://github.com/protocolbuffers/protobuf/releases" ;\
+	PB_VER="32.1" ;\
+	if [ "$$(uname -s)" = "Darwin" ]; then \
+		curl -L "$${PB_REL}/download/v$${PB_VER}/protoc-$${PB_VER}-osx-aarch_64.zip" -o /tmp/protoc.zip; \
+	elif [ "$$(uname -s)" = "Linux" ]; then \
+		curl -L "$${PB_REL}/download/v$${PB_VER}/protoc-$${PB_VER}-linux-x86_64.zip" -o /tmp/protoc.zip; \
+	else \
+		echo "Unsupported OS: $$(uname -s)"; exit 1; \
+	fi && unzip /tmp/protoc.zip -x readme.txt -d "$(GOPATH)" && rm /tmp/protoc.zip; \
+
+${SQLC}:
+	@echo "Installing sqlc..."
+	@go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
+
+${LINTER}:
+	@echo "Installing golangci-lint..."
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
+
+${TESTSUM}:
+	@echo "Installing gotestsum..."
+	@go install gotest.tools/gotestsum@latest
+
+${PROTOC_GEN_GO}:
+	@echo "Installing protoc-gen-go..."
+	@go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.9
+
+${PROTOC_GEN_GRPC}:
+	@echo "Installing protoc-gen-go-grpc..."
+	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 
 .PHONY: gen.db
 gen.db:
