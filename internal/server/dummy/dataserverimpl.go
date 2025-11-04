@@ -255,7 +255,7 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 	if len(req.ForecasterNamesFilter) != 0 {
 		forecaster_names = req.ForecasterNamesFilter
 	}
-	
+
 	forecasters := make([]*pb.Forecaster, 5*len(forecaster_names))
 
 	for _, name := range forecaster_names {
@@ -266,11 +266,11 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 			})
 		}
 	}
+
 	return &pb.ListForecastersResponse{
 		Forecasters: forecasters,
 	}, nil
 }
-
 
 // CreateLocation implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) CreateLocation(

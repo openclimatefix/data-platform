@@ -355,10 +355,10 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-
 	lfprms := db.GetForecastersByFiltersParams{
-	    ForecasterNames: req.ForecasterNamesFilter,
+		ForecasterNames: req.ForecasterNamesFilter,
 	}
+
 	dbListForecasters, err := querier.GetForecastersByFilters(ctx, lfprms)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetForecastersByFilters(%+v)", lfprms)
@@ -376,6 +376,7 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 			ForecasterVersion: fc.ForecasterVersion,
 		}
 	}
+
 	return &pb.ListForecastersResponse{
 		Forecasters: forecasters,
 	}, nil

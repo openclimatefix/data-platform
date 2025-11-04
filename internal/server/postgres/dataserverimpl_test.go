@@ -431,6 +431,7 @@ func TestListForecasters(t *testing.T) {
 			Version: "v0",
 		})
 		require.NoError(t, err)
+
 		for i := range 4 {
 			_, err := dc.UpdateForecaster(t.Context(), &pb.UpdateForecasterRequest{
 				Name:       name,
@@ -441,13 +442,13 @@ func TestListForecasters(t *testing.T) {
 	}
 
 	testcases := []struct {
-		name           string
-		req            *pb.ListForecastersRequest
+		name          string
+		req           *pb.ListForecastersRequest
 		expectedCount int
 	}{
 		{
 			name: "Should return all forecasters",
-			req:  &pb.ListForecastersRequest{
+			req: &pb.ListForecastersRequest{
 				ForecasterNamesFilter: []string{
 					"test_list_forecaster_1",
 					"test_list_forecaster_2",
@@ -457,7 +458,7 @@ func TestListForecasters(t *testing.T) {
 		},
 		{
 			name: "Should list only filtered forecasters",
-			req:  &pb.ListForecastersRequest{
+			req: &pb.ListForecastersRequest{
 				ForecasterNamesFilter: []string{"test_list_forecaster_1"},
 			},
 			expectedCount: 5,
