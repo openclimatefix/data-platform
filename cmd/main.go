@@ -52,8 +52,8 @@ func main() {
 		log.Fatal().Err(err).Msgf("net.Listen({tcp: %d})", conf.GetInt("port"))
 	}
 
-	// Choose the server implementation based on the environment
-	databaseUrl := strings.ToLower(conf.GetString("dburl"))
+	// Remove any errant quotation marks from the dburl
+	databaseUrl := strings.Trim(conf.GetString("dburl"), "\"")
 
 	var (
 		dataServerImpl  pb.DataPlatformDataServiceServer

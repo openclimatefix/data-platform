@@ -98,9 +98,9 @@ INSERT INTO pred.predicted_generation_values (
     $1, $2, $3, $4, $5, $6, $7
 );
 
--- name: GetLatestForecastAtHorizonSincePivot :one
-/* GetLatestForecastAtHorizonSincePivot retrieves the latest forecast for a given location,
- * source type, and forecaster. Only forecasts that are older than the pivot time
+-- name: GetLatestForecastsAtHorizonSincePivot :many
+/* GetLatestForecastAtHorizonSincePivot retrieves the latest forecasts for a given location
+ * and source type made by all forecasters. Only forecasts that are older than the pivot time
  * minus the specified horizon are considered.
  */
 SELECT
@@ -108,13 +108,15 @@ SELECT
     f.init_time_utc,
     f.source_type_id,
     f.location_uuid,
-    f.forecaster_id
+    fr.forecaster_name,
+    fr.forecaster_version,
+    UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid) AS created_at_utc
 FROM pred.forecasts AS f
+    INNER JOIN pred.forecasters AS fr USING (forecaster_id)
 WHERE f.location_uuid = $1
     AND f.source_type_id = $2
-    AND f.forecaster_id = $3
     AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-ORDER BY f.init_time_utc DESC LIMIT 1;
+ORDER BY f.init_time_utc DESC;
 
 -- name: ListForecasts :many
 /* ListForecasts retrieves all the forecasts for a given location, source type, and forecaster
