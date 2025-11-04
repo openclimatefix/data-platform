@@ -267,7 +267,7 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 		for i := range num_versions {
 			forecasters = append(forecasters, &pb.Forecaster{
 				ForecasterName:    name,
-				ForecasterVersion: fmt.Sprintf("v1.%d.0", num_versions - i),
+				ForecasterVersion: fmt.Sprintf("v1.%d.0", num_versions-i),
 			})
 		}
 	}

@@ -40,10 +40,10 @@ WITH ranked_forecasters AS (
         forecaster_name,
         forecaster_version,
         created_at_utc,
-        ROW_NUMBER() OVER(
-            PARTITION BY forecaster_name 
+        ROW_NUMBER() OVER (
+            PARTITION BY forecaster_name
             ORDER BY created_at_utc DESC
-        ) as rn
+        ) AS rn
     FROM pred.forecasters
 )
 SELECT

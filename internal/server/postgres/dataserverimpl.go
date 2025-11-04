@@ -356,7 +356,7 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	lfprms := db.GetForecastersByFiltersParams{
-		ForecasterNames: req.ForecasterNamesFilter,
+		ForecasterNames:   req.ForecasterNamesFilter,
 		LatestVersionOnly: req.LatestVersionsOnly,
 	}
 
