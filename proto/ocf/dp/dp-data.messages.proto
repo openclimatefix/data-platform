@@ -187,6 +187,7 @@ message CreateForecasterResponse {
   Forecaster forecaster = 1;
 }
 
+
 message UpdateForecasterRequest {
   string name = 1 [
     (buf.validate.field).string.min_len = 2,
@@ -200,6 +201,19 @@ message UpdateForecasterRequest {
 
 message UpdateForecasterResponse {
   Forecaster forecaster = 1;
+}
+
+
+message ListForecastersRequest {
+  // Optional filter to only return forecasters from a given set.
+  // If empty, all forecasters will be returned.
+  repeated string forecaster_names_filter = 1;
+  // If true, only the latest version of each forecaster will be returned.
+  bool latest_versions_only = 2;
+}
+
+message ListForecastersResponse {
+  repeated Forecaster forecasters = 1;
 }
 
 

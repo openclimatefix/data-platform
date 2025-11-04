@@ -118,7 +118,7 @@ func TestCapacityToMultiplier(t *testing.T) {
 		shouldError        bool
 	}
 
-	tests := []TestCase{
+	testcases := []TestCase{
 		{0, 0, 0, false},
 		{500000, 500, 3, false},
 		{32767000, 32767, 3, false},
@@ -128,7 +128,7 @@ func TestCapacityToMultiplier(t *testing.T) {
 		{12345678000, 12346, 6, false},  // 12 GW
 	}
 
-	for _, test := range tests {
+	for _, test := range testcases {
 		t.Run(fmt.Sprintf("capacityWatts=%d", test.capacityWatts), func(t *testing.T) {
 			capacity, prefix, err := capacityToValueMultiplier(test.capacityWatts)
 			if test.shouldError {
@@ -146,7 +146,7 @@ func TestCreateLocation(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
-	tests := []struct {
+	testcases := []struct {
 		name string
 		req  *pb.CreateLocationRequest
 	}{
@@ -262,7 +262,7 @@ func TestCreateLocation(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testcases {
 		t.Run(tt.name, func(t *testing.T) {
 			resp, err := dc.CreateLocation(t.Context(), tt.req)
 
@@ -354,7 +354,7 @@ func TestUpdateLocationCapacity(t *testing.T) {
 }
 
 func TestCreateUpdateForecaster(t *testing.T) {
-	tests := []struct {
+	testcases := []struct {
 		name      string
 		createReq *pb.CreateForecasterRequest
 		updateReq *pb.UpdateForecasterRequest
@@ -403,7 +403,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testcases {
 		var err error
 		if tt.createReq != nil {
 			_, err = dc.CreateForecaster(t.Context(), tt.createReq)
@@ -418,6 +418,74 @@ func TestCreateUpdateForecaster(t *testing.T) {
 		} else {
 			require.NoError(t, err)
 		}
+	}
+}
+
+func TestListForecasters(t *testing.T) {
+	for _, name := range []string{
+		"test_list_forecaster_1",
+		"test_list_forecaster_2",
+	} {
+		_, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
+			Name:    name,
+			Version: "v0",
+		})
+		require.NoError(t, err)
+
+		for i := range 4 {
+			_, err := dc.UpdateForecaster(t.Context(), &pb.UpdateForecasterRequest{
+				Name:       name,
+				NewVersion: fmt.Sprintf("v%d", i+1),
+			})
+			require.NoError(t, err)
+		}
+	}
+
+	testcases := []struct {
+		name          string
+		req           *pb.ListForecastersRequest
+		expectedCount int
+	}{
+		{
+			name: "Should return all forecasters",
+			req: &pb.ListForecastersRequest{
+				ForecasterNamesFilter: []string{
+					"test_list_forecaster_1",
+					"test_list_forecaster_2",
+				},
+			},
+			expectedCount: 2 * 5,
+		},
+		{
+			name: "Should list only forecasters with filtered names",
+			req: &pb.ListForecastersRequest{
+				ForecasterNamesFilter: []string{"test_list_forecaster_1"},
+			},
+			expectedCount: 5,
+		},
+		{
+			name: "Should list only the latest versions when asked",
+			req: &pb.ListForecastersRequest{
+				ForecasterNamesFilter: []string{
+					"test_list_forecaster_1",
+					"test_list_forecaster_2",
+				},
+				LatestVersionsOnly: true,
+			},
+			expectedCount: 2,
+		},
+	}
+
+	for _, tt := range testcases {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := dc.ListForecasters(t.Context(), tt.req)
+			if strings.Contains(tt.name, "Shouldn't") {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedCount, len(resp.Forecasters))
+			}
+		})
 	}
 }
 
@@ -586,7 +654,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 	}
 
 	// For each horizon, get the predicted timeseries
-	tests := []struct {
+	testcases := []struct {
 		horizonMins    int32
 		expectedValues []float32
 	}{
@@ -636,7 +704,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testcases {
 		t.Run(fmt.Sprintf("Horizon %d mins", tt.horizonMins), func(t *testing.T) {
 			resp, err := dc.GetForecastAsTimeseries(t.Context(), &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: siteResp.LocationUuid,
@@ -716,7 +784,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 	// TODO: This is a fairly minimal test suite, and I imagine there are plenty of edge cases that
 	// are not covered here. This purely covers the basic filtering functionality, and should by
 	// improved upon in future.
-	tests := []struct {
+	testcases := []struct {
 		name          string
 		req           *pb.ListLocationsRequest
 		expectedCount int
@@ -794,7 +862,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testcases {
 		t.Run(tt.name, func(t *testing.T) {
 			resp, err := dc.ListLocations(t.Context(), tt.req)
 			if strings.Contains(tt.name, "Shouldn't") {
@@ -853,7 +921,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tests := []struct {
+	testcases := []struct {
 		startTime    time.Time
 		endTime      time.Time
 		expectedSize int
@@ -865,7 +933,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testcases {
 		t.Run(fmt.Sprintf("Size %d", tt.expectedSize), func(t *testing.T) {
 			resp, err := dc.GetObservationsAsTimeseries(
 				t.Context(),
@@ -1034,7 +1102,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(b, err)
 
-	tests := []seedDBParams{
+	testcases := []seedDBParams{
 		{
 			NamePrefix:              "benchmark_6m",
 			NumLocations:            500,
@@ -1045,7 +1113,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 			PivotTime:               pivotTime,
 		},
 	}
-	for _, tt := range tests {
+	for _, tt := range testcases {
 		output := seed(b, pgConnString, tt)
 
 		// Create some test yields
