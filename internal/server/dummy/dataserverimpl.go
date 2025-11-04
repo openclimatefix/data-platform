@@ -246,6 +246,32 @@ func (d *DataPlatformDataServiceServerImpl) CreateForecaster(
 	}, nil
 }
 
+// ListForecasters implements dp.DataPlatformDataServiceServer.
+func (s *DataPlatformDataServiceServerImpl) ListForecasters(
+	ctx context.Context,
+	req *pb.ListForecastersRequest,
+) (*pb.ListForecastersResponse, error) {
+	forecaster_names := []string{"DummyForecaster", "FakeForecaster"}
+	if len(req.ForecasterNamesFilter) != 0 {
+		forecaster_names = req.ForecasterNamesFilter
+	}
+	
+	forecasters := make([]*pb.Forecaster, 5*len(forecaster_names))
+
+	for _, name := range forecaster_names {
+		for i := range 5 {
+			forecasters = append(forecasters, &pb.Forecaster{
+				ForecasterName:    name,
+				ForecasterVersion: fmt.Sprintf("v1.%d.0", i),
+			})
+		}
+	}
+	return &pb.ListForecastersResponse{
+		Forecasters: forecasters,
+	}, nil
+}
+
+
 // CreateLocation implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) CreateLocation(
 	ctx context.Context,

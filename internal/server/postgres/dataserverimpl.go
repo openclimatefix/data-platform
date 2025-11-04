@@ -348,6 +348,39 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 	}, nil
 }
 
+func (s *DataPlatformDataServiceServerImpl) ListForecasters(
+	ctx context.Context,
+	req *pb.ListForecastersRequest,
+) (*pb.ListForecastersResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+
+	lfprms := db.GetForecastersByFiltersParams{
+	    ForecasterNames: req.ForecasterNamesFilter,
+	}
+	dbListForecasters, err := querier.GetForecastersByFilters(ctx, lfprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetForecastersByFilters(%+v)", lfprms)
+
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No forecasters found with the specified filters",
+		)
+	}
+
+	forecasters := make([]*pb.Forecaster, len(dbListForecasters))
+	for i, fc := range dbListForecasters {
+		forecasters[i] = &pb.Forecaster{
+			ForecasterName:    fc.ForecasterName,
+			ForecasterVersion: fc.ForecasterVersion,
+		}
+	}
+	return &pb.ListForecastersResponse{
+		Forecasters: forecasters,
+	}, nil
+}
+
 func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 	req *pb.StreamForecastDataRequest,
 	stream grpc.ServerStreamingServer[pb.StreamForecastDataResponse],
@@ -701,7 +734,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	if err != nil {
 		return nil, status.Error(
 			codes.InvalidArgument,
-			"Invalid observation values. Ensure the values are greater than zero and less than 110%.",
+			"Invalid observation values. Ensure the values are greater than zero, less than 110% of capacity.",
 		)
 	}
 

@@ -34,6 +34,7 @@ service DataPlatformDataService {
 
   rpc CreateForecaster(CreateForecasterRequest) returns (CreateForecasterResponse) {}
   rpc UpdateForecaster(UpdateForecasterRequest) returns (UpdateForecasterResponse) {}
+  rpc ListForecasters(ListForecastersRequest) returns (ListForecastersResponse) {}
 
   rpc CreateForecast(CreateForecastRequest) returns (CreateForecastResponse) {}
   rpc GetLatestForecasts(GetLatestForecastsRequest) returns (GetLatestForecastsResponse) {}
