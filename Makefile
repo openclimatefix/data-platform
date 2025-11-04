@@ -11,12 +11,9 @@ OUT := bin/dp-server
 # --- Binaries and Tools ---
 PROTOC  := $(GOBIN)/protoc
 SQLC    := $(GOBIN)/sqlc
-LINTER  := $(GOBIN)/golangci-lint
-TESTSUM := $(GOBIN)/gotestsum
 PROTOC_GEN_GO    := $(GOBIN)/protoc-gen-go
 PROTOC_GEN_GRPC := $(GOBIN)/protoc-gen-go-grpc
-
-TOOLS := $(SQLC) $(LINTER) $(TESTSUM) $(PROTOC_GEN_GO) $(PROTOC_GEN_GRPC) $(PROTOC)
+TOOLS := $(SQLC) $(PROTOC) $(PROTOC_GEN_GO) $(PROTOC_GEN_GRPC)
 
 # --- Sources ---
 GO_SOURCES := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
@@ -45,16 +42,16 @@ init: tools gen
 	@git config --local core.hooksPath .github/hooks
 
 .PHONY: test
-test: ${TESTSUM} gen
-	@${TESTSUM} --format=testname --junitfile unit-tests.xml
+test: gen
+	@go run gotest.tools/gotestsum@latest --format=testname --junitfile unit-tests.xml
 
 .PHONY: lint
-lint: ${LINTER}
+lint:
 	@go mod tidy
-	@${LINTER} run \
+	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0 run \
 		--show-stats=false --fix
 	@gofmt -l . # Lists files that are likely to be changed by the next command
-	@${LINTER} fmt
+	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0 fmt
 	@uvx -q sqlfluff fix -q \
 		--disable-progress-bar \
 		--config=internal/server/postgres/sql/.sqlfluff.toml \
