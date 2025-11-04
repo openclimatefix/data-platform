@@ -28,6 +28,9 @@ import (
 //go:embed server.conf
 var confString string
 
+// Overwritten at build time
+var version string = "local"
+
 func main() {
 	conf, err := hocon.ParseString(confString)
 	if err != nil {
@@ -107,6 +110,6 @@ func main() {
 	grpc_health_v1.RegisterHealthServer(s, health.NewServer())
 	reflection.Register(s)
 
-	log.Info().Msgf("listening on :%d", conf.GetInt("port"))
+	log.Info().Str("version", version).Msgf("listening on :%d", conf.GetInt("port"))
 	_ = s.Serve(lis) // If this errors, we want it to panic! It's fundamental
 }

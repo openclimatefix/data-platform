@@ -25,10 +25,10 @@ RUN \
     --mount=type=cache,target=/go/bin,sharing=locked \
     --mount=type=cache,target=/go/include,sharing=locked \
     make gen
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /go/bin/app cmd/main.go
+RUN make CGO_ENABLED=0 GOOS=linux GOARCH=amd64 build
 
 FROM gcr.io/distroless/static-debian11 AS app
 
-COPY --from=build /go/bin/app /
-CMD ["/app"]
+COPY --from=build bin/dp-server /
+CMD ["/dp-server"]
 

@@ -1,3 +1,6 @@
+OUT := bin/dp-server
+VERSION := $(shell git describe --tags --always --long --dirty)
+
 # --- DEVELOPMENT TARGETS ------------------------------------------------------------------- #
 
 .PHONY: init
@@ -14,7 +17,6 @@ init:
 	@echo "Adding git hooks..."
 	@git config --local core.hooksPath .github/hooks
 
-.PHONY: test
 test:
 	go run gotest.tools/gotestsum@latest --format=testname --junitfile unit-tests.xml
 
@@ -35,14 +37,14 @@ lint:
 bench:
 	@go test ./...  -bench=. -run=^a -timeout=30m
 
-.PHONY: gen
-gen: gen.db gen.proto.go
 
-.PHONY: doctor
-doctor:
-	@go version
-	@protoc --version || echo "protoc not installed"
-	@echo "sqlc $$(sqlc version || echo "not installed")"
+build:
+	go build -v -o=${OUT} -ldflags="-X 'main.version=${VERSION}'" cmd/main.go
+
+run: build
+	./${OUT}
+
+gen: gen.db gen.proto.go
 
 # --- SUPPLEMENTARY TARGETS ---------------------------------------------------------------------- #
 
@@ -137,12 +139,6 @@ gen.proto.openapi: install.protoc
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
 
-.PHONY: run # Run the Data Platform GRPC API.
-# NOTE: use `make DATABASE_URL="postgresql://postgres:postgres@localhost:5400/postgres run"
-# to connect to database instance spawned with `make run.db`
-run:
-	go run cmd/main.go
-
 .PHONY: run.db # Run an instance of Postgres with the required extensions
 run.db:
 	docker build -f internal/server/postgres/infra/Containerfile internal/server/postgres/infra -t data-platform-pgdb:local
@@ -155,3 +151,10 @@ run.client:
 .PHONY: run.notebook # Run a python notebook to inspect the API
 run.notebook: gen.proto.python
 	uvx marimo edit --headless --sandbox examples/python-notebook/example.py
+
+.PHONY: doctor
+doctor:
+	@go version
+	@protoc --version || echo "protoc not installed"
+	@echo "sqlc $$(sqlc version || echo "not installed")"
+
