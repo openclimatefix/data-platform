@@ -20,6 +20,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
+          token: ${{ secrets.OCF_BOT_PAT_TOKEN }}
 
       # Bump tag according to conventional commit rules
       # See https://www.conventionalcommits.org/en/v1.0.0

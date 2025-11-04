@@ -1,13 +1,15 @@
 package main
 
 import (
+	_ "embed"
+	"fmt"
 	"net"
-	"os"
 	"slices"
 	"strings"
 
 	"buf.build/go/protovalidate"
 	protovalidate_ix "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/protovalidate"
+	"github.com/gurkankaymak/hocon"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -22,29 +24,36 @@ import (
 	dbpg "github.com/openclimatefix/data-platform/internal/server/postgres"
 )
 
+//go:embed server.conf
+var confString string
+
+// Overwritten at build time.
+var version string = "local"
+
 func main() {
-	// Set logging level based on environment
-	logLevel, err := zerolog.ParseLevel(os.Getenv("LOGLEVEL"))
+	conf, err := hocon.ParseString(confString)
 	if err != nil {
-		logLevel = zerolog.InfoLevel
+		log.Fatal().Err(err).Msg("error parsing configuration")
+	}
+
+	log.Debug().RawJSON("config", []byte(conf.String())).Msg("loaded configuration")
+
+	// Setup logging
+	logLevel, err := zerolog.ParseLevel(conf.GetString("loglevel"))
+	if err != nil {
+		log.Fatal().Err(err).Msgf("invalid log level: %s", conf.GetString("loglevel"))
 	}
 
 	zerolog.SetGlobalLevel(logLevel)
 
-	// Open a listener on port 50051
-	lis, err := net.Listen("tcp", ":50051")
+	// Create a TCP listener on the specified port
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", conf.GetInt("port")))
 	if err != nil {
-		log.Fatal().Err(err).Msg("net.Listen({tcp: 500051})")
-	}
-
-	// Create a validator to use with protovalidate interceptor
-	validator, err := protovalidate.New()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create validator")
+		log.Fatal().Err(err).Msgf("net.Listen({tcp: %d})", conf.GetInt("port"))
 	}
 
 	// Choose the server implementation based on the environment
-	databaseUrl := os.Getenv("DATABASE_URL")
+	databaseUrl := strings.ToLower(conf.GetString("dburl"))
 
 	var (
 		dataServerImpl  pb.DataPlatformDataServiceServer
@@ -52,8 +61,14 @@ func main() {
 		s               *grpc.Server
 	)
 
+	// Create a validator to use with protovalidate interceptor
+	validator, err := protovalidate.New()
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create validator")
+	}
+
 	if slices.Contains([]string{"", "dummy", "fake"}, strings.ToLower(databaseUrl)) {
-		log.Warn().Msg("Running in test mode with fake data. Not for production use")
+		log.Warn().Msg("running in test mode with fake data. Not for production use")
 
 		dataServerImpl = dbdy.NewDataPlatformDataServerImpl()
 		adminServerImpl = dbdy.NewDataPlatformAdministrationServiceServerImpl()
@@ -86,18 +101,16 @@ func main() {
 			),
 		)
 	} else {
-		log.Fatal().Str("url", databaseUrl).Msg("Unsupported DATABASE_URL format")
+		log.Fatal().Str("url", databaseUrl).Msg("unsupported DATABASE_URL format")
 	}
 
 	// Create the GRPC server
 	// * Add an interceptor for request validation
-	log.Debug().Int("port", 50051).Msg("Starting GRPC server")
-
 	pb.RegisterDataPlatformDataServiceServer(s, dataServerImpl)
 	pb.RegisterDataPlatformAdministrationServiceServer(s, adminServerImpl)
 	grpc_health_v1.RegisterHealthServer(s, health.NewServer())
 	reflection.Register(s)
 
-	log.Info().Msg("Listening on :50051")
+	log.Info().Str("version", version).Msgf("listening on :%d", conf.GetInt("port"))
 	_ = s.Serve(lis) // If this errors, we want it to panic! It's fundamental
 }
