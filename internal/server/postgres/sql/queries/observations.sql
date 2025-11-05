@@ -32,7 +32,6 @@ INSERT INTO obs.observed_generation_values (
 /* GetObservationsBetween gets observations between two timestamps
  * and returns their values as 16-bit integers, with 0 representing 0%
  * and 30000 representing 100% of capacity.
- * This is faster than converting the values to percentages.
  */
 SELECT
     og.location_uuid,
@@ -51,3 +50,29 @@ WHERE
     AND og.observer_uuid = $3
     AND og.observation_timestamp_utc BETWEEN sqlc.arg(start_time_utc)::TIMESTAMP AND sqlc.arg(end_time_utc)::TIMESTAMP
     AND sh.sys_period @> og.observation_timestamp_utc;
+
+-- name: GetLatestObservation :one
+/* GetLatestObservation gets the latest observation for a given location, source type, and observer.
+ * The value is returned as a 16-bit integer, with 0 representing 0%
+ * and 30000 representing 100% of capacity.
+ */
+SELECT
+    og.location_uuid,
+    og.source_type_id,
+    og.observation_timestamp_utc,
+    og.value_sip,
+    COALESCE(
+        sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
+    )::REAL AS capacity_inc_limit,
+    sh.capacity_unit_prefix_factor
+FROM obs.observed_generation_values AS og
+    INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
+    INNER JOIN obs.observers AS o USING (observer_uuid)
+WHERE
+    og.location_uuid = $1
+    AND og.source_type_id = $2
+    AND o.observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
+    AND sh.sys_period @> og.observation_timestamp_utc
+    AND og.observation_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
+ORDER BY og.observation_timestamp_utc DESC
+LIMIT 1;

@@ -121,6 +121,19 @@ func jsonbToStruct(data []byte) (*structpb.Struct, error) {
 	return s, nil
 }
 
+// timeptrToPgTimestamp converts a protobuf Timestamp pointer to a pgtype.Timestamp.
+// If the pointer is nil, it returns the current time truncated to the nearest minute.
+func timeptrToPgTimestamp(t *timestamppb.Timestamp) pgtype.Timestamp {
+	if t == nil {
+		return pgtype.Timestamp{
+			Time:  time.Now().UTC().Truncate(time.Minute),
+			Valid: true,
+		}
+	}
+
+	return pgtype.Timestamp{Time: t.AsTime().UTC(), Valid: true}
+}
+
 // --- Server Implementation ----------------------------------------------------------------------
 
 func NewDataPlatformDataServiceServerImpl() *DataPlatformDataServiceServerImpl {
@@ -156,7 +169,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	gsParams := db.GetLocationSourceAtTimestampParams{
 		LocationUuid:   locationUuid,
 		SourceTypeID:   int16(req.EnergySource.Number()),
-		AtTimestampUtc: pgtype.Timestamp{Time: req.InitTimeUtc.AsTime().UTC(), Valid: true},
+		AtTimestampUtc: timeptrToPgTimestamp(req.InitTimeUtc),
 	}
 
 	dbSource, err := querier.GetLocationSourceAtTimestamp(ctx, gsParams)
@@ -169,7 +182,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		)
 	}
 
-	resolution_mins := req.Values[1].HorizonMins - req.Values[0].HorizonMins // TODO: Check they are all the same
+	resolution_mins := req.Values[1].HorizonMins - req.Values[0].HorizonMins
+	// NOTE: The above assumes the the horizon values are uniformly spaced.
+	// Perhaps this ought to be checked?
 
 	// Check the forecaster exists
 	pctParams := db.GetForecasterElseLatestParams{
@@ -195,10 +210,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		ForecasterName:      req.Forecaster.ForecasterName,
 		ForecasterVersion:   req.Forecaster.ForecasterVersion,
 		ValueResolutionMins: int16(resolution_mins),
-		InitTimeUtc: pgtype.Timestamp{
-			Time:  req.InitTimeUtc.AsTime(),
-			Valid: true,
-		},
+		InitTimeUtc:         timeptrToPgTimestamp(req.InitTimeUtc),
 	}
 
 	dbForecast, err := querier.CreateForecast(ctx, params2)
@@ -548,6 +560,8 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
+	pivotTime := timeptrToPgTimestamp(req.PivotTimestamp)
+
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
@@ -558,7 +572,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	gstParams := db.GetLocationSourceAtTimestampParams{
 		LocationUuid:   locationUuid,
 		SourceTypeID:   int16(req.EnergySource.Number()),
-		AtTimestampUtc: pgtype.Timestamp{Time: req.PivotTime.AsTime(), Valid: true},
+		AtTimestampUtc: pivotTime,
 	}
 
 	dbSource, err := querier.GetLocationSourceAtTimestamp(ctx, gstParams)
@@ -606,7 +620,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 		SourceTypeID:   dbSource.SourceTypeID,
 		ForecasterID:   dbForecaster.ForecasterID,
 		ObserverUuid:   dbObserver.ObserverUuid,
-		PivotTimestamp: pgtype.Timestamp{Time: req.PivotTime.AsTime(), Valid: true},
+		PivotTimestamp: pivotTime,
 		LocationUuids:  []uuid.UUID{locationUuid},
 	}
 
@@ -639,7 +653,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	return &pb.GetWeekAverageDeltasResponse{
 		Deltas:        deltas,
-		InitTimeOfDay: req.PivotTime.AsTime().Format("03:04"),
+		InitTimeOfDay: pivotTime.Time.Format("03:04"),
 	}, nil
 }
 
@@ -785,6 +799,41 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	)
 
 	return &pb.CreateObservationsResponse{}, nil
+}
+
+func (s *DataPlatformDataServiceServerImpl) GetLatestObservation(
+	ctx context.Context,
+	req *pb.GetLatestObservationRequest,
+) (*pb.GetLatestObservationResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	goprms := db.GetLatestObservationParams{
+		LocationUuid: uuid.MustParse(req.LocationUuid),
+		SourceTypeID: int16(req.EnergySource),
+		ObserverName: req.ObserverName,
+		PivotTimeUtc: timeptrToPgTimestamp(req.PivotTimestampUtc),
+	}
+
+	dbObs, err := querier.GetLatestObservation(ctx, goprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetLatestObservation(%+v)", goprms)
+
+		return nil, status.Error(
+			codes.NotFound,
+			"No observations found. Ensure location and observer exist, and observations have been created.",
+		)
+	}
+
+	return &pb.GetLatestObservationResponse{
+		TimestampUtc:  timestamppb.New(dbObs.ObservationTimestampUtc.Time),
+		ValueFraction: float32(dbObs.ValueSip) / 30000.0,
+		EffectiveCapacityWatts: uint64(
+			dbObs.CapacityIncLimit,
+		) * uint64(
+			math.Pow10(int(dbObs.CapacityUnitPrefixFactor)),
+		),
+	}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) CreateObserver(

@@ -22,7 +22,8 @@ RUN \
     --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/go/bin,sharing=locked \
     --mount=type=cache,target=/go/include,sharing=locked \
-    make CGO_ENABLED=0 GOOS=linux GOOARCH=amd64 build
+    make gen \
+    && make CGO_ENABLED=0 GOOS=linux GOOARCH=amd64 build
 
 FROM gcr.io/distroless/static-debian11 AS app
 

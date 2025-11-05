@@ -953,6 +953,104 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 	}
 }
 
+func TestGetLatestObservation(t *testing.T) {
+	pivotTime := time.Now().Truncate(time.Minute)
+
+	// Create a site to attach the observations to
+	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_get_latest_observation_site",
+		GeometryWkt:            "POINT(-20.25 57.5)",
+		EffectiveCapacityWatts: 1000000,
+		Metadata:               &structpb.Struct{},
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
+	})
+	require.NoError(t, err)
+
+	// Create an observer to make the observations
+	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
+		Name: "test_get_latest_observation_observer",
+	})
+	require.NoError(t, err)
+
+	// Seed some observations for the site.
+	values := []*pb.CreateObservationsRequest_Value{
+		{
+			TimestampUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 2)),
+			ValueFraction:          0.3,
+			EffectiveCapacityWatts: siteResp.EffectiveCapacityWatts,
+		},
+		{
+			TimestampUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
+			ValueFraction:          0.5,
+			EffectiveCapacityWatts: siteResp.EffectiveCapacityWatts,
+		},
+	}
+	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+		LocationUuid: siteResp.LocationUuid,
+		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		ObserverName: obsResp.ObserverName,
+		Values:       values,
+	})
+	require.NoError(t, err)
+
+	testcases := []struct {
+		name             string
+		req              *pb.GetLatestObservationRequest
+		expectedFraction float32
+	}{
+		{
+			name: "Should get latest observation",
+			req: &pb.GetLatestObservationRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: obsResp.ObserverName,
+			},
+			expectedFraction: 0.5,
+		},
+		{
+			name: "Should get earlier observation before cutoff",
+			req: &pb.GetLatestObservationRequest{
+				LocationUuid:      siteResp.LocationUuid,
+				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName:      obsResp.ObserverName,
+				PivotTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 1).Add(-time.Second)),
+			},
+			expectedFraction: 0.3,
+		},
+		{
+			name: "Shouldn't fetch for non-existent observer",
+			req: &pb.GetLatestObservationRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: "non_existent_observer",
+			},
+		},
+		{
+			name: "Shouldn't fetch for non-existent location",
+			req: &pb.GetLatestObservationRequest{
+				LocationUuid: "non_existent_location",
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: obsResp.ObserverName,
+			},
+		},
+	}
+
+	for _, tt := range testcases {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := dc.GetLatestObservation(t.Context(), tt.req)
+			if strings.Contains(tt.name, "Shouldn't") {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				require.Equal(t, tt.expectedFraction, resp.ValueFraction)
+			}
+		})
+	}
+}
+
 func TestGetWeekAverageDeltas(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
@@ -1031,11 +1129,11 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 	}
 
 	deltaResp, err := dc.GetWeekAverageDeltas(t.Context(), &pb.GetWeekAverageDeltasRequest{
-		LocationUuid: siteResp.LocationUuid,
-		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		Forecaster:   forecasterResp.Forecaster,
-		ObserverName: obsResp.ObserverName,
-		PivotTime:    timestamppb.New(pivotTime),
+		LocationUuid:   siteResp.LocationUuid,
+		EnergySource:   pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		Forecaster:     forecasterResp.Forecaster,
+		ObserverName:   obsResp.ObserverName,
+		PivotTimestamp: timestamppb.New(pivotTime),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, deltaResp)
