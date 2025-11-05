@@ -18,7 +18,8 @@ TOOLS := $(SQLC) $(PROTOC) $(PROTOC_GEN_GO) $(PROTOC_GEN_GRPC)
 # --- Sources ---
 GO_SOURCES := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
 PROTO_SOURCES := $(shell find proto/ocf/dp -name '*.proto')
-PROTO_STAMP_FILE := internal/gen/.protoc.stamp
+PROTO_GO_STAMP_FILE := internal/gen/.protoc.stamp
+PTOTO_PY_STAMP_FILE := gen/python/.protoc.stamp
 SQLC_SOURCES := $(shell find internal/server/postgres/sql -name '*.sql')
 SQLC_SOURCE_CONFIG := internal/server/postgres/.sqlc.yaml
 SQLC_STAMP_FILE := internal/server/postgres/.sqlc.stamp
@@ -81,13 +82,13 @@ doctor: ${PROTOC} ${SQLC}
 # --- Code Generation Targets ------------------------------------------------------------- #
 
 .PHONY: gen
-gen: ${PROTO_STAMP_FILE} ${SQLC_STAMP_FILE}
+gen: ${PROTO_GO_STAMP_FILE} ${SQLC_STAMP_FILE}
 
 .PHONY: gen.db
 gen.db: ${SQLC_STAMP_FILE}
 
 .PHONY: gen.proto.go
-gen.proto.go: ${PROTO_STAMP_FILE}
+gen.proto.go: ${PROTO_GO_STAMP_FILE}
 
 # Depends on the sqlc binary, the config, and all .sql files.
 ${SQLC_STAMP_FILE}: ${SQLC} ${SQLC_SOURCES} ${SQLC_SOURCE_CONFIG}
@@ -97,7 +98,7 @@ ${SQLC_STAMP_FILE}: ${SQLC} ${SQLC_SOURCES} ${SQLC_SOURCE_CONFIG}
 	@echo " * Success."
 
 # Depends on the protoc binary, plugins, and all .proto source files.
-${PROTO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SOURCES}
+${PROTO_GO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SOURCES}
 	@echo "Generating internal protobuf code..."
 	@rm -rf internal/gen && mkdir -p internal/gen
 	@${PROTOC} \
@@ -107,7 +108,7 @@ ${PROTO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SOURC
 		--go_opt=paths=source_relative \
 		--go-grpc_out=require_unimplemented_servers=false:internal/gen \
 		--go-grpc_opt=paths=source_relative
-	@touch ${PROTO_STAMP_FILE}
+	@touch ${PROTO_GO_STAMP_FILE}
 	@echo " * Success."
 
 # --- SUPPLEMENTARY TARGETS ---------------------------------------------------------------------- #
@@ -149,33 +150,39 @@ ${PROTOC_GEN_GRPC}:
 
 # --- EXTERNAL GENERATION TARGETS --------------------------------------------------------------- #
 
-define pyproj =
+define GEN_PYPROJ
 [build-system]
 requires = ["setuptools>=67", "wheel", "setuptools-git-versioning>=2.0,<3"]
 build-backend = "setuptools.build_meta"
+
 [project]
 name = "dp-sdk"
 dynamic = ["version"]
 description = "Python client for OCF Data Platform API"
 dependencies = ["betterproto==2.0.0b7", "grpcio"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
 [tool.setuptools-git-versioning]
 enabled = true
+
 endef
 
+export GEN_PYPROJ
 .PHONY: gen.proto.python
 gen.proto.python: ${PROTOC}
 	@echo "Generating Python client bindings..."
 	@rm -rf gen/python && mkdir -p gen/python/src/dp_sdk
 	@uvx --from 'betterproto[compiler]==2.0.0b7' ${PROTOC} \
-		proto/ocf/dp/*.proto \
-		-I=proto \
-		--python_betterproto_opt=typing.310 \
-		--python_betterproto_out=gen/python/src/dp_sdk
-	@echo "$$pyproj" > gen/python/pyproject.toml
+        proto/ocf/dp/*.proto \
+        -I=proto \
+        --python_betterproto_opt=typing.310 \
+        --python_betterproto_out=gen/python/src/dp_sdk
+	@printf "%s" "$$pyproj" > gen/python/pyproject.toml
+	@echo "$$GEN_PYPROJ" > gen/python/pyproject.toml
 	@echo "Building wheel..."
-	@cd gen/python && uv build && cd ../..
+	@cd gen/python && echo $$(uv run python -m setuptools_git_versioning) && uv build && cd ../..
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
 
