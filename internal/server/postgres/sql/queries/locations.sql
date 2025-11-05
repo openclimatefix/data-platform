@@ -186,6 +186,7 @@ unfiltered_sources AS (
         ls.geometry_uuid,
         ls.capacity,
         ls.capacity_unit_prefix_factor,
+        ls.capacity_limit_sip,
         l.geometry_name,
         l.geometry_type_id,
         ST_X(l.centroid)::REAL AS longitude,

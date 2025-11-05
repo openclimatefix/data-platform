@@ -900,15 +900,11 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	// Get the capacities of the locations
 	locationUuids := make([]uuid.UUID, len(req.LocationUuids))
 	for i, loc := range req.LocationUuids {
-		locationUuids[i], err = uuid.Parse(loc)
-		if err != nil {
-			l.Err(err).Msgf("uuid.Parse(%s)", loc)
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
-		}
+		locationUuids[i] = uuid.MustParse(loc)
 	}
 
-	var sourceFilter *int16
-	*sourceFilter = int16(req.EnergySource)
+	sourceFilter := new(int16)
+	*sourceFilter = int16(pb.EnergySource_ENERGY_SOURCE_SOLAR)
 
 	lsprms := db.ListSourcesAtTimestampParams{
 		SourceTypeID:   sourceFilter,
