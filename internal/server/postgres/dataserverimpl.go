@@ -228,6 +228,8 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		p10sip := int16(value.P10Fraction * 30000.0)
 		p90sip := int16(value.P90Fraction * 30000.0)
 
+		// Parse the metadata. Because this query uses COPYFROM, the metadata must be set
+		// to NULL explicitly in the Go code in the instance there is no metadata.
 		metadata, err := value.Metadata.MarshalJSON()
 		if err != nil {
 			l.Err(err).Msgf("value.Metadata.MarshalJSON()")
@@ -237,6 +239,10 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 				"Invalid metadata for predicted generation value at horizon %d mins",
 				value.HorizonMins,
 			)
+		}
+
+		if value.Metadata == nil || len(value.Metadata.Fields) == 0 {
+			metadata = nil
 		}
 
 		paramsList[i] = db.CreatePredictedValuesParams{

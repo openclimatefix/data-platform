@@ -10,12 +10,21 @@
   </picture>
 </p>
 
-- **Two orders of magnitude faster** than current OCF stack (milliseconds vs seconds)
+The Data Platform is a gRPC API server that provides efficient access to, and storage of, renewable
+energy forecast data. It has been architected to be performant under the specific workflows and
+data access patterns required by OCF's applications, in order to enable scaling, and to improve the
+developer experience when integrating with OCF's stack. With this in mind, there is a focus on not
+just the quality of the code, but also of the tooling surrounding the codebase.
+
+The benefits of the Data Platform, over the current OCF stack (datamodels) include, but aren't
+limited to:
+
+- **Two orders of magnitude faster** (milliseconds vs seconds)
 - **Performant at scale** (tested to 50x current org scope)
-- **Cheaper deployment stack** as metrics and blend apps obsoleted for on-the-fly calculation capability
+- **Cheaper deployment** as on-the-fly calculation capability obsoletes analysis microservices
 - **Fully typed** client implementations in Python and Typescript
 - **Simple** to understand due to codegen of boilerplate
-- **Safer deployment architecture** with single, considered source of entry to database
+- **Safer architecture** with single, considered source of entry to database
 - Unlocks greater depth of analysis with geometries, capacity limits, history and more
 
 

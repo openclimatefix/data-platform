@@ -1141,6 +1141,7 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 }
 
 func TestCreateForecast(t *testing.T) {
+	pivotTime := time.Date(2024, 5, 5, 0, 30, 0, 0, time.UTC)
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
@@ -1152,19 +1153,20 @@ func TestCreateForecast(t *testing.T) {
 		Metadata:               metadata,
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 24)),
 	})
 	require.NoError(t, err)
 
 	// Create a forecaster
-	_, err = dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
+	fcResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
 		Name:    "test_create_forecast_forecaster",
 		Version: "v1",
 	})
 	require.NoError(t, err)
 
-	yields := make([]*pb.CreateForecastRequest_ForecastValue, 10)
-	for i := range yields {
-		yields[i] = &pb.CreateForecastRequest_ForecastValue{
+	yieldsPopulated := make([]*pb.CreateForecastRequest_ForecastValue, 10)
+	for i := range yieldsPopulated {
+		yieldsPopulated[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 30),
 			P50Fraction: 0.5 + float32(i)*0.05,
 			P10Fraction: 0.4 + float32(i)*0.05,
@@ -1173,19 +1175,133 @@ func TestCreateForecast(t *testing.T) {
 		}
 	}
 
-	req := &pb.CreateForecastRequest{
-		LocationUuid: siteResp.LocationUuid,
-		Forecaster: &pb.Forecaster{
-			ForecasterName:    "test_create_forecast_forecaster",
-			ForecasterVersion: "v1",
-		},
-		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		InitTimeUtc:  timestamppb.New(time.Now().UTC()),
-		Values:       yields,
+	yieldsZeros := make([]*pb.CreateForecastRequest_ForecastValue, 10)
+	for i := range yieldsZeros {
+		yieldsZeros[i] = &pb.CreateForecastRequest_ForecastValue{
+			HorizonMins: uint32(i * 30),
+			P50Fraction: 0.0,
+			P10Fraction: 0.0,
+			P90Fraction: 0.0,
+			Metadata:    nil,
+		}
 	}
-	resp, err := dc.CreateForecast(t.Context(), req)
-	require.NoError(t, err)
-	require.NotNil(t, resp)
+
+	yieldsInvalid := make([]*pb.CreateForecastRequest_ForecastValue, 10)
+	for i := range yieldsInvalid {
+		yieldsInvalid[i] = &pb.CreateForecastRequest_ForecastValue{
+			HorizonMins: uint32(i * 30),
+			P50Fraction: 1.2,
+			P10Fraction: -0.1,
+			P90Fraction: 0.5,
+			Metadata:    metadata,
+		}
+	}
+
+	testcases := []struct {
+		name string
+		req  *pb.CreateForecastRequest
+	}{
+		{
+			name: "Should create forecast with populated values",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fcResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				InitTimeUtc:  timestamppb.New(pivotTime),
+				Values:       yieldsPopulated,
+			},
+		},
+		{
+			name: "Should create forecast with zeroed values",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fcResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				InitTimeUtc:  timestamppb.New(pivotTime.Add(6 * time.Hour)),
+				Values:       yieldsZeros,
+			},
+		},
+		{
+			name: "Shouldn't create forecast with no values",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fcResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				InitTimeUtc:  timestamppb.New(pivotTime.Add(12 * time.Hour)),
+				Values:       []*pb.CreateForecastRequest_ForecastValue{},
+			},
+		},
+		{
+			name: "Shouldn't create forecast for non-existent location source",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fcResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_WIND,
+				InitTimeUtc:  timestamppb.New(pivotTime.Add(18 * time.Hour)),
+				Values:       yieldsPopulated,
+			},
+		},
+		{
+			name: "Shouldn't create forecast for non-existent forecaster",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster: &pb.Forecaster{
+					ForecasterName:    "non_existent_forecaster",
+					ForecasterVersion: "v1",
+				},
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				InitTimeUtc:  timestamppb.New(pivotTime.Add(24 * time.Hour)),
+				Values:       yieldsPopulated,
+			},
+		},
+		{
+			name: "Shouldn't create forecast for non-existent forecaster version",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster: &pb.Forecaster{
+					ForecasterName:    "test_create_forecast_forecaster",
+					ForecasterVersion: "v999",
+				},
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				InitTimeUtc:  timestamppb.New(pivotTime.Add(30 * time.Hour)),
+				Values:       yieldsPopulated,
+			},
+		},
+		{
+			name: "Shouldn't create forecast with invalid value fractions",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fcResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				InitTimeUtc:  timestamppb.New(pivotTime.Add(36 * time.Hour)),
+				Values:       yieldsInvalid,
+			},
+		},
+	}
+
+	for _, tt := range testcases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := dc.CreateForecast(t.Context(), tt.req)
+			if strings.Contains(tt.name, "Shouldn't") {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+
+				fResp, err := dc.GetForecastAsTimeseries(t.Context(), &pb.GetForecastAsTimeseriesRequest{
+					LocationUuid: siteResp.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					HorizonMins:  0,
+					TimeWindow: &pb.TimeWindow{
+						StartTimestampUtc: tt.req.InitTimeUtc,
+						EndTimestampUtc:   timestamppb.New(tt.req.InitTimeUtc.AsTime().Add(5 * time.Hour)),
+					},
+					Forecaster: fcResp.Forecaster,
+				})
+				require.NoError(t, err)
+				require.Equal(t, len(tt.req.Values), len(fResp.Values))
+			}
+		})
+	}
 }
 
 func TestGetLatestForecasts(t *testing.T) {
