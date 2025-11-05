@@ -1475,7 +1475,11 @@ func BenchmarkPostgresClient(b *testing.B) {
 				// There is a forecast value every 30 minutes, and the window is 84 hours long
 				// But the forecast made at the pivot time is the latest one, and that is only
 				// tt.ForecastLengthHours long
-				require.Equal(b, (48+tt.ForecastLengthHours)*60/tt.PgvResolutionMins, len(resp.Values))
+				require.Equal(
+					b,
+					(48+tt.ForecastLengthHours)*60/tt.PgvResolutionMins,
+					len(resp.Values),
+				)
 			}
 		})
 		b.Run(fmt.Sprintf("%d/GetForecastAtTimestamp", output.NumPgvs), func(b *testing.B) {
