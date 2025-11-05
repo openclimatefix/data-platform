@@ -249,7 +249,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 	policies := make([]*pb.LocationPolicy, len(dbPolicies))
 	for i, p := range dbPolicies {
 		policies[i] = &pb.LocationPolicy{
-			LocationId:   p.LocationUuid.String(),
+			LocationId:   p.GeometryUuid.String(),
 			EnergySource: pb.EnergySource(p.SourceTypeID),
 			Permission:   pb.Permission(p.PermissionID),
 		}
@@ -276,7 +276,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) AddLocationPoliciesToGroup
 			PermissionID:            int16(p.Permission),
 			SourceTypeID:            int16(p.EnergySource),
 			LocationPolicyGroupName: req.LocationPolicyGroupName,
-			LocationUuids:           []uuid.UUID{locUuid},
+			GeometryUuids:           []uuid.UUID{locUuid},
 		}
 
 		err := querier.AddLocationPolicesToGroup(ctx, apParams)
@@ -308,7 +308,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPoliciesFrom
 			PermissionID:            int16(p.Permission),
 			SourceTypeID:            int16(p.EnergySource),
 			LocationPolicyGroupName: req.LocationPolicyGroupName,
-			LocationUuid:            locUuid,
+			GeometryUuid:            locUuid,
 		}
 
 		err := querier.RemoveLocationPoliciesFromGroup(ctx, rpParams)

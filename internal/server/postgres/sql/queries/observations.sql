@@ -23,7 +23,7 @@ WHERE o.observer_name = $1;
  * and 30000 representing 100% of capacity.
  */
 INSERT INTO obs.observed_generation_values (
-    location_uuid, source_type_id, observer_uuid, observation_timestamp_utc, value_sip
+    geometry_uuid, source_type_id, observer_uuid, observation_timestamp_utc, value_sip
 ) VALUES (
     $1, $2, $3, $4, $5
 );
@@ -34,7 +34,7 @@ INSERT INTO obs.observed_generation_values (
  * and 30000 representing 100% of capacity.
  */
 SELECT
-    og.location_uuid,
+    og.geometry_uuid,
     og.source_type_id,
     og.observation_timestamp_utc,
     og.value_sip,
@@ -43,9 +43,9 @@ SELECT
     )::REAL AS effective_capacity,
     sh.capacity_unit_prefix_factor
 FROM obs.observed_generation_values AS og
-    INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
+    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
 WHERE
-    og.location_uuid = $1
+    og.geometry_uuid = $1
     AND og.source_type_id = $2
     AND og.observer_uuid = $3
     AND og.observation_timestamp_utc BETWEEN sqlc.arg(start_time_utc)::TIMESTAMP AND sqlc.arg(end_time_utc)::TIMESTAMP
@@ -57,7 +57,7 @@ WHERE
  * and 30000 representing 100% of capacity.
  */
 SELECT
-    og.location_uuid,
+    og.geometry_uuid,
     og.source_type_id,
     og.observation_timestamp_utc,
     og.value_sip,
@@ -66,10 +66,10 @@ SELECT
     )::REAL AS capacity_inc_limit,
     sh.capacity_unit_prefix_factor
 FROM obs.observed_generation_values AS og
-    INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
+    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
     INNER JOIN obs.observers AS o USING (observer_uuid)
 WHERE
-    og.location_uuid = $1
+    og.geometry_uuid = $1
     AND og.source_type_id = $2
     AND o.observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
     AND sh.sys_period @> og.observation_timestamp_utc

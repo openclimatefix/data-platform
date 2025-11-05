@@ -30,7 +30,7 @@ CREATE TABLE obs.observers (
 
 /*
  * Table to store observed generation values.
- * The generation value is stored as a percentage of the location capacity represented by a
+ * The generation value is stored as a percentage of the source capacity represented by a
  * smallint percent (sip). Since it isn't impossible to measure a little over capacity, 30000
  * represents 100% of capacity instead of the max smallint value (32767). This allows for some
  * measurement leeway.
@@ -52,11 +52,11 @@ CREATE TABLE obs.observed_generation_values (
     REFERENCES obs.observers (observer_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
-    location_uuid UUID NOT NULL
-    REFERENCES loc.locations (location_uuid)
+    geometry_uuid UUID NOT NULL
+    REFERENCES loc.geometries (geometry_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
-    PRIMARY KEY (location_uuid, source_type_id, observer_uuid, observation_timestamp_utc)
+    PRIMARY KEY (geometry_uuid, source_type_id, observer_uuid, observation_timestamp_utc)
 )
 PARTITION BY RANGE (observation_timestamp_utc);
 

@@ -65,7 +65,7 @@ ORDER BY forecaster_name ASC, created_at_utc DESC;
 
 -- name: CreateForecast :one
 INSERT INTO pred.forecasts (
-    location_uuid, source_type_id, forecaster_id, init_time_utc, value_resolution_mins
+    geometry_uuid, source_type_id, forecaster_id, init_time_utc, value_resolution_mins
 ) VALUES (
     $1,
     $2,
@@ -76,12 +76,12 @@ INSERT INTO pred.forecasts (
     ),
     $3,
     $4
-) RETURNING forecast_uuid, init_time_utc, source_type_id, location_uuid, forecaster_id;
+) RETURNING forecast_uuid, init_time_utc, source_type_id, geometry_uuid, forecaster_id;
 
 -- name: CreateForecasts :batchone
 /* CreateForecasts inserts forecasts as a batch process, returning each newly created entry. */
 INSERT INTO pred.forecasts (
-    location_uuid, source_type_id, forecaster_id, init_time_utc
+    geometry_uuid, source_type_id, forecaster_id, init_time_utc
 ) VALUES (
     $1, $2, $3, $4
 ) RETURNING *;
@@ -107,13 +107,13 @@ SELECT
     f.forecast_uuid,
     f.init_time_utc,
     f.source_type_id,
-    f.location_uuid,
+    f.geometry_uuid,
     fr.forecaster_name,
     fr.forecaster_version,
     UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid) AS created_at_utc
 FROM pred.forecasts AS f
     INNER JOIN pred.forecasters AS fr USING (forecaster_id)
-WHERE f.location_uuid = $1
+WHERE f.geometry_uuid = $1
     AND f.source_type_id = $2
     AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
 ORDER BY f.init_time_utc DESC;
@@ -134,13 +134,13 @@ WITH desired_forecaster AS (
 SELECT
     forecasts.forecast_uuid,
     forecasts.init_time_utc,
-    forecasts.location_uuid,
+    forecasts.geometry_uuid,
     desired_forecaster.forecaster_name,
     desired_forecaster.forecaster_version,
     UUIDV7_EXTRACT_TIMESTAMP(forecasts.forecast_uuid) AS created_at_utc
 FROM pred.forecasts AS forecasts
     INNER JOIN desired_forecaster USING (forecaster_id)
-WHERE forecasts.location_uuid = $1
+WHERE forecasts.geometry_uuid = $1
     AND forecasts.source_type_id = $2
     AND forecasts.init_time_utc BETWEEN
     sqlc.arg(start_timestamp)::TIMESTAMP
@@ -172,11 +172,11 @@ WITH relevant_forecasts AS (
     /* Get all the forecasts that fall within the time window for the given location, source, and forecaster */
     SELECT
         f.forecast_uuid,
-        f.location_uuid,
+        f.geometry_uuid,
         f.source_type_id,
         f.init_time_utc
     FROM pred.forecasts AS f
-    WHERE f.location_uuid = $1
+    WHERE f.geometry_uuid = $1
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
         AND f.init_time_utc BETWEEN
@@ -196,7 +196,7 @@ filtered_predictions AS (
         pg.metadata,
         relevant_forecasts.init_time_utc,
         relevant_forecasts.forecast_uuid,
-        relevant_forecasts.location_uuid,
+        relevant_forecasts.geometry_uuid,
         relevant_forecasts.source_type_id
     FROM pred.predicted_generation_values AS pg
         INNER JOIN relevant_forecasts USING (forecast_uuid)
@@ -228,7 +228,7 @@ SELECT
     sh.capacity_unit_prefix_factor,
     UUIDV7_EXTRACT_TIMESTAMP(rp.forecast_uuid) AS created_at_utc
 FROM ranked_predictions AS rp
-    INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
+    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
 WHERE rp.rn = 1
     AND sh.sys_period @> rp.target_time_utc
 ORDER BY rp.target_time_utc ASC;
@@ -242,12 +242,12 @@ ORDER BY rp.target_time_utc ASC;
 WITH relevant_forecasts AS (
     SELECT
         f.forecast_uuid,
-        f.location_uuid,
+        f.geometry_uuid,
         f.source_type_id,
         f.init_time_utc,
-        ROW_NUMBER() OVER (PARTITION BY f.location_uuid ORDER BY f.init_time_utc DESC) AS rn
+        ROW_NUMBER() OVER (PARTITION BY f.geometry_uuid ORDER BY f.init_time_utc DESC) AS rn
     FROM pred.forecasts AS f
-    WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
+    WHERE f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.init_time_utc
@@ -256,7 +256,7 @@ WITH relevant_forecasts AS (
 latest_relevant_forecasts AS (
     SELECT
         rf.forecast_uuid,
-        rf.location_uuid,
+        rf.geometry_uuid,
         rf.source_type_id,
         rf.init_time_utc
     FROM relevant_forecasts AS rf
@@ -264,7 +264,7 @@ latest_relevant_forecasts AS (
 )
 SELECT
     rf.forecast_uuid,
-    rf.location_uuid,
+    rf.geometry_uuid,
     rf.source_type_id,
     pg.horizon_mins,
     pg.p10_sip,
@@ -278,7 +278,7 @@ SELECT
     sh.capacity_unit_prefix_factor
 FROM pred.predicted_generation_values AS pg
     INNER JOIN latest_relevant_forecasts AS rf USING (forecast_uuid)
-    INNER JOIN loc.sources_mv AS sh USING (location_uuid, source_type_id)
+    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
 WHERE pg.horizon_mins = sqlc.arg(horizon_mins)::INTEGER
     AND sh.sys_period @> pg.target_time_utc;
 
@@ -303,17 +303,17 @@ relevant_forecasts AS (
         f.forecast_uuid,
         f.init_time_utc,
         f.source_type_id,
-        f.location_uuid,
+        f.geometry_uuid,
         f.forecaster_id
     FROM pred.forecasts AS f
         INNER JOIN desired_init_times AS dit ON f.init_time_utc = dit.init_time_utc
-    WHERE f.location_uuid = ANY(sqlc.arg(location_uuids)::UUID [])
+    WHERE f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
 ),
 relevant_predicted_values AS (
     SELECT
-        rf.location_uuid,
+        rf.geometry_uuid,
         rf.forecast_uuid,
         rf.source_type_id,
         pg.target_time_utc,
@@ -324,22 +324,22 @@ relevant_predicted_values AS (
 ),
 deltas AS (
     SELECT
-        rv.location_uuid,
+        rv.geometry_uuid,
         rv.source_type_id,
         rv.forecast_uuid,
         rv.target_time_utc,
         rv.horizon_mins,
         rv.p50_sip - og.value_sip AS delta_sip
     FROM relevant_predicted_values AS rv
-        LEFT OUTER JOIN obs.observed_generation_values AS og USING (location_uuid, source_type_id)
+        LEFT OUTER JOIN obs.observed_generation_values AS og USING (geometry_uuid, source_type_id)
     WHERE
         og.observer_uuid = $3
         AND og.observation_timestamp_utc = rv.target_time_utc
 )
 SELECT
-    d.location_uuid,
+    d.geometry_uuid,
     d.horizon_mins,
     AVG(d.delta_sip) AS avg_delta_sip
 FROM deltas AS d
-GROUP BY d.location_uuid, d.horizon_mins
-ORDER BY d.location_uuid, d.horizon_mins;
+GROUP BY d.geometry_uuid, d.horizon_mins
+ORDER BY d.geometry_uuid, d.horizon_mins;

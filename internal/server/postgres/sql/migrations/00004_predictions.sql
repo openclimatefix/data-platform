@@ -62,13 +62,13 @@ CREATE TABLE pred.forecasts (
     REFERENCES pred.forecasters (forecaster_id)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
-    location_uuid UUID NOT NULL
-    REFERENCES loc.locations (location_uuid)
+    geometry_uuid UUID NOT NULL
+    REFERENCES loc.geometries (geometry_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
     forecast_uuid UUID DEFAULT UUIDV7() NOT NULL,
     PRIMARY KEY (forecast_uuid),
-    UNIQUE (location_uuid, source_type_id, forecaster_id, init_time_utc)
+    UNIQUE (geometry_uuid, source_type_id, forecaster_id, init_time_utc)
 );
 
 /*
