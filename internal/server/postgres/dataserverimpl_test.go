@@ -1472,7 +1472,10 @@ func BenchmarkPostgresClient(b *testing.B) {
 					},
 				)
 				require.NoError(b, err)
-				require.GreaterOrEqual(b, len(resp.Values), 1)
+				// There is a forecast value every 30 minutes, and the window is 84 hours long
+				// But the forecast made at the pivot time is the latest one, and that is only
+				// tt.ForecastLengthHours long
+				require.Equal(b, (48+tt.ForecastLengthHours)*60/tt.PgvResolutionMins, len(resp.Values))
 			}
 		})
 		b.Run(fmt.Sprintf("%d/GetForecastAtTimestamp", output.NumPgvs), func(b *testing.B) {
@@ -1495,7 +1498,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 				)
 				require.NoError(b, err)
 				require.NotNil(b, crossSectionResp)
-				require.GreaterOrEqual(b, len(crossSectionResp.Values), 1)
+				require.Equal(b, len(output.LocationUuids), len(crossSectionResp.Values))
 			}
 		})
 		b.Run(fmt.Sprintf("%d/GetObservationsAsTimeseries", output.NumPgvs), func(b *testing.B) {
