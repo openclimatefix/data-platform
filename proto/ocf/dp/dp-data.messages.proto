@@ -152,7 +152,7 @@ message GetLatestForecastsRequest {
   /* The time to search backwards from to find the 'latest' forecast.
    * If not specified, the current time will be used.
    */
-  google.protobuf.Timestamp pivot_timestamp_utc = 3 [
+  optional google.protobuf.Timestamp pivot_timestamp_utc = 3 [
     (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
 }
@@ -246,7 +246,8 @@ message CreateForecastRequest {
   ];
   EnergySource energy_source = 3;
   google.protobuf.Timestamp init_time_utc = 4 [
-    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true },
+    (buf.validate.field).required = true
   ];
 
   repeated CreateForecastRequest.ForecastValue values = 5 [
@@ -383,6 +384,27 @@ message CreateObservationsRequest {
 message CreateObservationsResponse {}
 
 
+message GetLatestObservationRequest {
+  string location_uuid = 1 [
+    (buf.validate.field).string.uuid = true
+  ];
+  EnergySource energy_source = 2;
+  string observer_name = 3 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 100
+  ];
+  optional google.protobuf.Timestamp pivot_timestamp_utc = 4 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+  ];
+}
+
+message GetLatestObservationResponse {
+  google.protobuf.Timestamp timestamp_utc = 1;
+  float value_fraction = 2;
+  uint64 effective_capacity_watts = 3;
+}
+
+
 message CreateObserverRequest {
   string name = 1 [
     (buf.validate.field).string.min_len = 2,
@@ -406,7 +428,7 @@ message GetWeekAverageDeltasRequest {
    * and the date component is to define the end of the seven-day period
    * over which to average.
    */
-  google.protobuf.Timestamp pivot_time = 3 [
+  google.protobuf.Timestamp pivot_timestamp = 3 [
     (buf.validate.field).required = true,
     (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];

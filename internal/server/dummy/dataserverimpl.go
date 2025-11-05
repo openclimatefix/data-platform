@@ -309,6 +309,22 @@ func (d *DataPlatformDataServiceServerImpl) CreateObservations(
 	return &pb.CreateObservationsResponse{}, nil
 }
 
+// GetLatestObservation implements dp.DataPlatformDataServiceServer.
+func (s *DataPlatformDataServiceServerImpl) GetLatestObservation(
+	ctx context.Context,
+	req *pb.GetLatestObservationRequest,
+) (*pb.GetLatestObservationResponse, error) {
+	if req.PivotTimestampUtc == nil {
+		req.PivotTimestampUtc = timestamppb.New(time.Now().UTC())
+	}
+
+	return &pb.GetLatestObservationResponse{
+		TimestampUtc:           req.PivotTimestampUtc,
+		ValueFraction:          0.75,
+		EffectiveCapacityWatts: 150e6,
+	}, nil
+}
+
 // CreateObserver implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) CreateObserver(
 	ctx context.Context,
@@ -517,7 +533,7 @@ func (d *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	return &pb.GetWeekAverageDeltasResponse{
 		Deltas:        values,
-		InitTimeOfDay: req.PivotTime.AsTime().Format("15:04"),
+		InitTimeOfDay: req.PivotTimestamp.AsTime().Format("15:04"),
 	}, nil
 }
 
