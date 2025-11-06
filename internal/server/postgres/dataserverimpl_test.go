@@ -703,6 +703,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 
 	// For each horizon, get the predicted timeseries
 	testcases := []struct {
+		name 		   string
 		horizonMins    int32
 		expectedValues []float32
 	}{
@@ -718,6 +719,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			// 0, 8, 16, 24, 32, 40 (horizons 0 to 25 minutes from forecast 3)
 			// Then the same from forecast 2, as it's horizon is smaller - likewise then forecast 1
 			// 0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88 (horizons 0 to 55 minutes from forecast 0)
+			name: "Should return expected values for horizon 0 mins",
 			horizonMins: 0,
 			expectedValues: []float32{
 				0.00, 0.08, 0.16, 0.24, 0.32, 0.40,
@@ -729,6 +731,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		{
 			// For horizon of 14 minutes, anything with a lesser horizon should not be included.
 			// So the value for 0, 5, and 10 minutes should not be included.
+			name: "Should return expected values for horizon 14 mins",
 			horizonMins: 14,
 			expectedValues: []float32{
 				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
@@ -738,6 +741,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			},
 		},
 		{
+			name: "Should return expected values for horizon 30 mins",
 			horizonMins: 30,
 			expectedValues: []float32{
 				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
@@ -747,8 +751,8 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			},
 		},
 		{
+			name: "Shouldn't return successfully for horizon 60 mins",
 			horizonMins:    60,
-			expectedValues: []float32{},
 		},
 	}
 
@@ -764,27 +768,31 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
 				},
 			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
+			if strings.Contains(tc.name, "Shouldn't") {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, resp)
 
-			targetTimes := make([]int64, len(resp.Values))
+				targetTimes := make([]int64, len(resp.Values))
 
-			actualValues := make([]float32, len(resp.Values))
-			for i, v := range resp.Values {
-				targetTimes[i] = v.TargetTimestampUtc.AsTime().Unix()
-				actualValues[i] = v.P50ValueFraction
+				actualValues := make([]float32, len(resp.Values))
+				for i, v := range resp.Values {
+					targetTimes[i] = v.TargetTimestampUtc.AsTime().Unix()
+					actualValues[i] = v.P50ValueFraction
 
-				// Assert that the capacity change has been picked up
-				if v.TargetTimestampUtc.AsTime().
-					After(pivotTime.Add(-1 * time.Hour).Add(-1 * time.Second)) {
-					require.Equal(t, 1500000, int(v.EffectiveCapacityWatts))
-				} else {
-					require.Equal(t, 1000000, int(v.EffectiveCapacityWatts))
+					// Assert that the capacity change has been picked up
+					if v.TargetTimestampUtc.AsTime().
+						After(pivotTime.Add(-1 * time.Hour).Add(-1 * time.Second)) {
+						require.Equal(t, 1500000, int(v.EffectiveCapacityWatts))
+					} else {
+						require.Equal(t, 1000000, int(v.EffectiveCapacityWatts))
+					}
 				}
-			}
 
-			require.IsIncreasing(t, targetTimes)
-			require.Equal(t, tc.expectedValues, actualValues)
+				require.IsIncreasing(t, targetTimes)
+				require.Equal(t, tc.expectedValues, actualValues)
+			}
 		})
 	}
 }
@@ -1581,7 +1589,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 					LocationUuid: output.LocationUuids[0],
 					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 					InitTimeUtc: timestamppb.New(
-						pivotTime.Add(time.Duration(rand.Int64N(2000000)) * time.Minute),
+						pivotTime.Add(time.Duration(tc.ForecastLengthHours + rand.IntN(10000)) * time.Hour),
 					),
 					Values: yields,
 				})
