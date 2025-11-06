@@ -48,13 +48,17 @@ BEGIN
         -- Insert forecasts for each location and model
         FOR p_id IN SELECT forecaster_id FROM pred.forecasters LOOP
             INSERT INTO pred.forecasts
-                (source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins)
+                (source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period)
             SELECT
                 1,
                 geo_id,
                 p_id,
                 pivot_time - (i || ' minutes')::interval,
-                gv_resolution_mins::SMALLINT
+                gv_resolution_mins::SMALLINT,
+                TSRANGE(
+                    pivot_time - (i || ' minutes')::interval,
+                    pivot_time - (i || ' minutes')::interval + make_interval(mins => forecast_length_mins)
+                )
             FROM generate_series(0, earliest_forecast_offset_mins - forecast_resolution_mins, forecast_resolution_mins) AS i;
         END LOOP; 
 
