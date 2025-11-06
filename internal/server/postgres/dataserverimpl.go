@@ -158,8 +158,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	}
 
 	querier := db.New(ix.GetTxFromContext(ctx))
-
-	// Get the location and source
+// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
 		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
@@ -182,17 +181,27 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		)
 	}
 
+	// Check the forecast values have monotonically increasing horizons
 	resolution_mins := req.Values[1].HorizonMins - req.Values[0].HorizonMins
-	// NOTE: The above assumes the the horizon values are uniformly spaced.
-	// Perhaps this ought to be checked?
-
+	for i, value := range req.Values {
+		if i > 0 {
+			if resolution_mins != value.HorizonMins-req.Values[i-1].HorizonMins || 
+			  value.HorizonMins <= req.Values[i-1].HorizonMins {
+				return nil, status.Error(
+					codes.InvalidArgument,
+					"Forecast horizon values must monotonically  spaced in time",
+				)
+			}
+		}
+	}
+	
 	// Check the forecaster exists
 	pctprms := db.GetForecasterElseLatestParams{
 		ForecasterName:    req.Forecaster.ForecasterName,
 		ForecasterVersion: req.Forecaster.ForecasterVersion,
 	}
 
-	_, err = querier.GetForecasterElseLatest(ctx, pctprms)
+	dbForecaster, err := querier.GetForecasterElseLatest(ctx, pctprms)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", pctprms)
 
@@ -204,23 +213,32 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	}
 
 	// Create a new forecast
-	params2 := db.CreateForecastParams{
+	cfprms := db.CreateForecastParams{
 		GeometryUuid:        locationUuid,
 		SourceTypeID:        dbSource.SourceTypeID,
-		ForecasterName:      req.Forecaster.ForecasterName,
-		ForecasterVersion:   req.Forecaster.ForecasterVersion,
+		ForecasterID:        dbForecaster.ForecasterID,
 		ValueResolutionMins: int16(resolution_mins),
 		InitTimeUtc:         timeptrToPgTimestamp(req.InitTimeUtc),
+		FirstHorizonMins:    int32(req.Values[0].HorizonMins),
+		// Okay to take the last value as we checked it was monotonically increasing above
+		LastHorizonMins:     int32(req.Values[len(req.Values)-1].HorizonMins),
 	}
 
-	dbForecast, err := querier.CreateForecast(ctx, params2)
+	dbForecast, err := querier.CreateForecast(ctx, cfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateForecast(%+v)", params2)
+		l.Err(err).Msgf("querier.CreateForecast(%+v)", cfprms)
 		return nil, status.Error(codes.InvalidArgument, "Invalid forecast")
 	}
 
 	l.Debug().
-		Msgf("created forecast with ID '%s' and init time %s", dbForecast.ForecastUuid, dbForecast.InitTimeUtc.Time)
+		Str("forecast_uuid", dbForecast.ForecastUuid.String()).
+		Str("geometry_uuid", dbForecast.GeometryUuid.String()).
+		Str("init_time", dbForecast.InitTimeUtc.Time.String()).
+		Str("target_period", fmt.Sprintf(
+			"%s - %s",
+			dbForecast.TargetPeriod.Lower.Time.String(),
+			dbForecast.TargetPeriod.Upper.Time.String(),
+		)).Msgf("Created forecast")
 
 	// Create the forecast data
 	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
@@ -904,7 +922,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	}
 
 	sourceFilter := new(int16)
-	*sourceFilter = int16(pb.EnergySource_ENERGY_SOURCE_SOLAR)
+	*sourceFilter = int16(req.EnergySource)
 
 	lsprms := db.ListSourcesAtTimestampParams{
 		SourceTypeID:   sourceFilter,
@@ -927,6 +945,8 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 			"Expected %d location sources, but found %d. Some locations may not have associated sources.",
 			len(req.LocationUuids), len(dbSources),
 		)
+	} else {
+		l.Debug().Msgf("Found %d locations for %d requested", len(dbSources), len(req.LocationUuids))
 	}
 
 	ids := make([]uuid.UUID, len(dbSources))
@@ -936,10 +956,10 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	params3 := db.ListPredictionsAtTimeForLocationsParams{
 		GeometryUuids: ids,
-		SourceTypeID:  dbSources[0].SourceTypeID,
+		SourceTypeID:  int16(req.EnergySource),
 		ForecasterID:  dbForecaster.ForecasterID,
-		Time:          pgtype.Timestamp{Time: req.TimestampUtc.AsTime(), Valid: true},
-		HorizonMins:   0,
+		TargetTimestampUtc:          pgtype.Timestamp{Time: req.TimestampUtc.AsTime(), Valid: true},
+		HorizonMins:   0, // NOTE: May want to make this available to the RPC message
 	}
 
 	dbCrossSection, err := querier.ListPredictionsAtTimeForLocations(ctx, params3)
@@ -1309,8 +1329,8 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		ForecasterID:   dbForecaster.ForecasterID,
 		SourceTypeID:   dbSource.SourceTypeID,
 		HorizonMins:    int32(req.HorizonMins),
-		StartTimestamp: start,
-		EndTimestamp:   end,
+		StartTimestampUtc: start,
+		EndTimestampUtc:   end,
 	}
 
 	dbValues, err := querier.ListPredictionsForLocation(ctx, lpprms)
@@ -1351,7 +1371,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			P10ValueFraction:   p10,
 			P90ValueFraction:   p90,
 			EffectiveCapacityWatts: uint64(
-				value.EffectiveCapacity,
+				value.CapacityIncLimit,
 			) * uint64(
 				math.Pow10(int(value.CapacityUnitPrefixFactor)),
 			),
