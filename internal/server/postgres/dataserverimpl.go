@@ -1317,13 +1317,13 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			"Error communicating with backend.",
 		)
 	}
+
 	if len(dbValues) == 0 {
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No predicted values found for the given location at the given horizon.",
 		)
 	}
-
 
 	l.Debug().
 		Str("dp.geometry.uuid", dbSource.GeometryUuid.String()).
