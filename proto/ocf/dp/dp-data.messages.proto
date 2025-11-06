@@ -242,7 +242,8 @@ message CreateForecastRequest {
     (buf.validate.field).required = true
   ];
   string location_uuid = 2 [
-    (buf.validate.field).string.uuid = true
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).required = true
   ];
   EnergySource energy_source = 3;
   google.protobuf.Timestamp init_time_utc = 4 [
@@ -251,21 +252,21 @@ message CreateForecastRequest {
   ];
 
   repeated CreateForecastRequest.ForecastValue values = 5 [
-    (buf.validate.field).repeated.min_items = 10,
+    (buf.validate.field).repeated.min_items = 2,
     (buf.validate.field).repeated.max_items = 5000
   ];
 
-  option (buf.validate.message).cel = {
-    id: "forecast.values.monotonic_horizons"
-    message: "Forecast horizon values must be monotonically increasing"
-    expression:
-      "this.values.all(i, v, "
-        "i == 0 || ("
-          "v.horizon_mins > this.values[i-1].horizon_mins && "
-          "(v.horizon_mins - this.values[i-1].horizon_mins == this.values[1].horizon_mins - this.values[0].horizon_mins)"
-        ")"
-      ")"
-  };
+  //option (buf.validate.message).cel = {
+  //  id: "forecast.values.monotonic_horizons"
+  //  message: "Forecast horizon values must be monotonically increasing"
+  //  expression:
+  //    "this.values.all(i, v, "
+  //      "i == 0 || ("
+  //        "v.horizon_mins > this.values[i-1].horizon_mins && "
+  //        "(v.horizon_mins - this.values[i-1].horizon_mins == this.values[1].horizon_mins - this.values[0].horizon_mins)"
+  //      ")"
+  //    ")"
+  //};
 }
 
 message CreateForecastResponse {

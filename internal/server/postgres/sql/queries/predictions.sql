@@ -3,7 +3,7 @@
 -- name: CreateForecaster :one
 INSERT INTO pred.forecasters (forecaster_name, forecaster_version) VALUES (
     LOWER(sqlc.arg(forecaster_name)::TEXT), LOWER(sqlc.arg(forecaster_version)::TEXT)
-) RETURNING forecaster_id;
+) RETURNING forecaster_id, forecaster_name, forecaster_version;
 
 -- name: GetForecasterElseLatest :one
 /* GetForecaster retrieves a forecaster by its name and version.
@@ -208,8 +208,8 @@ ranked_predictions AS (
         INNER JOIN relevant_forecasts AS rf USING (forecast_uuid)
     WHERE
         pg.target_time_utc BETWEEN
-            sqlc.arg(start_timestamp_utc)::TIMESTAMP
-            AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
+        sqlc.arg(start_timestamp_utc)::TIMESTAMP
+        AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
         AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
 )
 SELECT
@@ -264,12 +264,12 @@ ranked_predictions AS (
         pg.p90_sip,
         pg.target_time_utc,
         pg.metadata,
-        ROW_NUMBER() OVER(
+        ROW_NUMBER() OVER (
             PARTITION BY rf.geometry_uuid
             ORDER BY pg.horizon_mins ASC
         ) AS rn
     FROM relevant_forecasts AS rf
-    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
+        INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     WHERE
         pg.target_time_utc = sqlc.arg(target_timestamp_utc)::TIMESTAMP
         AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
@@ -288,7 +288,10 @@ SELECT
         sv.capacity_limit_sip::REAL * sv.capacity / 30000.0, sv.capacity::REAL
     )::REAL AS capacity_inc_limit,
     sv.capacity,
-    sv.capacity_unit_prefix_factor
+    sv.capacity_unit_prefix_factor,
+    sv.latitude,
+    sv.longitude,
+    sv.geometry_name
 FROM ranked_predictions AS rp
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
 WHERE rp.rn = 1

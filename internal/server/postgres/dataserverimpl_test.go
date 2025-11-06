@@ -547,39 +547,39 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 	}
 
 	testcases := []struct {
-		name          string
-		timestamp     timestamppb.Timestamp
-		expectedp50   float32
+		name         string
+		timestamp    time.Time
+		expectedp50s []float32
 	}{
 		{
-			name:        "Should get forecast at init time",
-			timestamp:   *timestamppb.New(pivotTime),
-			expectedp50: 0.5,
+			name:         "Should get forecast at init time",
+			timestamp:    pivotTime,
+			expectedp50s: []float32{0.5, 0.5},
 		},
 		{
-			name:        "Should get forecast at first horizon",
-			timestamp:   *timestamppb.New(pivotTime.Add(30 * time.Minute)),
-			expectedp50: 0.55,
+			name:         "Should get forecast at first horizon",
+			timestamp:    pivotTime.Add(30 * time.Minute),
+			expectedp50s: []float32{0.55, 0.55},
 		},
 		{
-			name:        "Should get forecast at in-between horizon",
-			timestamp:   *timestamppb.New(pivotTime.Add(45 * time.Minute)),
-			expectedp50: 0.55,
+			name:         "Should return no values where no predicted values exist",
+			timestamp:    pivotTime.Add(45 * time.Minute),
+			expectedp50s: []float32{},
 		},
 		{
-			name:        "Should get forecast at last horizon",
-			timestamp:   *timestamppb.New(pivotTime.Add(270 * time.Minute)),
-			expectedp50: 0.95,
+			name:         "Should get forecast at last horizon",
+			timestamp:    pivotTime.Add(270 * time.Minute),
+			expectedp50s: []float32{0.95, 0.95},
 		},
 		{
-			name: "Shouldn't get forecast before init time",
-			timestamp:   *timestamppb.New(pivotTime.Add(-15 * time.Minute)),
-			expectedp50: 0,
+			name:         "Should return no values before init time",
+			timestamp:    pivotTime.Add(-15 * time.Minute),
+			expectedp50s: []float32{},
 		},
 		{
-			name: "Shouldn't get forecast after last horizon",
-			timestamp:   *timestamppb.New(pivotTime.Add(300 * time.Minute)),
-			expectedp50: 0,
+			name:         "Should return no values after last horizon",
+			timestamp:    pivotTime.Add(300 * time.Minute),
+			expectedp50s: []float32{},
 		},
 	}
 
@@ -590,24 +590,23 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 					siteResp.LocationUuid,
 					siteResp2.LocationUuid,
 				},
-				Forecaster:    forecasterResp.Forecaster,
-				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				TimestampUtc:  &tc.timestamp,
+				Forecaster:   forecasterResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimestampUtc: timestamppb.New(tc.timestamp),
 			})
 			if strings.Contains(tc.name, "Shouldn't") {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				require.Equal(t, 2, len(resp.Values))
+				require.Len(t, resp.Values, len(tc.expectedp50s))
 
-				for _, forecast := range resp.Values {
-					require.Equal(t, tc.expectedp50, forecast.ValueFraction)
+				for i, forecast := range resp.Values {
+					require.Equal(t, tc.expectedp50s[i], forecast.ValueFraction)
 				}
 			}
 		})
 	}
-
 }
 
 func TestGetLocationsAsGeoJSON(t *testing.T) {

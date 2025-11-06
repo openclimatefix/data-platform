@@ -7,7 +7,7 @@ INSERT INTO loc.geometries AS l (
     LOWER(sqlc.arg(geometry_name)::TEXT),
     ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326), --Ensure in WSG84
     $1
-) RETURNING l.geometry_uuid, l.geometry_name;
+) RETURNING l.geometry_uuid, l.geometry_name, ST_X(l.centroid)::REAL AS longitude, ST_Y(l.centroid)::REAL AS latitude;
 
 -- name: GetGeometryGeoJSON :one
 /* GetLocationGeoJSON returns a GeoJSON FeatureCollection for the given geometries.
@@ -77,7 +77,7 @@ INSERT INTO loc.sources_history (
     $5,
     $6,
     CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
-) RETURNING geometry_uuid, capacity, capacity_unit_prefix_factor;
+) RETURNING geometry_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc;
 
 -- name: RefreshSourcesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;

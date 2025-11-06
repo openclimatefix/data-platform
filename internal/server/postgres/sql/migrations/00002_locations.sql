@@ -138,20 +138,24 @@ CREATE TABLE loc.sources_history (
  */
 CREATE MATERIALIZED VIEW loc.sources_mv AS
 SELECT
-    geometry_uuid,
-    source_type_id,
-    capacity,
-    capacity_unit_prefix_factor,
-    capacity_limit_sip,
-    metadata,
+    sh.geometry_uuid,
+    sh.source_type_id,
+    sh.capacity,
+    sh.capacity_unit_prefix_factor,
+    sh.capacity_limit_sip,
+    sh.metadata,
+    g.geometry_name,
+    ST_X(g.centroid)::REAL AS longitude,
+    ST_Y(g.centroid)::REAL AS latitude,
     TSRANGE(
-        valid_from_utc,
-        LEAD(valid_from_utc, 1) OVER (
-            PARTITION BY geometry_uuid, source_type_id
-            ORDER BY valid_from_utc
+        sh.valid_from_utc,
+        LEAD(sh.valid_from_utc, 1) OVER (
+            PARTITION BY sh.geometry_uuid, sh.source_type_id
+            ORDER BY sh.valid_from_utc
         )
     ) AS sys_period
-FROM loc.sources_history;
+FROM loc.sources_history AS sh
+INNER JOIN loc.geometries AS g USING (geometry_uuid);
 -- Prevent overlapping records. Required for concurrent refreshes.
 CREATE UNIQUE INDEX ON loc.sources_mv (geometry_uuid, source_type_id, sys_period);
 CREATE INDEX ON loc.sources_mv USING gist (sys_period);
