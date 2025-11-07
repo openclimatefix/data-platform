@@ -625,8 +625,6 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	pivotTime := timeptrToPgTimestamp(req.PivotTimestamp)
-
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
@@ -637,7 +635,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	gstprms := db.GetSourceAtTimestampParams{
 		GeometryUuid:   locationUuid,
 		SourceTypeID:   int16(req.EnergySource.Number()),
-		AtTimestampUtc: pivotTime,
+		AtTimestampUtc: pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true},
 	}
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, gstprms)
@@ -685,7 +683,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 		SourceTypeID:   dbSource.SourceTypeID,
 		ForecasterID:   dbExistingForecaster.ForecasterID,
 		ObserverUuid:   dbObserver.ObserverUuid,
-		PivotTimestamp: pivotTime,
+		PivotTimestamp: pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true},
 		GeometryUuids:  []uuid.UUID{locationUuid},
 	}
 
@@ -718,7 +716,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	return &pb.GetWeekAverageDeltasResponse{
 		Deltas:        deltas,
-		InitTimeOfDay: pivotTime.Time.Format("03:04"),
+		InitTimeOfDay: req.PivotTimestampUtc.AsTime().Format("03:04"),
 	}, nil
 }
 
@@ -879,11 +877,16 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestObservation(
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
+	// Set the pivot time to now if not provided
+	if req.PivotTimestampUtc == nil {
+		req.PivotTimestampUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
+	}
+
 	goprms := db.GetLatestObservationParams{
 		GeometryUuid: uuid.MustParse(req.LocationUuid),
 		SourceTypeID: int16(req.EnergySource),
 		ObserverName: req.ObserverName,
-		PivotTimeUtc: timeptrToPgTimestamp(req.PivotTimestampUtc),
+		PivotTimeUtc: pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true},
 	}
 
 	dbObs, err := querier.GetLatestObservation(ctx, goprms)
@@ -933,6 +936,44 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 	}, nil
 }
 
+func (s *DataPlatformDataServiceServerImpl) ListObservers(
+	ctx context.Context,
+	req *pb.ListObserversRequest,
+) (*pb.ListObserversResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	loPrms := db.GetObserversByFiltersParams{
+		ObserverNames: req.ObserverNamesFilter,
+	}
+
+	dbListObservers, err := querier.GetObserversByFilters(ctx, loPrms)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetObserversByFilters(%+v)", loPrms)
+
+		return nil, status.Errorf(
+			codes.Internal,
+			"Backend communication error. See logs for details.",
+		)
+	}
+
+	l.Debug().
+		Int("dp.observers.count", len(dbListObservers)).
+		Msg("found observers")
+
+	observers := make([]*pb.ListObserversResponse_ObserverSummary, len(dbListObservers))
+	for i, ob := range dbListObservers {
+		observers[i] = &pb.ListObserversResponse_ObserverSummary{
+			ObserverUuid: ob.ObserverUuid.String(),
+			ObserverName: ob.ObserverName,
+		}
+	}
+
+	return &pb.ListObserversResponse{
+		Observers: observers,
+	}, nil
+}
+
 func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	ctx context.Context,
 	req *pb.GetForecastAtTimestampRequest,
@@ -940,6 +981,11 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	l := zerolog.Ctx(ctx)
 
 	querier := db.New(ix.GetTxFromContext(ctx))
+
+	// Set default timestamp to now if not provided
+	if req.TimestampUtc == nil {
+		req.TimestampUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
+	}
 
 	// Get the relevant forecaster
 	cfprms := db.GetForecasterElseLatestParams{
@@ -1112,9 +1158,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		)
 	}
 
-	validFrom := time.Now().UTC()
-	if req.ValidFromUtc != nil {
-		validFrom = req.ValidFromUtc.AsTime()
+	// Set valid from time to now if not provided
+	if req.ValidFromUtc == nil {
+		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
 	}
 
 	csprms := db.CreateSourceEntryParams{
@@ -1123,7 +1169,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		Capacity:                 cp,
 		CapacityUnitPrefixFactor: ex,
 		Metadata:                 metadata,
-		ValidFromUtc:             pgtype.Timestamp{Time: validFrom, Valid: true},
+		ValidFromUtc:             pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
 	}
 
 	dbSource, err := querier.CreateSourceEntry(ctx, csprms)
@@ -1169,7 +1215,8 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	if (req.ValidFromUtc.AsTime().Equal(time.Time{})) {
+	// Set the valid from time to now if not provided
+	if req.ValidFromUtc == nil {
 		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
 	}
 
@@ -1522,7 +1569,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 	}
 
 	l.Debug().
-		Int32("dp.locations.count", int32(len(locations))).
+		Int("dp.locations.count", len(locations)).
 		Msg("found locations")
 
 	return &pb.ListLocationsResponse{

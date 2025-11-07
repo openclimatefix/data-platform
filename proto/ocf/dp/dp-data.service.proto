@@ -41,6 +41,7 @@ service DataPlatformDataService {
   rpc DeleteForecast(DeleteForecastRequest) returns (DeleteForecastResponse) {}
 
   rpc CreateObserver(CreateObserverRequest) returns (CreateObserverResponse) {}
+  rpc ListObservers(ListObserversRequest) returns (ListObserversResponse) {}
   rpc CreateObservations(CreateObservationsRequest) returns (CreateObservationsResponse) {}
   /* GetLatestObservation fetches the most recent observation for a given location and observer. */
   rpc GetLatestObservation(GetLatestObservationRequest) returns (GetLatestObservationResponse) {}
