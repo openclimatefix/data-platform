@@ -86,7 +86,8 @@ INSERT INTO pred.forecasts (
     target_period;
 
 -- name: DeleteForecast :exec
-DELETE FROM pred.forecasts WHERE forecast_uuid = $1;
+DELETE FROM pred.forecasts
+WHERE forecast_uuid = $1;
 
 -- name: CreatePredictedValues :copyfrom
 /* CreatePredictedValues inserts predicted generation values using

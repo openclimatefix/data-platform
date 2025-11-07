@@ -293,7 +293,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	}, nil
 }
 
-
 // DeleteForecast implements dp.DataPlatformDataServiceServer.
 func (s *DataPlatformDataServiceServerImpl) DeleteForecast(
 	ctx context.Context,
