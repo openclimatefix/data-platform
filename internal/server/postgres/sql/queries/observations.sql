@@ -2,11 +2,15 @@
 INSERT INTO obs.observers (observer_name) VALUES (LOWER(sqlc.arg(observer_name)::TEXT)) RETURNING
     observer_uuid, observer_name;
 
--- name: ListObservers :many
+-- name: GetObserversByFilters :many
 SELECT
     observer_uuid,
     observer_name
-FROM obs.observers;
+FROM obs.observers
+WHERE (
+    ARRAY_LENGTH(sqlc.arg(observer_names)::TEXT [], 1) IS NULL
+    OR observer_name = ANY(sqlc.arg(observer_names)::TEXT [])
+);
 
 -- name: GetObserverByName :one
 SELECT

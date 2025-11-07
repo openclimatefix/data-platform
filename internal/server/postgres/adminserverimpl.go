@@ -79,6 +79,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateLocationPolicyGroup(
 		)
 	}
 
+	l.Debug().
+		Str("dp.loc_policygroup.name", dbGroup.LocationPolicyGroupName).
+		Str("dp.loc_policygroup.uuid", dbGroup.LocationPolicyGroupUuid.String()).
+		Msg("created location policy group")
+
 	return &pb.CreateLocationPolicyGroupResponse{
 		LocationPolicyGroupId: dbGroup.LocationPolicyGroupUuid.String(),
 		Name:                  dbGroup.LocationPolicyGroupName,
@@ -117,6 +122,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
 			"Invalid Organisation request. Ensure name is unique and metadata is valid JSON.",
 		)
 	}
+
+	l.Debug().
+		Str("dp.organisation.name", dbOrg.OrgName).
+		Str("dp.organisation.uuid", dbOrg.OrgUuid.String()).
+		Msg("created organisation")
 
 	return &pb.CreateOrganisationResponse{
 		OrgId:   dbOrg.OrgUuid.String(),
@@ -174,6 +184,12 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 			"Invalid User request. Ensure OAuth ID is of the correct format and  metadata is valid JSON.",
 		)
 	}
+
+	l.Debug().
+		Str("dp.user.oauthid", dbUser.OauthID).
+		Str("dp.user.uuid", dbUser.UserUuid.String()).
+		Str("dp.user.org_name", dbOrg.OrgName).
+		Msg("created user")
 
 	return &pb.CreateUserResponse{
 		UserId:  dbUser.UserUuid.String(),
@@ -255,6 +271,12 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetLocationPolicyGroup(
 		}
 	}
 
+	l.Debug().
+		Str("dp.loc_policygroup.name", dbGroup.LocationPolicyGroupName).
+		Str("dp.loc_policygroup.uuid", dbGroup.LocationPolicyGroupUuid.String()).
+		Int("dp.loc_policygroup.count", len(policies)).
+		Msg("found location policy group")
+
 	return &pb.GetLocationPolicyGroupResponse{
 		LocationPolicyGroupId: dbGroup.LocationPolicyGroupUuid.String(),
 		Name:                  dbGroup.LocationPolicyGroupName,
@@ -291,6 +313,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) AddLocationPoliciesToGroup
 		}
 	}
 
+	l.Debug().
+		Str("dp.loc_policygroup.name", req.LocationPolicyGroupName).
+		Int("dp.loc_policygroup.added_count", len(req.LocationPolicies)).
+		Msg("added location policies to group")
+
 	return &pb.AddLocationPoliciesToGroupResponse{}, nil
 }
 
@@ -322,6 +349,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPoliciesFrom
 			)
 		}
 	}
+
+	l.Debug().
+		Str("dp.loc_policygroup.name", req.LocationPolicyGroupName).
+		Int("dp.loc_policygroup.removed_count", len(req.LocationPolicies)).
+		Msg("removed location policies from group")
 
 	return &pb.RemoveLocationPoliciesFromGroupResponse{}, nil
 }
@@ -359,6 +391,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 			req.OrgName,
 		)
 	}
+
+	l.Debug().
+		Str("dp.organisation.name", dbOrg.OrgName).
+		Str("dp.organisation.uuid", dbOrg.OrgUuid.String()).
+		Msg("found organisation")
 
 	return &pb.GetOrganisationResponse{
 		OrgId:                dbOrg.OrgUuid.String(),
@@ -419,6 +456,12 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 		)
 	}
 
+	l.Debug().
+		Str("dp.user.oauthid", dbUser.OauthID).
+		Str("dp.user.uuid", dbUser.UserUuid.String()).
+		Str("dp.user.org_name", dbUser.OrgName).
+		Msg("found user")
+
 	return &pb.GetUserResponse{
 		UserId:               dbUser.UserUuid.String(),
 		OauthId:              dbUser.OauthID,
@@ -455,6 +498,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) AddLocationPolicyGroupToOr
 		)
 	}
 
+	l.Debug().
+		Str("dp.organisation.name", req.OrgName).
+		Str("dp.loc_policygroup.name", req.LocationPolicyGroupName).
+		Msg("added location policy group to organisation")
+
 	return &pb.AddLocationPolicyGroupToOrganisationResponse{}, nil
 }
 
@@ -483,6 +531,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) RemoveLocationPolicyGroupF
 			req.OrgName,
 		)
 	}
+
+	l.Debug().
+		Str("dp.organisation.name", req.OrgName).
+		Str("dp.loc_policygroup.name", req.LocationPolicyGroupName).
+		Msg("removed location policy group from organisation")
 
 	return &pb.RemoveLocationPolicyGroupFromOrganisationResponse{}, nil
 }
@@ -513,6 +566,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) AddUserToOrganisation(
 		)
 	}
 
+	l.Debug().
+		Str("dp.organisation.name", req.OrgName).
+		Str("dp.user.oauthid", req.UserOauthId).
+		Msg("added user to organisation")
+
 	return &pb.AddUserToOrganisationResponse{}, nil
 }
 
@@ -541,6 +599,11 @@ func (d *DataPlatformAdministrationServiceServerImpl) RemoveUserFromOrganisation
 			req.OrgName,
 		)
 	}
+
+	l.Debug().
+		Str("dp.organisation.name", req.OrgName).
+		Str("dp.user.oauthid", req.UserOauthId).
+		Msg("removed user from organisation")
 
 	return &pb.RemoveUserFromOrganisationResponse{}, nil
 }

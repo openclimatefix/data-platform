@@ -14,11 +14,9 @@ option go_package = "github.com/openclimatefix/data-platform/internal/protogen/o
 
 // --- Common message types ----------------------------------------------------------------------
 message Forecaster {
-  /* The name of the forecaster to use.
-   * The name must be at least 3 characters long, and cannot be changed once set.
-   */
   string forecaster_name = 1 [
-    (buf.validate.field).string.min_len = 3
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_forecaster_name) = true
   ];
   /* The version of the forecaster to use. If not specified, the latest version will be used.
    */
@@ -55,9 +53,12 @@ message TimeWindow {
 
 message GetForecastAsTimeseriesRequest {
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
 
   uint32 horizon_mins = 3;
   TimeWindow time_window = 4 [
@@ -87,13 +88,16 @@ message GetForecastAsTimeseriesResponse {
 
 message GetObservationsAsTimeseriesRequest {
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
   string observer_name = 2 [
-    (buf.validate.field).string.min_len = 2,
-    (buf.validate.field).string.max_len = 100
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_observer_name) = true
   ];
-  EnergySource energy_source = 3;
+  EnergySource energy_source = 3 [
+    (buf.validate.field).required = true 
+  ];
   TimeWindow time_window = 4 [
     (buf.validate.field).required = true
   ];
@@ -120,11 +124,15 @@ message GetForecastAtTimestampRequest {
       string: {uuid: true}
     }
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
   /* The time to fetch predicted yields for.
    * If not specified, the current time will be used.
    */
-  google.protobuf.Timestamp timestamp_utc = 3;
+  optional google.protobuf.Timestamp timestamp_utc = 3 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000} }
+  ];
   Forecaster forecaster = 4 [
     (buf.validate.field).required = true
   ];
@@ -146,9 +154,12 @@ message GetForecastAtTimestampResponse {
 
 message GetLatestForecastsRequest {
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
   /* The time to search backwards from to find the 'latest' forecast.
    * If not specified, the current time will be used.
    */
@@ -171,12 +182,12 @@ message GetLatestForecastsResponse {
 
 message CreateForecasterRequest {
   string name = 1 [
-    (buf.validate.field).string.min_len = 2,
-    (buf.validate.field).string.max_len = 100
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_forecaster_name) = true
   ];
   string version = 2 [
-    (buf.validate.field).string.min_len = 1,
-    (buf.validate.field).string.max_len = 100
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_forecaster_name) = true
   ];
 }
 
@@ -187,12 +198,12 @@ message CreateForecasterResponse {
 
 message UpdateForecasterRequest {
   string name = 1 [
-    (buf.validate.field).string.min_len = 2,
-    (buf.validate.field).string.max_len = 100
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_forecaster_name) = true
   ];
   string new_version = 2 [
-    (buf.validate.field).string.min_len = 1,
-    (buf.validate.field).string.max_len = 100
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_forecaster_name) = true
   ];
 }
 
@@ -241,14 +252,19 @@ message CreateForecastRequest {
   Forecaster forecaster = 1 [
     (buf.validate.field).required = true
   ];
+
   string location_uuid = 2 [
-    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+
+  EnergySource energy_source = 3 [
     (buf.validate.field).required = true
   ];
-  EnergySource energy_source = 3;
+
   google.protobuf.Timestamp init_time_utc = 4 [
-    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true },
-    (buf.validate.field).required = true
+    (buf.validate.field).required = true,
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
 
   repeated CreateForecastRequest.ForecastValue values = 5 [
@@ -276,6 +292,7 @@ message CreateForecastResponse {
 
 message DeleteForecastRequest {
   string forecast_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
 }
@@ -285,13 +302,17 @@ message DeleteForecastResponse {}
 
 message CreateLocationRequest {
   string location_name = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.(valid_location_name) = true
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
   // A geometry string in Well-Known-Text (WKT) format.
   // Geometry type must be POINT, POLYGON, or MULTIPOLYGON, must have 2 dimensions,
   // and must be in the EPSG:4326 coordinate system (longitude/latitude).
   string geometry_wkt = 3 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.(valid_geometry) = true,
     (buf.validate.field).string.example = "POLYGON ((-0.127 51.507, -0.127 51.507, -0.127 51.507, -0.127 51.507))"
   ];
@@ -301,10 +322,12 @@ message CreateLocationRequest {
   uint64 effective_capacity_watts = 4 [
     (buf.validate.field).required = true
   ];
-  LocationType location_type = 5;
+  LocationType location_type = 5 [
+    (buf.validate.field).required = true 
+  ];
   optional google.protobuf.Struct metadata = 6;
   // The UTC time from which this location is considered valid. Leave empty to use current time.
-  google.protobuf.Timestamp valid_from_utc = 7 [
+  optional google.protobuf.Timestamp valid_from_utc = 7 [
     (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
 }
@@ -318,9 +341,14 @@ message CreateLocationResponse {
 
 message GetLocationRequest {
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2[
+    (buf.validate.field).required = true 
+  ];
+  // If true, the geometry_wkb field will be included in the response.
+  // This may be very big, so only include if necessary.
   bool include_geometry = 3;
 }
 
@@ -336,17 +364,19 @@ message GetLocationResponse {
 
 message UpdateLocationCapacityRequest {
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
   uint64 new_effective_capacity_watts = 3 [
-    (buf.validate.field).uint64.gte = 0,
-    (buf.validate.field).required = true
+    (buf.validate.field).required = true,
+    (buf.validate.field).uint64.gte = 0
   ];
   // The UTC time from which this extension is considered valid. Leave empty to use current time.
-  google.protobuf.Timestamp valid_from_utc = 4 [
-    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true },
-    (buf.validate.field).required = false
+  optional google.protobuf.Timestamp valid_from_utc = 4 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
 }
 
@@ -390,12 +420,15 @@ message CreateObservationsRequest {
   }
 
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
   string observer_name = 3 [
-    (buf.validate.field).string.min_len = 2,
-    (buf.validate.field).string.max_len = 100
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_observer_name) = true
   ];
   repeated CreateObservationsRequest.Value values = 4 [
     (buf.validate.field).repeated.min_items = 1,
@@ -408,13 +441,19 @@ message CreateObservationsResponse {}
 
 message GetLatestObservationRequest {
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
-  EnergySource energy_source = 2;
-  string observer_name = 3 [
-    (buf.validate.field).string.min_len = 2,
-    (buf.validate.field).string.max_len = 100
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
   ];
+  string observer_name = 3 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_observer_name) = true
+  ];
+  /* The time to search backwards from to find the 'latest' observation.
+   * If not specified, the current time will be used.
+   */
   optional google.protobuf.Timestamp pivot_timestamp_utc = 4 [
     (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
@@ -429,8 +468,8 @@ message GetLatestObservationResponse {
 
 message CreateObserverRequest {
   string name = 1 [
-    (buf.validate.field).string.min_len = 2,
-    (buf.validate.field).string.max_len = 100
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_observer_name) = true
   ];
 }
 
@@ -440,17 +479,42 @@ message CreateObserverResponse {
 }
 
 
+message ListObserversRequest {
+  // Optional filter to only return observers from a given set.
+  // If empty, all observers will be returned.
+  repeated string observer_names_filter = 1 [
+    (buf.validate.field).repeated.max_items = 100,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items = {
+        string: {min_len: 2, max_len: 100},
+    }
+  ];
+}
+
+message ListObserversResponse {
+  message ObserverSummary {
+    string observer_uuid = 1;
+    string observer_name = 2;
+  }
+
+  repeated ObserverSummary observers = 1;
+}
+
+
 message GetWeekAverageDeltasRequest {
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
   /* The characteristic time to detrmine averages for.
    * The time component specifies the initialization time,
    * and the date component is to define the end of the seven-day period
    * over which to average.
    */
-  google.protobuf.Timestamp pivot_timestamp = 3 [
+  google.protobuf.Timestamp pivot_timestamp_utc = 3 [
     (buf.validate.field).required = true,
     (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
@@ -458,8 +522,8 @@ message GetWeekAverageDeltasRequest {
     (buf.validate.field).required = true
   ];
   string observer_name = 5 [
-    (buf.validate.field).string.min_len = 2,
-    (buf.validate.field).string.max_len = 100
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_observer_name) = true
   ];
 }
 
@@ -498,7 +562,9 @@ message ListLocationsRequest {
   // Optional filter to only return locations for which the user has a specific permission.
   optional Permission permission_filter = 5;
   // Optional filter to only return locations enclosed within a specific location.
-  optional string enclosing_location_uuid_filter = 6;
+  optional string enclosing_location_uuid_filter = 6 [
+    (buf.validate.field).string.uuid = true
+  ];
 }
 
 message ListLocationsResponse {
@@ -518,9 +584,12 @@ message ListLocationsResponse {
 
 message StreamForecastDataRequest {
   string location_uuid = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
   ];
-  EnergySource energy_source = 2;
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
   TimeWindow time_window = 3 [
     (buf.validate.field).required = true
   ];

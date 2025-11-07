@@ -1107,6 +1107,89 @@ func TestGetLatestObservation(t *testing.T) {
 	}
 }
 
+func TestCreateListObservers(t *testing.T) {
+	testcases := []struct {
+		name          string
+		createReq     *pb.CreateObserverRequest
+		listReq       *pb.ListObserversRequest
+		expectedNames []string
+	}{
+		{
+			name: "Should create observer",
+			createReq: &pb.CreateObserverRequest{
+				Name: "test_create_list_observers_observer_1",
+			},
+			expectedNames: []string{"test_create_list_observers_observer_1"},
+		},
+		{
+			name: "Should create another observer",
+			createReq: &pb.CreateObserverRequest{
+				Name: "test_create_list_observers_observer_2",
+			},
+			expectedNames: []string{
+				"test_create_list_observers_observer_1",
+				"test_create_list_observers_observer_2",
+			},
+		},
+		{
+			name: "Shouldn't create duplicate observer",
+			createReq: &pb.CreateObserverRequest{
+				Name: "test_create_list_observers_observer_1",
+			},
+		},
+		{
+			name: "Shouldn't create observer with empty name",
+			createReq: &pb.CreateObserverRequest{
+				Name: "",
+			},
+		},
+		{
+			name: "Shouldn't create observer with invalid name",
+			createReq: &pb.CreateObserverRequest{
+				Name: "invalid name with spaces and *special_characters*",
+			},
+		},
+		{
+			name: "Should list observers with name filter",
+			listReq: &pb.ListObserversRequest{
+				ObserverNamesFilter: []string{
+					"test_create_list_observers_observer_2",
+				},
+			},
+			expectedNames: []string{"test_create_list_observers_observer_2"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.createReq != nil {
+				_, err := dc.CreateObserver(t.Context(), tc.createReq)
+				if strings.Contains(tc.name, "Shouldn't") {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			}
+
+			if tc.listReq != nil {
+				resp, err := dc.ListObservers(t.Context(), tc.listReq)
+				if strings.Contains(tc.name, "Shouldn't") {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+
+					var observerNames []string
+					for _, observer := range resp.Observers {
+						observerNames = append(observerNames, observer.ObserverName)
+					}
+
+					require.ElementsMatch(t, tc.expectedNames, observerNames)
+				}
+			}
+		})
+	}
+}
+
 func TestGetWeekAverageDeltas(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
@@ -1185,11 +1268,11 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 	}
 
 	deltaResp, err := dc.GetWeekAverageDeltas(t.Context(), &pb.GetWeekAverageDeltasRequest{
-		LocationUuid:   siteResp.LocationUuid,
-		EnergySource:   pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		Forecaster:     forecasterResp.Forecaster,
-		ObserverName:   obsResp.ObserverName,
-		PivotTimestamp: timestamppb.New(pivotTime),
+		LocationUuid:      siteResp.LocationUuid,
+		EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		Forecaster:        forecasterResp.Forecaster,
+		ObserverName:      obsResp.ObserverName,
+		PivotTimestampUtc: timestamppb.New(pivotTime),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, deltaResp)

@@ -344,6 +344,33 @@ func (d *DataPlatformDataServiceServerImpl) CreateObserver(
 	}, nil
 }
 
+// ListObservers implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) ListObservers(
+	ctx context.Context,
+	req *pb.ListObserversRequest,
+) (*pb.ListObserversResponse, error) {
+	observers := make([]*pb.ListObserversResponse_ObserverSummary, 3)
+
+	if len(req.ObserverNamesFilter) != 0 {
+		observers = make([]*pb.ListObserversResponse_ObserverSummary, len(req.ObserverNamesFilter))
+	}
+
+	for i := range observers {
+		name := fmt.Sprintf("DummyObserver%d", i)
+		if len(req.ObserverNamesFilter) != 0 {
+			name = req.ObserverNamesFilter[i]
+		}
+		observers[i] = &pb.ListObserversResponse_ObserverSummary{
+			ObserverUuid: uuid.New().String(),
+			ObserverName: name,
+		}
+	}
+
+	return &pb.ListObserversResponse{
+		Observers: observers,
+	}, nil
+}
+
 // GetForecastAsTimeseries implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	ctx context.Context,
@@ -541,7 +568,7 @@ func (d *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	return &pb.GetWeekAverageDeltasResponse{
 		Deltas:        values,
-		InitTimeOfDay: req.PivotTimestamp.AsTime().Format("15:04"),
+		InitTimeOfDay: req.PivotTimestampUtc.AsTime().Format("15:04"),
 	}, nil
 }
 
