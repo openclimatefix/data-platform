@@ -1600,12 +1600,10 @@ func BenchmarkPostgresClient(b *testing.B) {
 					Values: yields,
 				})
 				require.NoError(b, err)
-				b.StopTimer()
 				_, err = dc.DeleteForecast(b.Context(), &pb.DeleteForecastRequest{
 					ForecastUuid: resp.ForecastUuid,
 				})
 				require.NoError(b, err)
-				b.StartTimer()
 			}
 		})
 	}
