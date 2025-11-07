@@ -38,6 +38,7 @@ service DataPlatformDataService {
 
   rpc CreateForecast(CreateForecastRequest) returns (CreateForecastResponse) {}
   rpc GetLatestForecasts(GetLatestForecastsRequest) returns (GetLatestForecastsResponse) {}
+  rpc DeleteForecast(DeleteForecastRequest) returns (DeleteForecastResponse) {}
 
   rpc CreateObserver(CreateObserverRequest) returns (CreateObserverResponse) {}
   rpc CreateObservations(CreateObservationsRequest) returns (CreateObservationsResponse) {}

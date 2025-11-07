@@ -110,6 +110,7 @@ CREATE TABLE iam.org_location_policy_groups (
  * These policies match locations to permissions, and each policy is linked to a location group.
  * A location group can only have one permission per location and source (can't be an OWNER *and* a
  * VIEWER for UK solar, for instance).
+ * A location is a combination of a geometry and a source type.
  */
 CREATE TABLE iam.location_policies (
     permission_id SMALLINT NOT NULL
@@ -120,16 +121,16 @@ CREATE TABLE iam.location_policies (
     REFERENCES loc.source_types (source_type_id)
     ON UPDATE CASCADE
     ON DELETE RESTRICT,
-    location_uuid UUID NOT NULL
-    REFERENCES loc.locations (location_uuid)
+    geometry_uuid UUID NOT NULL
+    REFERENCES loc.geometries (geometry_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
     location_policy_group_uuid UUID NOT NULL
     REFERENCES iam.location_policy_groups (location_policy_group_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
-    PRIMARY KEY (location_policy_group_uuid, location_uuid, source_type_id, permission_id),
-    UNIQUE (location_policy_group_uuid, location_uuid, source_type_id)
+    PRIMARY KEY (location_policy_group_uuid, geometry_uuid, source_type_id, permission_id),
+    UNIQUE (location_policy_group_uuid, geometry_uuid, source_type_id)
 );
 
 /*- Views ---------------------------------------------------------------------------------------*/

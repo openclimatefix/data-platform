@@ -161,7 +161,7 @@ SELECT
     r.permission_name,
     lp.source_type_id,
     st.source_type_name,
-    lp.location_uuid,
+    lp.geometry_uuid,
     lp.location_policy_group_uuid
 FROM iam.location_policies AS lp
     INNER JOIN iam.permissions AS r USING (permission_id)
@@ -172,7 +172,7 @@ WHERE lp.location_policy_group_uuid = $1;
 INSERT INTO iam.location_policies (
     permission_id,
     source_type_id,
-    location_uuid,
+    geometry_uuid,
     location_policy_group_uuid
 ) SELECT
     $1,
@@ -182,7 +182,7 @@ INSERT INTO iam.location_policies (
         SELECT lpg.location_policy_group_uuid FROM iam.location_policy_groups AS lpg
         WHERE lpg.location_policy_group_name = sqlc.arg(location_policy_group_name)::TEXT
     )
-FROM UNNEST(ARRAY[sqlc.arg(location_uuids)::UUID []]) AS t (loc_uuid)
+FROM UNNEST(ARRAY[sqlc.arg(geometry_uuids)::UUID []]) AS t (loc_uuid)
 ON CONFLICT DO NOTHING;
 
 -- name: RemoveLocationPoliciesFromGroup :exec
@@ -191,6 +191,6 @@ WHERE location_policy_group_uuid = (
         SELECT lpg.location_policy_group_uuid FROM iam.location_policy_groups AS lpg
         WHERE lpg.location_policy_group_name = sqlc.arg(location_policy_group_name)::TEXT
     )
-    AND location_uuid = $1
+    AND geometry_uuid = $1
     AND source_type_id = $2
     AND permission_id = $3;

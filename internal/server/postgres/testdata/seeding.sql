@@ -8,9 +8,9 @@ CREATE OR REPLACE FUNCTION seed_db(
     num_forecasts_per_location INTEGER DEFAULT 24,
     pivot_time TIMESTAMP DEFAULT DATE_TRUNC('hour', NOW())
 )
-RETURNS TABLE (num_values INTEGER, location_uuids UUID[]) AS $$
+RETURNS TABLE (num_values INTEGER, geometry_uuids UUID[]) AS $$
 DECLARE
-    loc_id UUID;
+    geo_id UUID;
     p_id INTEGER;
     result RECORD;
     num_pgvs_per_forecast INTEGER := forecast_length_mins / gv_resolution_mins;
@@ -20,25 +20,25 @@ BEGIN
     INSERT INTO pred.forecasters (forecaster_name, forecaster_version)
     VALUES (LOWER(name_prefix) || '_forecaster', 'v1');
 
-    -- Insert locations
-    INSERT INTO loc.locations
-      (location_name, location_type_id, geom)
+    -- Insert geometries
+    INSERT INTO loc.geometries
+      (geometry_name, geometry_type_id, geom)
     SELECT
-        LOWER(name_prefix) || '_testlocation' || i AS location_name,
+        LOWER(name_prefix) || '_testgeometry' || i AS geometry_name,
         1,
         ST_SetSRID(ST_MakePoint(random() * 355 - 180, random() * 175 - 90), 4326)
     FROM generate_series(0, num_locations - 1) as i;
-    RAISE NOTICE 'Inserted % locations', (SELECT COUNT(*) FROM loc.locations);
+    RAISE NOTICE 'Inserted % geometries', (SELECT COUNT(*) FROM loc.geometries);
 
     -- Insert observers
     INSERT INTO obs.observers (observer_name) VALUES (LOWER(name_prefix) || '_observer');
 
-    FOR loc_id IN SELECT location_uuid FROM loc.locations LOOP
+    FOR geo_id IN SELECT geometry_uuid FROM loc.geometries LOOP
 
         INSERT INTO loc.sources_history
-            (location_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc)
+            (geometry_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc)
         SELECT
-            loc_id,
+            geo_id,
             1,
             200 * i::SMALLINT,
             3,
@@ -48,24 +48,28 @@ BEGIN
         -- Insert forecasts for each location and model
         FOR p_id IN SELECT forecaster_id FROM pred.forecasters LOOP
             INSERT INTO pred.forecasts
-                (source_type_id, location_uuid, forecaster_id, init_time_utc, value_resolution_mins)
+                (source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period)
             SELECT
                 1,
-                loc_id,
+                geo_id,
                 p_id,
                 pivot_time - (i || ' minutes')::interval,
-                gv_resolution_mins::SMALLINT
+                gv_resolution_mins::SMALLINT,
+                TSRANGE(
+                    pivot_time - (i || ' minutes')::interval,
+                    pivot_time - (i || ' minutes')::interval + make_interval(mins => forecast_length_mins)
+                )
             FROM generate_series(0, earliest_forecast_offset_mins - forecast_resolution_mins, forecast_resolution_mins) AS i;
         END LOOP; 
 
         -- Insert observed generation values covering all the forecast period, always half the capacity
         INSERT INTO obs.observed_generation_values
-            (value_sip, source_type_id, observer_uuid, location_uuid, observation_timestamp_utc)
+            (value_sip, source_type_id, observer_uuid, geometry_uuid, observation_timestamp_utc)
         SELECT
             15000::SMALLINT,
             1,
             (SELECT observer_uuid FROM obs.observers WHERE observer_name = LOWER(name_prefix) || '_observer'),
-            loc_id,
+            geo_id,
             pivot_time - (i || ' minutes')::interval
         FROM generate_series(0, earliest_forecast_offset_mins - gv_resolution_mins, gv_resolution_mins) AS i;
 
@@ -93,7 +97,7 @@ BEGIN
     RETURN QUERY
     SELECT
         (SELECT COUNT(*) FROM pred.predicted_generation_values)::INTEGER,
-        (SELECT ARRAY_AGG(location_uuid) FROM loc.locations);
+        (SELECT ARRAY_AGG(geometry_uuid) FROM loc.geometries);
 
 END;
 $$ LANGUAGE plpgsql;

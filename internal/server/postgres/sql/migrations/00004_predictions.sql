@@ -44,7 +44,6 @@ CREATE TABLE pred.forecasters (
  * forecaster; reruns should replace old values.
  */
 CREATE TABLE pred.forecasts (
-    -- Type of energy source
     source_type_id SMALLINT NOT NULL
     REFERENCES loc.source_types (source_type_id)
     ON UPDATE CASCADE
@@ -53,23 +52,32 @@ CREATE TABLE pred.forecasts (
     CONSTRAINT value_resolution_mins_size_check CHECK (
         value_resolution_mins > 0 AND value_resolution_mins <= 60
     ),
+    forecaster_id INTEGER NOT NULL
+    REFERENCES pred.forecasters (forecaster_id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
     init_time_utc TIMESTAMP NOT NULL,
     CONSTRAINT init_time_utc_recency_check CHECK (
         init_time_utc >= '2000-01-01 00:00:00'::TIMESTAMP
         AND init_time_utc < CURRENT_TIMESTAMP + MAKE_INTERVAL(days => 30)
     ),
-    forecaster_id INTEGER NOT NULL
-    REFERENCES pred.forecasters (forecaster_id)
-    ON UPDATE CASCADE
-    ON DELETE CASCADE,
-    location_uuid UUID NOT NULL
-    REFERENCES loc.locations (location_uuid)
+    geometry_uuid UUID NOT NULL
+    REFERENCES loc.geometries (geometry_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
     forecast_uuid UUID DEFAULT UUIDV7() NOT NULL,
+    target_period TSRANGE NOT NULL,
+    CONSTRAINT target_period_valid_check CHECK (
+        UPPER(target_period) > LOWER(target_period)
+    ),
+    CONSTRAINT target_period_recency_check CHECK (
+        LOWER(target_period) >= '2000-01-01 00:00:00'::TIMESTAMP
+        AND UPPER(target_period) < CURRENT_TIMESTAMP + MAKE_INTERVAL(days => 30)
+    ),
     PRIMARY KEY (forecast_uuid),
-    UNIQUE (location_uuid, source_type_id, forecaster_id, init_time_utc)
+    UNIQUE (geometry_uuid, source_type_id, forecaster_id, init_time_utc)
 );
+CREATE INDEX ON pred.forecasts USING GIST (target_period);
 
 /*
  * Table to store predicted generation values.
