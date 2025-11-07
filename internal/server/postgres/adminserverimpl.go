@@ -54,7 +54,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) DeleteOrganisation(
 			"Encountered database error. Check application logs.",
 		)
 	}
-	
+
 	return &pb.DeleteOrganisationResponse{}, nil
 }
 
