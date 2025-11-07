@@ -288,7 +288,40 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 			dbForecast.TargetPeriod.Upper.Time.String(),
 		)).Msgf("created forecast")
 
-	return &pb.CreateForecastResponse{}, nil
+	return &pb.CreateForecastResponse{
+		ForecastUuid: dbForecast.ForecastUuid.String(),
+	}, nil
+}
+
+
+// DeleteForecast implements dp.DataPlatformDataServiceServer.
+func (s *DataPlatformDataServiceServerImpl) DeleteForecast(
+	ctx context.Context,
+	req *pb.DeleteForecastRequest,
+) (*pb.DeleteForecastResponse, error) {
+	l := zerolog.Ctx(ctx)
+
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	dfprms := db.DeleteForecastParams{
+		ForecastUuid: uuid.MustParse(req.ForecastUuid),
+	}
+
+	err := querier.DeleteForecast(ctx, dfprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.DeleteForecast(%+v)", dfprms)
+
+		return nil, status.Error(
+			codes.Internal,
+			"Backend communication error.",
+		)
+	}
+
+	l.Debug().
+		Str("dp.forecast.uuid", req.ForecastUuid).
+		Msg("deleted forecast")
+
+	return &pb.DeleteForecastResponse{}, nil
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(

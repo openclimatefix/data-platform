@@ -85,6 +85,9 @@ INSERT INTO pred.forecasts (
     forecaster_id,
     target_period;
 
+-- name: DeleteForecast :exec
+DELETE FROM pred.forecasts WHERE forecast_uuid = $1;
+
 -- name: CreatePredictedValues :copyfrom
 /* CreatePredictedValues inserts predicted generation values using
  * postgres COPY protocol, making it the fastest way to perform large inserts of predictions.

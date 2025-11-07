@@ -1273,7 +1273,7 @@ func TestCreateForecast(t *testing.T) {
 				LocationUuid: siteResp.LocationUuid,
 				Forecaster:   fcResp.Forecaster,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				InitTimeUtc:  timestamppb.New(pivotTime.Add(6 * time.Hour)),
+				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsZeros,
 			},
 		},
@@ -1283,7 +1283,7 @@ func TestCreateForecast(t *testing.T) {
 				LocationUuid: siteResp.LocationUuid,
 				Forecaster:   fcResp.Forecaster,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				InitTimeUtc:  timestamppb.New(pivotTime.Add(12 * time.Hour)),
+				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       []*pb.CreateForecastRequest_ForecastValue{},
 			},
 		},
@@ -1293,7 +1293,7 @@ func TestCreateForecast(t *testing.T) {
 				LocationUuid: siteResp.LocationUuid,
 				Forecaster:   fcResp.Forecaster,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_WIND,
-				InitTimeUtc:  timestamppb.New(pivotTime.Add(18 * time.Hour)),
+				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsPopulated,
 			},
 		},
@@ -1306,7 +1306,7 @@ func TestCreateForecast(t *testing.T) {
 					ForecasterVersion: "v1",
 				},
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				InitTimeUtc:  timestamppb.New(pivotTime.Add(24 * time.Hour)),
+				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsPopulated,
 			},
 		},
@@ -1319,7 +1319,7 @@ func TestCreateForecast(t *testing.T) {
 					ForecasterVersion: "v999",
 				},
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				InitTimeUtc:  timestamppb.New(pivotTime.Add(30 * time.Hour)),
+				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsPopulated,
 			},
 		},
@@ -1329,7 +1329,7 @@ func TestCreateForecast(t *testing.T) {
 				LocationUuid: siteResp.LocationUuid,
 				Forecaster:   fcResp.Forecaster,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				InitTimeUtc:  timestamppb.New(pivotTime.Add(36 * time.Hour)),
+				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsInvalid,
 			},
 		},
@@ -1337,7 +1337,7 @@ func TestCreateForecast(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := dc.CreateForecast(t.Context(), tc.req)
+			resp, err := dc.CreateForecast(t.Context(), tc.req)
 			if strings.Contains(tc.name, "Shouldn't") {
 				require.Error(t, err)
 			} else {
@@ -1355,6 +1355,10 @@ func TestCreateForecast(t *testing.T) {
 				})
 				require.NoError(t, err)
 				require.Equal(t, len(tc.req.Values), len(fResp.Values))
+				_, err = dc.DeleteForecast(t.Context(), &pb.DeleteForecastRequest{
+					ForecastUuid: resp.ForecastUuid,
+				})
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -1581,7 +1585,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 		})
 		b.Run(fmt.Sprintf("%d/CreateForecast", output.NumPgvs), func(b *testing.B) {
 			for b.Loop() {
-				_, err := dc.CreateForecast(b.Context(), &pb.CreateForecastRequest{
+				resp, err := dc.CreateForecast(b.Context(), &pb.CreateForecastRequest{
 					Forecaster: &pb.Forecaster{
 						ForecasterName:    tc.NamePrefix + "_forecaster",
 						ForecasterVersion: "v1",
@@ -1590,12 +1594,18 @@ func BenchmarkPostgresClient(b *testing.B) {
 					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 					InitTimeUtc: timestamppb.New(
 						pivotTime.Add(
-							time.Duration(tc.ForecastLengthHours+rand.IntN(10000)) * time.Hour,
+							time.Duration(tc.ForecastLengthHours+2) * time.Hour,
 						),
 					),
 					Values: yields,
 				})
 				require.NoError(b, err)
+				b.StopTimer()
+				_, err = dc.DeleteForecast(b.Context(), &pb.DeleteForecastRequest{
+					ForecastUuid: resp.ForecastUuid,
+				})
+				require.NoError(b, err)
+				b.StartTimer()
 			}
 		})
 	}
