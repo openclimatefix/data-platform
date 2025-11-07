@@ -60,7 +60,8 @@ lint:
 
 .PHONY: bench
 bench: gen
-	@go test ./...  -bench=. -run=^a -timeout=2m
+	@go test ./...  -bench=. -run=^a -timeout=10m
+
 .PHONY: clean
 clean:
 	@echo "Cleaning up..."
