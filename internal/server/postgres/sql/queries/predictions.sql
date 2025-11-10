@@ -96,9 +96,9 @@ WHERE forecast_uuid = $1;
  * with 0 representing 0% and 30000 representing 100% of capacity.
  */
 INSERT INTO pred.predicted_generation_values (
-    horizon_mins, p10_sip, p50_sip, p90_sip, forecast_uuid, target_time_utc, metadata
+    horizon_mins, p50_sip, forecast_uuid, target_time_utc, other_stats_fractions, metadata
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5, $6
 );
 
 -- name: GetLatestForecastsAtHorizonSincePivot :many
@@ -156,10 +156,9 @@ WHERE forecasts.geometry_uuid = $1
  */
 SELECT
     pg.horizon_mins,
-    pg.p10_sip,
     pg.p50_sip,
-    pg.p90_sip,
     pg.target_time_utc,
+    pg.other_stats_fractions,
     pg.metadata
 FROM pred.predicted_generation_values AS pg
 WHERE pg.forecast_uuid = $1;
@@ -195,11 +194,10 @@ ranked_predictions AS (
      * input horizon are considered. */
     SELECT
         pg.horizon_mins,
-        pg.p10_sip,
         pg.p50_sip,
-        pg.p90_sip,
         pg.target_time_utc,
         pg.metadata,
+        pg.other_stats_fractions,
         rf.init_time_utc,
         rf.forecast_uuid,
         rf.geometry_uuid,
@@ -219,12 +217,11 @@ ranked_predictions AS (
 SELECT
     /* For each target time, choose the value with the lowest allowable horizon. */
     rp.horizon_mins,
-    rp.p10_sip,
     rp.p50_sip,
-    rp.p90_sip,
     rp.target_time_utc,
     rp.init_time_utc,
     rp.metadata,
+    rp.other_stats_fractions,
     COALESCE(
         sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
     )::REAL AS capacity_inc_limit,
@@ -263,11 +260,10 @@ ranked_predictions AS (
         rf.source_type_id,
         rf.init_time_utc,
         pg.horizon_mins,
-        pg.p10_sip,
         pg.p50_sip,
-        pg.p90_sip,
         pg.target_time_utc,
         pg.metadata,
+        pg.other_stats_fractions,
         ROW_NUMBER() OVER (
             PARTITION BY rf.geometry_uuid
             ORDER BY pg.horizon_mins ASC
@@ -283,11 +279,10 @@ SELECT
     rp.geometry_uuid,
     rp.source_type_id,
     rp.horizon_mins,
-    rp.p10_sip,
     rp.p50_sip,
-    rp.p90_sip,
     rp.target_time_utc,
     rp.metadata,
+    rp.other_stats_fractions,
     COALESCE(
         sv.capacity_limit_sip::REAL * sv.capacity / 30000.0, sv.capacity::REAL
     )::REAL AS capacity_inc_limit,

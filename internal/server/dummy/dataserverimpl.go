@@ -383,10 +383,12 @@ func (d *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		sd := determineIrradiance(t, randomUkLngLat())
 
 		values = append(values, &pb.GetForecastAsTimeseriesResponse_Value{
-			TargetTimestampUtc:     timestamppb.New(t),
-			P50ValueFraction:       float32(sd.normalizedIrradiance()) * 1.00,
-			P10ValueFraction:       float32(sd.normalizedIrradiance()) * 0.95,
-			P90ValueFraction:       float32(sd.normalizedIrradiance()) * 1.05,
+			TargetTimestampUtc: timestamppb.New(t),
+			P50ValueFraction:   float32(sd.normalizedIrradiance()) * 1.00,
+			OtherStatisticsFractions: map[string]float32{
+				"p10": float32(sd.normalizedIrradiance()) * 0.95,
+				"p90": float32(sd.normalizedIrradiance()) * 1.05,
+			},
 			EffectiveCapacityWatts: 150e6,
 			InitializationTimestampUtc: timestamppb.New(
 				t.Add(-time.Duration(req.HorizonMins) * time.Minute),
@@ -596,17 +598,6 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 				tt := it.Add(time.Duration(h) * time.Minute)
 				sd := determineIrradiance(tt, randomUkLngLat())
 
-				var (
-					p90 *float32
-					p10 *float32
-				)
-
-				p90val := float32(sd.normalizedIrradiance()) * 1.05
-				p10val := float32(sd.normalizedIrradiance()) * 0.95
-
-				p90 = &p90val
-				p10 = &p10val
-
 				err := stream.Send(&pb.StreamForecastDataResponse{
 					InitTimestamp: timestamppb.New(it),
 					LocationUuid:  req.LocationUuid,
@@ -615,10 +606,12 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 						fc.ForecasterName,
 						fc.ForecasterVersion,
 					),
-					HorizonMins:         uint32(h),
-					P50Fraction:         float32(sd.normalizedIrradiance()),
-					P10Fraction:         p10,
-					P90Fraction:         p90,
+					HorizonMins: uint32(h),
+					P50Fraction: float32(sd.normalizedIrradiance()),
+					OtherStatisticsFractions: map[string]float32{
+						"p10": float32(sd.normalizedIrradiance()) * 0.95,
+						"p90": float32(sd.normalizedIrradiance()) * 1.05,
+					},
 					CreatedTimestampUtc: timestamppb.New(time.Now().UTC()),
 				})
 				if err != nil {

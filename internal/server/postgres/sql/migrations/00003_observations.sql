@@ -82,6 +82,7 @@ SET
     retention_keep_index = FALSE,
     infinite_time_partitions = TRUE
 WHERE parent_table = 'obs.observed_generation_values';
+SELECT partman.run_maintenance('obs.observed_generation_values');
 
 -- +goose Down
 DROP SCHEMA obs CASCADE;

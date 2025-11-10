@@ -12,6 +12,54 @@
 
 CREATE SCHEMA pred;
 
+/*- Functions -------------------------------------------------------------------------------*/
+
+/*
+ * Check that all present values in a JSONB blob are valid forecaster statistic fractions.
+ * Valid statistic fractions are defined as numeric values between 0 and 1.1 (inclusive),
+ * with up to 4 digits for precision (this final constraint ensures that only 2 bytes are
+ * used to store each value).
+ */
+-- +goose StatementBegin
+CREATE FUNCTION pred.check_all_jsonb_values_are_valid_stat_fractions(stats_blob jsonb)
+RETURNS boolean AS $$
+DECLARE
+    rec record;
+    val_num numeric;
+BEGIN
+    IF stats_blob IS NULL THEN
+        RETURN true;
+    END IF;
+
+    FOR rec IN SELECT key, value FROM jsonb_each(stats_blob) LOOP
+        IF LENGTH(rec.key) = 0 OR LENGTH(rec.key) > 64 THEN
+            RETURN false;
+        END IF;
+        IF rec.key <> LOWER(rec.key) THEN
+            RETURN false;
+        END IF;
+        
+        IF jsonb_typeof(rec.value) <> 'number' THEN
+            RETURN false;
+        END IF;
+        val_num := rec.value::numeric;
+        IF (val_num < 0 OR val_num > 1.1) 
+            OR (val_num >= 0 AND val_num < 1 AND scale(val_num) > 4)
+            OR (val_num >= 1 AND val_num <= 1.1 AND scale(val_num) > 3)
+        THEN
+            RETURN false;
+        END IF;
+
+    END LOOP;
+    RETURN true;
+
+EXCEPTION
+    WHEN others THEN
+        RETURN false;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+-- +goose StatementEnd
+
 /*- Tables ----------------------------------------------------------------------------------*/
 
 /*
@@ -86,10 +134,15 @@ CREATE INDEX ON pred.forecasts USING GIST (target_period);
  * data is stored as smallints where possible, and the columns are ordered to allow for efficient
  * bit-packing.
  *
- * The pXX columns are for predicted generation confidence level values, as a percentage of
- * capacity represented by a smallint percentage (sip). Since it isn't impossible to predict a
- * little over capacity, 30000 represents 100% of capacity intead of the max smallint value (32767).
- * This is to allow for a little bit of leeway in the predictions.
+ * The p50 column is for the characteristic predicted generation confidence level value, recorded
+ * as a percentage of capacity (represented by a smallint percentage, "sip". this allows for
+ * efficient database calculation on the value for aggregation etc. Also, since it isn't impossible
+ * to predict a little over capacity, 30000 represents 100% of capacity intead of the max smallint
+ * value (32767).
+ *
+ * Any other forecaster outputs (such as other quantiles or averages) should be stored in the
+ * "other_stats_fractions" JSONB column, as fractions of capacity. This allows for flexibility in
+ * what other statistics are stored, without needing to modify the table structure.
  *
  * The horizon_mins column stores the number of minutes difference between the target_time_utc and
  * the initialization time of the forecast. It is a more useful index for the kinds of query we
@@ -102,17 +155,21 @@ CREATE TABLE pred.predicted_generation_values (
     CONSTRAINT horizon_mins_nonnegative_check CHECK (horizon_mins >= 0),
     p50_sip SMALLINT NOT NULL,
     CONSTRAINT p50_sip_nonnegative_check CHECK (p50_sip >= 0),
-    p10_sip SMALLINT DEFAULT NULL,
-    CONSTRAINT p10_sip_nonnegative_check CHECK (p10_sip IS NULL OR p10_sip >= 0),
-    p90_sip SMALLINT DEFAULT NULL
-    CHECK (p90_sip IS NULL OR p90_sip >= 0),
     target_time_utc TIMESTAMP NOT NULL,
-    metadata JSONB DEFAULT NULL
-    CHECK (metadata IS NULL OR metadata != '{}'),
     forecast_uuid UUID NOT NULL
     REFERENCES pred.forecasts (forecast_uuid)
     ON DELETE CASCADE
     ON UPDATE CASCADE,
+    metadata JSONB DEFAULT NULL
+    CONSTRAINT metadata_nullifempty CHECK (
+        metadata IS NULL OR metadata != '{}'
+    ),
+    other_stats_fractions JSONB DEFAULT NULL,
+    CONSTRAINT other_stats_nullifempty CHECK (
+        other_stats_fractions IS NULL OR other_stats_fractions != '{}'
+    ),
+    CONSTRAINT other_stats_valid_fractions_check
+        CHECK (pred.check_all_jsonb_values_are_valid_stat_fractions(other_stats_fractions)),
     PRIMARY KEY (forecast_uuid, target_time_utc, horizon_mins)
 )
 PARTITION BY RANGE (target_time_utc);
@@ -139,6 +196,7 @@ SET
     retention_keep_index = FALSE,
     infinite_time_partitions = TRUE
 WHERE parent_table = 'pred.predicted_generation_values';
+SELECT partman.run_maintenance('pred.predicted_generation_values');
 
 -- +goose Down
 DROP SCHEMA pred CASCADE;

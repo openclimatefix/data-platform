@@ -73,11 +73,11 @@ message GetForecastAsTimeseriesResponse {
   message Value {
     google.protobuf.Timestamp target_timestamp_utc = 1;
     float p50_value_fraction = 2;
-    float p10_value_fraction = 3;
-    float p90_value_fraction = 4;
-    uint64 effective_capacity_watts = 5;
-    google.protobuf.Timestamp initialization_timestamp_utc = 6;
-    google.protobuf.Timestamp created_timestamp_utc = 7;
+    uint64 effective_capacity_watts = 3;
+    google.protobuf.Timestamp initialization_timestamp_utc = 4;
+    google.protobuf.Timestamp created_timestamp_utc = 5;
+    map<string, float> other_statistics_fractions = 6;
+    google.protobuf.Struct metadata = 7;
   }
 
   string location_uuid = 1;
@@ -236,17 +236,22 @@ message CreateForecastRequest {
     uint32 horizon_mins = 1;
     float p50_fraction = 2 [
       (buf.validate.field).float.gte = 0,
-      (buf.validate.field).float.lte = 1.1
+      (buf.validate.field).float.lte = 1.1,
+      (buf.validate.field).float.finite = true
     ];
-    float p10_fraction = 3 [
-      (buf.validate.field).float.gte = 0,
-      (buf.validate.field).float.lte = 1.1
+    // Struct for storing additional statistics like p10, p90, mean etc.
+    map<string, float> other_statistics_fractions = 3 [
+      (buf.validate.field).map.min_pairs = 0,
+      (buf.validate.field).map.max_pairs = 20,
+      (buf.validate.field).map.values = {
+        float: {
+          gte: 0.0,
+          lte: 1.1,
+          finite: true
+        }
+      }
     ];
-    float p90_fraction = 4 [
-      (buf.validate.field).float.gte = 0,
-      (buf.validate.field).float.lte = 1.1
-    ];
-    optional google.protobuf.Struct metadata = 5;
+    optional google.protobuf.Struct metadata = 4;
   }
 
   Forecaster forecaster = 1 [
@@ -605,9 +610,8 @@ message StreamForecastDataResponse {
   string location_uuid = 2;
   string forecaster_fullname = 3;
   uint32 horizon_mins = 4;
-  optional float p10_fraction = 5;
-  float p50_fraction = 6;
-  optional float p90_fraction = 7;
-  google.protobuf.Timestamp created_timestamp_utc = 8;
+  float p50_fraction = 5;
+  map<string, float> other_statistics_fractions = 6;
+  google.protobuf.Timestamp created_timestamp_utc = 7;
 }
 
