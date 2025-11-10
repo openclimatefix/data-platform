@@ -15,7 +15,7 @@
 
 import marimo
 
-__generated_with = "0.17.6"
+__generated_with = "0.17.7"
 app = marimo.App(width="medium")
 
 
@@ -128,10 +128,12 @@ async def _(Struct, cl_response, dp, dp_data_client, dt):
         values=[
             dp.CreateForecastRequestForecastValue(
                 horizon_mins=i * 60,
-                p10_fraction=0.5 + i / 100,
+                other_statistics_fractions={
+                    "p10": 0.5 + i / 100,
+                    "p90": 0.7 + i / 100,
+                },
                 p50_fraction=0.6 + i / 100,
-                p90_fraction=0.7 + i / 100,
-                metadata=Struct().from_pydict({"member": 39, "p75": 0.65 + i / 100}),
+                metadata=Struct().from_pydict({"member": 39}),
             )
             for i in range(37)
         ],
@@ -218,8 +220,12 @@ def _(mo):
 
 @app.cell
 def _(betterproto, gf_response, pd):
-    gfdf = pd.DataFrame.from_dict(
-        gf_response.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["values"]
+    gfdf = (
+        pd.DataFrame.from_dict(
+            gf_response.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["values"]
+        )
+        .pipe(lambda df: df.join(pd.json_normalize(df['other_statistics_fractions'])))
+        .drop("other_statistics_fractions", axis=1)
     )
     gfdf
     return (gfdf,)
@@ -249,8 +255,8 @@ def _(alt, gfdf):
         alt.Chart(gfdf)
         .mark_errorband(extent="ci")
         .encode(
-            y="p10_value_fraction",
-            y2="p90_value_fraction",
+            y="p10",
+            y2="p90",
             x="target_timestamp_utc:T",
         )
     )
@@ -274,7 +280,7 @@ async def _(dp, dp_data_client, pivot_timestamp, uuid):
     gd_request = dp.GetWeekAverageDeltasRequest(
         location_uuid=str(uuid.uuid4()),
         energy_source=dp.EnergySource.SOLAR,
-        pivot_time=pivot_timestamp,
+        pivot_timestamp_utc=pivot_timestamp,
         forecaster=dp.Forecaster(
             forecaster_name="test_forecaster_1",
             forecaster_version="v1",
@@ -411,7 +417,9 @@ async def _(betterproto, dp, dp_data_client, dt, pivot_timestamp, uuid):
 
 @app.cell
 def _(forecasts, pd):
-    pd.DataFrame.from_dict(forecasts).set_index(
+    pd.DataFrame.from_dict(forecasts).pipe(
+        lambda df: df.join(pd.json_normalize(df['other_statistics_fractions']))
+    ).drop("other_statistics_fractions", axis=1).set_index(
         ["init_timestamp", "location_uuid", "forecaster_fullname", "horizon_mins"]
     ).to_xarray()
     return
