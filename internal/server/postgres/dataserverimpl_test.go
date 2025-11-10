@@ -528,9 +528,11 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 		yields[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 30),
 			P50Fraction: float32(0.5 + float64(i)*0.05),
-			P10Fraction: float32(0.4 + float64(i)*0.05),
-			P90Fraction: float32(0.6 + float64(i)*0.05),
-			Metadata:    metadata,
+			OtherStatisticsFractions: map[string]float32{
+				"p90": float32(0.6 + float32(i)*0.05),
+				"p10": float32(0.4 + float32(i)*0.05),
+			},
+			Metadata: metadata,
 		}
 	}
 
@@ -645,7 +647,7 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 }
 
 func TestGetForecastAsTimeseries(t *testing.T) {
-	pivotTime := time.Date(2025, 1, 5, 12, 0, 0, 0, time.UTC)
+	pivotTime := time.Date(2025, 2, 5, 12, 0, 0, 0, time.UTC)
 	// Create a site to attach the forecasts to
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
@@ -683,9 +685,11 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		yields[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 5),
 			P50Fraction: float32(i) * float32(100/len(yields)) / 100.0,
-			P10Fraction: max(float32(i-1)*float32(100/len(yields))/100.0, 0),
-			P90Fraction: min(float32(i+1)*float32(100/len(yields))/100.0, 1.1),
-			Metadata:    metadata,
+			OtherStatisticsFractions: map[string]float32{
+				"p10": float32(max(float32(i-1)*float32(100/len(yields))/100.0, 0)),
+				"p90": float32(min(float32(i+1)*float32(100/len(yields))/100.0, 1.1)),
+			},
+			Metadata: metadata,
 		}
 	}
 
@@ -1249,9 +1253,11 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 		yields[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 5),
 			P50Fraction: float32(i) * float32(100/len(yields)) / 100.0,
-			P10Fraction: max(float32(i-1)*float32(100/len(yields))/100.0, 0),
-			P90Fraction: min(float32(i+1)*float32(100/len(yields))/100.0, 1.1),
-			Metadata:    metadata,
+			OtherStatisticsFractions: map[string]float32{
+				"p10": float32(max(float32(i-1)*float32(100/len(yields))/100.0, 0)),
+				"p90": float32(min(float32(i+1)*float32(100/len(yields))/100.0, 1.1)),
+			},
+			Metadata: metadata,
 		}
 	}
 
@@ -1308,20 +1314,21 @@ func TestCreateForecast(t *testing.T) {
 		yieldsPopulated[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 30),
 			P50Fraction: 0.5 + float32(i)*0.05,
-			P10Fraction: 0.4 + float32(i)*0.05,
-			P90Fraction: 0.6 + float32(i)*0.05,
-			Metadata:    metadata,
+			OtherStatisticsFractions: map[string]float32{
+				"p10": 0.4 + float32(i)*0.05,
+				"p90": 0.6 + float32(i)*0.05,
+			},
+			Metadata: metadata,
 		}
 	}
 
 	yieldsZeros := make([]*pb.CreateForecastRequest_ForecastValue, 10)
 	for i := range yieldsZeros {
 		yieldsZeros[i] = &pb.CreateForecastRequest_ForecastValue{
-			HorizonMins: uint32(i * 30),
-			P50Fraction: 0.0,
-			P10Fraction: 0.0,
-			P90Fraction: 0.0,
-			Metadata:    nil,
+			HorizonMins:              uint32(i * 30),
+			P50Fraction:              0.0,
+			OtherStatisticsFractions: map[string]float32{},
+			Metadata:                 nil,
 		}
 	}
 
@@ -1330,9 +1337,11 @@ func TestCreateForecast(t *testing.T) {
 		yieldsInvalid[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 30),
 			P50Fraction: 1.2,
-			P10Fraction: -0.1,
-			P90Fraction: 0.5,
-			Metadata:    metadata,
+			OtherStatisticsFractions: map[string]float32{
+				"p10": 1.3,
+				"p90": -0.2,
+			},
+			Metadata: metadata,
 		}
 	}
 
@@ -1484,9 +1493,11 @@ func TestGetLatestForecasts(t *testing.T) {
 		yields[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins: uint32(i * 30),
 			P50Fraction: 0.5 + float32(i)*0.05,
-			P10Fraction: 0.4 + float32(i)*0.05,
-			P90Fraction: 0.6 + float32(i)*0.05,
-			Metadata:    metadata,
+			OtherStatisticsFractions: map[string]float32{
+				"p10": 0.4 + float32(i)*0.05,
+				"p90": 0.6 + float32(i)*0.05,
+			},
+			Metadata: metadata,
 		}
 	}
 
@@ -1591,9 +1602,11 @@ func BenchmarkPostgresClient(b *testing.B) {
 			yields[i] = &pb.CreateForecastRequest_ForecastValue{
 				HorizonMins: uint32(i * 30),
 				P50Fraction: 0.5,
-				P10Fraction: 0.5,
-				P90Fraction: 0.5,
-				Metadata:    metadata,
+				OtherStatisticsFractions: map[string]float32{
+					"p10": 0.5,
+					"p90": 0.5,
+				},
+				Metadata: metadata,
 			}
 		}
 

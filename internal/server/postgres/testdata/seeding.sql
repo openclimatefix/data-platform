@@ -79,15 +79,17 @@ BEGIN
     -- Insert predicted generation values for each forecast
     FOR result IN SELECT forecast_uuid, init_time_utc FROM pred.forecasts LOOP
         INSERT INTO pred.predicted_generation_values
-            (horizon_mins, p10_sip, p50_sip, p90_sip, forecast_uuid, target_time_utc, metadata)
+            (horizon_mins, p50_sip, forecast_uuid, target_time_utc, metadata, other_stats_fractions)
         SELECT
             i,
-            GREATEST(CAST((100 / num_pgvs_per_forecast) * (i / gv_resolution_mins) * (30000/100) AS SMALLINT) - 300::SMALLINT, 0::SMALLINT),
             CAST((100 / num_pgvs_per_forecast) * (i / gv_resolution_mins) * (30000/100) AS SMALLINT),
-            CAST((100 / num_pgvs_per_forecast) * (i / gv_resolution_mins) * (30000/100) AS SMALLINT) + 300::SMALLINT,
             result.forecast_uuid,
             result.init_time_utc + (i || ' minutes')::interval,
-            jsonb_build_object('source', 'test')
+            jsonb_build_object('source', 'test'),
+            jsonb_build_object(
+                'p10_fraction', TRUNC(GREATEST(((100 / num_pgvs_per_forecast) * (i / gv_resolution_mins) / 100) - 0.03, 0), 3),
+                'p90_fraction', TRUNC(((100 / num_pgvs_per_forecast) * (i / gv_resolution_mins) / 100) + 0.03, 3)
+            )
         FROM generate_series(0, forecast_length_mins - gv_resolution_mins, gv_resolution_mins) AS i;
     END LOOP;
     RAISE NOTICE 'Inserted % predicted generation values', (SELECT COUNT(*) FROM pred.predicted_generation_values);

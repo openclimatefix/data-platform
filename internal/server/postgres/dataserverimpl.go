@@ -208,6 +208,12 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		)
 	}
 
+	l.Debug().
+		Int32("dp.forecaster.id", dbForecaster.ForecasterID).
+		Str("dp.forecaster.name", dbForecaster.ForecasterName).
+		Str("dp.forecaster.version", dbForecaster.ForecasterVersion).
+		Msg("found forecaster")
+
 	// Create a new forecast
 	cfprms := db.CreateForecastParams{
 		GeometryUuid:        uuid.MustParse(req.LocationUuid),
@@ -233,24 +239,48 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	// Create the forecast data
 	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
 	for i, value := range req.Values {
-		p10sip := int16(value.P10Fraction * 30000.0)
-		p90sip := int16(value.P90Fraction * 30000.0)
-
 		// Parse the metadata. Because this query uses COPYFROM, the metadata must be set
 		// to NULL explicitly in the Go code in the instance there is no metadata.
-		metadata, err := value.Metadata.MarshalJSON()
-		if err != nil {
-			l.Err(err).Msgf("value.Metadata.MarshalJSON()")
+		var metadataJSONB []byte
+		if value.Metadata == nil || len(value.Metadata.Fields) == 0 {
+			metadataJSONB = nil
+		} else {
+			metadataJSONB, err = value.Metadata.MarshalJSON()
+			if err != nil {
+				l.Err(err).Msgf("value.Metadata.MarshalJSON()")
 
-			return nil, status.Errorf(
-				codes.InvalidArgument,
-				"Invalid metadata for predicted generation value at horizon %d mins",
-				value.HorizonMins,
-			)
+				return nil, status.Error(
+					codes.InvalidArgument,
+					"Invalid metadata.",
+				)
+			}
 		}
 
-		if value.Metadata == nil || len(value.Metadata.Fields) == 0 {
-			metadata = nil
+		// Parse the other stats fractions map to JSONB.
+		// Since the database wants each numeric value to have 4 significant figures,
+		// the float32 values need to be rounded accordingly.
+		var otherStatsJSONB []byte
+		if len(value.OtherStatisticsFractions) == 0 {
+			otherStatsJSONB = nil
+		} else {
+			roundedStats := make(map[string]float64, len(value.OtherStatisticsFractions))
+			for key, val32 := range value.OtherStatisticsFractions {
+				val64 := float64(val32)
+
+				var roundedVal float64
+				if val64 < 1 {
+					roundedVal = math.Round(val64*10000) / 10000
+				} else {
+					roundedVal = math.Round(val64*1000) / 1000
+				}
+				roundedStats[key] = roundedVal
+			}
+
+			otherStatsJSONB, err = json.Marshal(roundedStats)
+			if err != nil {
+				l.Err(err).Msgf("json.Marshal(roundedStats: %+v)", roundedStats)
+				return nil, status.Error(codes.Internal, "Failed to serialise statistics")
+			}
 		}
 
 		paramsList[i] = db.CreatePredictedValuesParams{
@@ -263,15 +293,15 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 				),
 				Valid: true,
 			},
-			//
-			P10Sip:   &p10sip,
-			P90Sip:   &p90sip,
-			Metadata: metadata,
+			OtherStatsFractions: otherStatsJSONB,
+			Metadata:            metadataJSONB,
 		}
 	}
 
 	count, err := querier.CreatePredictedValues(ctx, paramsList)
 	if err != nil || count < int64(len(req.Values)) {
+		l.Err(err).Msgf("querier.CreatePredictedValues(%+v)", paramsList)
+
 		return nil, status.Error(
 			codes.InvalidArgument, "Invalid predicted generation values. "+
 				"Ensure the values are positive and correspond to less than 110% of capacity.",
@@ -581,17 +611,17 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 		}
 
 		for i := range dbPreds {
-			var p90 *float32
-			if dbPreds[i].P90Sip != nil {
-				p90val := float32(*dbPreds[i].P90Sip) / 30000.0
-				p90 = &p90val
-			}
+			otherStatistics := make(map[string]float32)
+			if dbPreds[i].OtherStatsFractions != nil {
+				err = json.Unmarshal(dbPreds[i].OtherStatsFractions, &otherStatistics)
+				if err != nil {
+					l.Err(err).Msgf("json.Unmarshal(%s)", string(dbPreds[i].OtherStatsFractions))
 
-			var p10 *float32
-			if dbPreds[i].P10Sip != nil {
-				p10val := float32(*dbPreds[i].P10Sip) / 30000.0
-
-				p10 = &p10val
+					return status.Errorf(
+						codes.Internal,
+						"Backend communication error.",
+					)
+				}
 			}
 
 			err = stream.Send(&pb.StreamForecastDataResponse{
@@ -602,11 +632,10 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					forecast.ForecasterName,
 					forecast.ForecasterVersion,
 				),
-				HorizonMins:         uint32(dbPreds[i].HorizonMins),
-				P50Fraction:         float32(dbPreds[i].P50Sip) / 30000.0,
-				P10Fraction:         p10,
-				P90Fraction:         p90,
-				CreatedTimestampUtc: timestamppb.New(forecast.CreatedAtUtc.Time),
+				HorizonMins:              uint32(dbPreds[i].HorizonMins),
+				P50Fraction:              float32(dbPreds[i].P50Sip) / 30000.0,
+				OtherStatisticsFractions: otherStatistics,
+				CreatedTimestampUtc:      timestamppb.New(forecast.CreatedAtUtc.Time),
 			})
 			if err != nil {
 				return err
@@ -1418,25 +1447,17 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 	values := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbValues))
 	for i, value := range dbValues {
-		var p10 float32
-		if value.P10Sip == nil {
-			p10 = float32(math.NaN())
-		} else {
-			p10 = float32(*value.P10Sip) / 30000.0
-		}
+		otherStats := make(map[string]float32)
 
-		var p90 float32
-		if value.P90Sip == nil {
-			p90 = float32(math.NaN())
-		} else {
-			p90 = float32(*value.P90Sip) / 30000.0
+		err := json.Unmarshal(value.OtherStatsFractions, &otherStats)
+		if err != nil {
+			l.Err(err).Msgf("json.Unmarshal(%s)", value.OtherStatsFractions)
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
-			TargetTimestampUtc: timestamppb.New(value.TargetTimeUtc.Time),
-			P50ValueFraction:   float32(value.P50Sip) / 30000.0,
-			P10ValueFraction:   p10,
-			P90ValueFraction:   p90,
+			TargetTimestampUtc:       timestamppb.New(value.TargetTimeUtc.Time),
+			P50ValueFraction:         float32(value.P50Sip) / 30000.0,
+			OtherStatisticsFractions: otherStats,
 			EffectiveCapacityWatts: uint64(
 				value.CapacityIncLimit,
 			) * uint64(

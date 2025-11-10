@@ -166,7 +166,7 @@ type logConsumer struct{}
 
 // Accept implements the LogConsumer interface, only writing NOTICE logs.
 func (lc *logConsumer) Accept(l testcontainers.Log) {
-	if strings.Contains(string(l.Content), "NOTICE:") {
-		log.Info().Msgf("pgcontainer: %s", l.Content)
+	if strings.Contains(string(l.Content), "DETAIL:") {
+		log.Info().Msgf("postgres: %s", strings.Split(string(l.Content), "DETAIL: ")[1])
 	}
 }
