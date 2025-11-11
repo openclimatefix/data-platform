@@ -32,6 +32,34 @@ INSERT INTO obs.observed_generation_values (
     $1, $2, $3, $4, $5
 );
 
+-- name: CreateObservationsBatch :batchone
+/* CreateObservationsBatch inserts observations in batch mode.
+ * Input yield is given as watts, so we join the sources materialized view
+ * to determine the capacity at the given timestamp.
+ */
+INSERT INTO obs.observed_generation_values (
+    geometry_uuid,
+    source_type_id,
+    observer_uuid,
+    observation_timestamp_utc,
+    value_sip
+)
+SELECT
+    mv.geometry_uuid,
+    mv.source_type_id,
+    sqlc.arg(observer_uuid)::UUID,
+    sqlc.arg(observation_timestamp_utc)::TIMESTAMP,
+    (
+        (sqlc.arg(value_watts)::BIGINT / (mv.capacity::REAL * POWER(10.0, mv.capacity_unit_prefix_factor)::REAL)) * 30000.0
+    )::SMALLINT AS calculated_value_sip
+FROM loc.sources_mv AS mv
+WHERE mv.geometry_uuid = sqlc.arg(geometry_uuid)::UUID
+    AND mv.source_type_id = sqlc.arg(source_type_id)::SMALLINT
+    AND mv.sys_period @> sqlc.arg(observation_timestamp_utc)::TIMESTAMP
+ON CONFLICT (geometry_uuid, source_type_id, observer_uuid, observation_timestamp_utc)
+DO NOTHING
+RETURNING *;
+
 -- name: GetObservationsBetween :many
 /* GetObservationsBetween gets observations between two timestamps
  * and returns their values as 16-bit integers, with 0 representing 0%

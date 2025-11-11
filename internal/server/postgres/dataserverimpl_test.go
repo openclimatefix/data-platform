@@ -969,8 +969,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 			TimestampUtc: timestamppb.New(
 				pivotTime.Add(time.Duration(i*5*-1) * time.Minute),
 			),
-			ValueFraction:          rand.Float32(),
-			EffectiveCapacityWatts: siteResp.EffectiveCapacityWatts,
+			ValueWatts: uint64(rand.Float64() * float64(siteResp.EffectiveCapacityWatts)),
 		}
 	}
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
@@ -1037,14 +1036,12 @@ func TestGetLatestObservation(t *testing.T) {
 	// Seed some observations for the site.
 	values := []*pb.CreateObservationsRequest_Value{
 		{
-			TimestampUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 2)),
-			ValueFraction:          0.3,
-			EffectiveCapacityWatts: siteResp.EffectiveCapacityWatts,
+			TimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 2)),
+			ValueWatts:   uint64(0.3 * float64(siteResp.EffectiveCapacityWatts)),
 		},
 		{
-			TimestampUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
-			ValueFraction:          0.5,
-			EffectiveCapacityWatts: siteResp.EffectiveCapacityWatts,
+			TimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 1)),
+			ValueWatts:   uint64(0.5 * float64(siteResp.EffectiveCapacityWatts)),
 		},
 	}
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
@@ -1226,8 +1223,7 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 			TimestampUtc: timestamppb.New(
 				pivotTime.Add(time.Duration(i*5*-1) * time.Minute),
 			),
-			ValueFraction:          0.5,
-			EffectiveCapacityWatts: siteResp.EffectiveCapacityWatts,
+			ValueWatts: uint64(0.5 * float64(siteResp.EffectiveCapacityWatts)),
 		}
 	}
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
