@@ -862,9 +862,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	}
 
 	// Insert the observations
-	coprms := make([]db.CreateObservationsParams, len(req.Values))
+	coprms := make([]db.CreateObservationsBatchParams, len(req.Values))
 	for i, v := range req.Values {
-		coprms[i] = db.CreateObservationsParams{
+		coprms[i] = db.CreateObservationsBatchParams{
 			GeometryUuid: locationUuid,
 			ObserverUuid: dbObserver.ObserverUuid,
 			ObservationTimestampUtc: pgtype.Timestamp{
@@ -872,12 +872,16 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 				Valid: true,
 			},
 			SourceTypeID: dbSource.SourceTypeID,
-			ValueSip:     int16(v.ValueFraction * 30000.0),
+			ValueWatts:   int64(v.ValueWatts),
 		}
 	}
 
-	count, err := querier.CreateObservations(ctx, coprms)
+	batch := querier.CreateObservationsBatch(ctx, coprms)
+
+	err = batch.Close()
 	if err != nil {
+		l.Err(err).Msgf("querier.CreateObservationsBatch(%+v)", coprms)
+
 		return nil, status.Error(
 			codes.InvalidArgument,
 			"Invalid observation values. Ensure the values are positive, and less than 110% of capacity.",
@@ -893,7 +897,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 			coprms[0].ObservationTimestampUtc.Time.String(),
 			coprms[len(coprms)-1].ObservationTimestampUtc.Time.String(),
 		)).
-		Int64("dp.observations.count", count).
+		Int("dp.observations.count", len(coprms)).
 		Msg("created observations")
 
 	return &pb.CreateObservationsResponse{}, nil
