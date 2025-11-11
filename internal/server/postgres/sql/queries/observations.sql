@@ -50,7 +50,8 @@ SELECT
     sqlc.arg(observer_uuid)::UUID,
     sqlc.arg(observation_timestamp_utc)::TIMESTAMP,
     (
-        (sqlc.arg(value_watts)::BIGINT / (mv.capacity::REAL * POWER(10.0, mv.capacity_unit_prefix_factor)::REAL)) * 30000.0
+        (sqlc.arg(value_watts)::BIGINT / (mv.capacity::REAL * POWER(10.0, mv.capacity_unit_prefix_factor)::REAL))
+        * 30000.0
     )::SMALLINT AS calculated_value_sip
 FROM loc.sources_mv AS mv
 WHERE mv.geometry_uuid = sqlc.arg(geometry_uuid)::UUID

@@ -881,6 +881,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	err = batch.Close()
 	if err != nil {
 		l.Err(err).Msgf("querier.CreateObservationsBatch(%+v)", coprms)
+
 		return nil, status.Error(
 			codes.InvalidArgument,
 			"Invalid observation values. Ensure the values are positive, and less than 110% of capacity.",
