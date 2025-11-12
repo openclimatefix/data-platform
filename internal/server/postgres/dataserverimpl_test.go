@@ -1191,6 +1191,113 @@ func TestCreateListObservers(t *testing.T) {
 	}
 }
 
+func TestCreateObservations(t *testing.T) {
+	pivotTime := time.Date(2020, 7, 7, 12, 0, 0, 0, time.UTC)
+	// Create a site to attach the observations to
+	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_create_observations_site",
+		GeometryWkt:            "POINT(-0.1 51.5)",
+		EffectiveCapacityWatts: 1000000,
+		Metadata:               &structpb.Struct{},
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
+	})
+	require.NoError(t, err)
+
+	// Update the capacity
+	updateResp, err := dc.UpdateLocationCapacity(t.Context(), &pb.UpdateLocationCapacityRequest{
+		LocationUuid:              siteResp.LocationUuid,
+		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		NewEffectiveCapacityWatts: 2000000,
+		ValidFromUtc:              timestamppb.New(pivotTime.Add(time.Hour * 1)),
+	})
+	require.NoError(t, err)
+
+	// Create an observer to make the observations
+	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
+		Name: "test_create_observations_observer",
+	})
+	require.NoError(t, err)
+
+	validObservations := make([]*pb.CreateObservationsRequest_Value, 10)
+	for i := range validObservations {
+		value := 0.5 * float64(siteResp.EffectiveCapacityWatts)
+		if i >= 2 {
+			value = 0.5 * float64(updateResp.EffectiveCapacityWatts)
+		}
+		validObservations[i] = &pb.CreateObservationsRequest_Value{
+			TimestampUtc: timestamppb.New(pivotTime.Add(time.Duration(i*30) * time.Minute)),
+			ValueWatts:   uint64(value),
+		}
+	}
+
+	invalidObservations := make([]*pb.CreateObservationsRequest_Value, 10)
+	for i := range invalidObservations {
+		value := 0.5 * float64(siteResp.EffectiveCapacityWatts)
+		if i >= 2 {
+			value = 1.2 * float64(updateResp.EffectiveCapacityWatts)
+		}
+		invalidObservations[i] = &pb.CreateObservationsRequest_Value{
+			TimestampUtc: timestamppb.New(pivotTime.Add(time.Duration(i*30) * time.Minute)),
+			ValueWatts:   uint64(value),
+		}
+	}
+
+	testcases := []struct {
+		name string
+		req  *pb.CreateObservationsRequest
+	}{
+		{
+			name: "Should create valid observations",
+			req: &pb.CreateObservationsRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: obsResp.ObserverName,
+				Values:       validObservations,
+			},
+		},
+		{
+			name: "Shouldn't create invalid observations",
+			req: &pb.CreateObservationsRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: obsResp.ObserverName,
+				Values:       invalidObservations,
+			},
+		},
+		{
+			name: "Shouldn't create observations for non-existent location",
+			req: &pb.CreateObservationsRequest{
+				LocationUuid: "non_existent_location",
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: obsResp.ObserverName,
+				Values:       validObservations,
+			},
+		},
+		{
+			name: "Shouldn't create observations for non-existent observer",
+			req: &pb.CreateObservationsRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: "non_existent_observer",
+				Values:       validObservations,
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := dc.CreateObservations(t.Context(), tc.req)
+			if strings.Contains(tc.name, "Shouldn't") {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestGetWeekAverageDeltas(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
