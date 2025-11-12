@@ -77,7 +77,7 @@ jobs:
         if: github.event_name != 'pull_request'
         continue-on-error: true
         run: |
-          gh cache delete ${{ runner.os }}-bench-${{ steps.head-benchfil.outputs.name }} --confirm || true
+          gh cache delete ${{ runner.os }}-bench-${{ steps.head-benchfil.outputs.name }} --succeed-on-no-caches
 
       - name: Cache benchmark results
         uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
