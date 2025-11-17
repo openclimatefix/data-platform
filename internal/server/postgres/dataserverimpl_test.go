@@ -1012,12 +1012,12 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 	}
 }
 
-func TestGetLatestObservation(t *testing.T) {
+func TestGetLatestObservations(t *testing.T) {
 	pivotTime := time.Now().Truncate(time.Minute)
 
 	// Create a site to attach the observations to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_latest_observation_site",
+		LocationName:           "test_get_latest_observations_site_1",
 		GeometryWkt:            "POINT(-20.25 57.5)",
 		EffectiveCapacityWatts: 1000000,
 		Metadata:               &structpb.Struct{},
@@ -1029,7 +1029,7 @@ func TestGetLatestObservation(t *testing.T) {
 
 	// Create an observer to make the observations
 	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
-		Name: "test_get_latest_observation_observer",
+		Name: "test_get_latest_observations_observer",
 	})
 	require.NoError(t, err)
 
@@ -1053,56 +1053,60 @@ func TestGetLatestObservation(t *testing.T) {
 	require.NoError(t, err)
 
 	testcases := []struct {
-		name             string
-		req              *pb.GetLatestObservationRequest
-		expectedFraction float32
+		name              string
+		req               *pb.GetLatestObservationsRequest
+		expectedFractions []float32
 	}{
 		{
-			name: "Should get latest observation",
-			req: &pb.GetLatestObservationRequest{
-				LocationUuid: siteResp.LocationUuid,
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				ObserverName: obsResp.ObserverName,
+			name: "Should get latest observations",
+			req: &pb.GetLatestObservationsRequest{
+				LocationUuids: []string{siteResp.LocationUuid},
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName:  obsResp.ObserverName,
 			},
-			expectedFraction: 0.5,
+			expectedFractions: []float32{0.5},
 		},
 		{
 			name: "Should get earlier observation before cutoff",
-			req: &pb.GetLatestObservationRequest{
-				LocationUuid:      siteResp.LocationUuid,
+			req: &pb.GetLatestObservationsRequest{
+				LocationUuids:     []string{siteResp.LocationUuid},
 				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				ObserverName:      obsResp.ObserverName,
 				PivotTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 1).Add(-time.Second)),
 			},
-			expectedFraction: 0.3,
+			expectedFractions: []float32{0.3},
 		},
 		{
-			name: "Shouldn't fetch for non-existent observer",
-			req: &pb.GetLatestObservationRequest{
-				LocationUuid: siteResp.LocationUuid,
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				ObserverName: "non_existent_observer",
+			name: "Should fetch no rows for non-existent observer",
+			req: &pb.GetLatestObservationsRequest{
+				LocationUuids: []string{siteResp.LocationUuid},
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName:  "non_existent_observer",
 			},
 		},
 		{
-			name: "Shouldn't fetch for non-existent location",
-			req: &pb.GetLatestObservationRequest{
-				LocationUuid: "non_existent_location",
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				ObserverName: obsResp.ObserverName,
+			name: "Should fetch no rows for non-existent location",
+			req: &pb.GetLatestObservationsRequest{
+				LocationUuids: []string{uuid.New().String()},
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName:  obsResp.ObserverName,
 			},
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := dc.GetLatestObservation(t.Context(), tc.req)
+			resp, err := dc.GetLatestObservations(t.Context(), tc.req)
 			if strings.Contains(tc.name, "Shouldn't") {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				require.Equal(t, tc.expectedFraction, resp.ValueFraction)
+
+				for i, obs := range resp.Observations {
+					t.Log(obs)
+					require.Equal(t, tc.expectedFractions[i], obs.ValueFraction)
+				}
 			}
 		})
 	}

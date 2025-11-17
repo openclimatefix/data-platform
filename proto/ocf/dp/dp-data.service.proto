@@ -44,7 +44,7 @@ service DataPlatformDataService {
   rpc ListObservers(ListObserversRequest) returns (ListObserversResponse) {}
   rpc CreateObservations(CreateObservationsRequest) returns (CreateObservationsResponse) {}
   /* GetLatestObservation fetches the most recent observation for a given location and observer. */
-  rpc GetLatestObservation(GetLatestObservationRequest) returns (GetLatestObservationResponse) {}
+  rpc GetLatestObservations(GetLatestObservationsRequest) returns (GetLatestObservationsResponse) {}
 
   // --- Analysis ----------------------------------------------------------------
 

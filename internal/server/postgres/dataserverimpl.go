@@ -903,10 +903,10 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	return &pb.CreateObservationsResponse{}, nil
 }
 
-func (s *DataPlatformDataServiceServerImpl) GetLatestObservation(
+func (s *DataPlatformDataServiceServerImpl) GetLatestObservations(
 	ctx context.Context,
-	req *pb.GetLatestObservationRequest,
-) (*pb.GetLatestObservationResponse, error) {
+	req *pb.GetLatestObservationsRequest,
+) (*pb.GetLatestObservationsResponse, error) {
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
@@ -915,31 +915,50 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestObservation(
 		req.PivotTimestampUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
 	}
 
-	goprms := db.GetLatestObservationParams{
-		GeometryUuid: uuid.MustParse(req.LocationUuid),
-		SourceTypeID: int16(req.EnergySource),
-		ObserverName: req.ObserverName,
-		PivotTimeUtc: pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true},
+	locUuids := make([]uuid.UUID, len(req.LocationUuids))
+	for i, locStr := range req.LocationUuids {
+		locUuids[i] = uuid.MustParse(locStr)
 	}
 
-	dbObs, err := querier.GetLatestObservation(ctx, goprms)
+	goprms := db.GetLatestObservationsParams{
+		GeometryUuids: locUuids,
+		SourceTypeID:  int16(req.EnergySource),
+		ObserverName:  req.ObserverName,
+		PivotTimeUtc:  pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true},
+	}
+
+	dbObs, err := querier.GetLatestObservations(ctx, goprms)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetLatestObservation(%+v)", goprms)
 
 		return nil, status.Error(
-			codes.NotFound,
-			"No observations found. Ensure location and observer exist, and observations have been created.",
+			codes.Internal,
+			"Backend communication error. See logs for details.",
 		)
 	}
 
-	return &pb.GetLatestObservationResponse{
-		TimestampUtc:  timestamppb.New(dbObs.ObservationTimestampUtc.Time),
-		ValueFraction: float32(dbObs.ValueSip) / 30000.0,
-		EffectiveCapacityWatts: uint64(
-			dbObs.CapacityIncLimit,
-		) * uint64(
-			math.Pow10(int(dbObs.CapacityUnitPrefixFactor)),
-		),
+	observations := make([]*pb.GetLatestObservationsResponse_Observation, len(dbObs))
+	for i, obs := range dbObs {
+		observations[i] = &pb.GetLatestObservationsResponse_Observation{
+			LocationUuid:  obs.GeometryUuid.String(),
+			TimestampUtc:  timestamppb.New(obs.ObservationTimestampUtc.Time),
+			ValueFraction: float32(obs.ValueSip) / 30000.0,
+			EffectiveCapacityWatts: uint64(
+				obs.CapacityIncLimit,
+			) * uint64(
+				math.Pow10(int(obs.CapacityUnitPrefixFactor)),
+			),
+		}
+	}
+
+	l.Debug().
+		Int16("dp.source.type_id", goprms.SourceTypeID).
+		Int("dp.geometry.count", len(req.LocationUuids)).
+		Int("dp.observations.count", len(observations)).
+		Msg("found observations")
+
+	return &pb.GetLatestObservationsResponse{
+		Observations: observations,
 	}, nil
 }
 
