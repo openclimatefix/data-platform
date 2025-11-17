@@ -443,10 +443,14 @@ message CreateObservationsRequest {
 message CreateObservationsResponse {}
 
 
-message GetLatestObservationRequest {
-  string location_uuid = 1 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).string.uuid = true
+message GetLatestObservationsRequest {
+  repeated string location_uuids = 1 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 100,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items = {
+      string: {uuid: true}
+    }
   ];
   EnergySource energy_source = 2 [
     (buf.validate.field).required = true 
@@ -463,10 +467,15 @@ message GetLatestObservationRequest {
   ];
 }
 
-message GetLatestObservationResponse {
-  google.protobuf.Timestamp timestamp_utc = 1;
-  float value_fraction = 2;
-  uint64 effective_capacity_watts = 3;
+message GetLatestObservationsResponse {
+  message Observation {
+    string location_uuid = 1;
+    google.protobuf.Timestamp timestamp_utc = 2;
+    float value_fraction = 3;
+    uint64 effective_capacity_watts = 4;
+  }
+
+  repeated GetLatestObservationsResponse.Observation observations = 1;
 }
 
 

@@ -317,19 +317,27 @@ func (d *DataPlatformDataServiceServerImpl) CreateObservations(
 	return &pb.CreateObservationsResponse{}, nil
 }
 
-// GetLatestObservation implements dp.DataPlatformDataServiceServer.
-func (s *DataPlatformDataServiceServerImpl) GetLatestObservation(
+// GetLatestObservations implements dp.DataPlatformDataServiceServer.
+func (s *DataPlatformDataServiceServerImpl) GetLatestObservations(
 	ctx context.Context,
-	req *pb.GetLatestObservationRequest,
-) (*pb.GetLatestObservationResponse, error) {
+	req *pb.GetLatestObservationsRequest,
+) (*pb.GetLatestObservationsResponse, error) {
 	if req.PivotTimestampUtc == nil {
 		req.PivotTimestampUtc = timestamppb.New(time.Now().UTC())
 	}
 
-	return &pb.GetLatestObservationResponse{
-		TimestampUtc:           req.PivotTimestampUtc,
-		ValueFraction:          0.75,
-		EffectiveCapacityWatts: 150e6,
+	observations := make([]*pb.GetLatestObservationsResponse_Observation, len(req.LocationUuids))
+	for i := range observations {
+		observations[i] = &pb.GetLatestObservationsResponse_Observation{
+			LocationUuid:           req.LocationUuids[i],
+			TimestampUtc:           req.PivotTimestampUtc,
+			ValueFraction:          0.75,
+			EffectiveCapacityWatts: 150e6,
+		}
+	}
+
+	return &pb.GetLatestObservationsResponse{
+		Observations: observations,
 	}, nil
 }
 

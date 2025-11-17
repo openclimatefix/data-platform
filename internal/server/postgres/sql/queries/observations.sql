@@ -84,28 +84,43 @@ WHERE
     AND og.observation_timestamp_utc BETWEEN sqlc.arg(start_time_utc)::TIMESTAMP AND sqlc.arg(end_time_utc)::TIMESTAMP
     AND sh.sys_period @> og.observation_timestamp_utc;
 
--- name: GetLatestObservation :one
-/* GetLatestObservation gets the latest observation for a given location, source type, and observer.
- * The value is returned as a 16-bit integer, with 0 representing 0%
+-- name: GetLatestObservations :many
+/* GetLatestObservations gets the latest observations for a given location set, source type, and
+ * observer. The value is returned as a 16-bit integer, with 0 representing 0%
  * and 30000 representing 100% of capacity.
  */
+WITH ranked_observations AS (
+    SELECT
+        og.geometry_uuid,
+        og.source_type_id,
+        og.observation_timestamp_utc,
+        og.value_sip,
+        sh.capacity_limit_sip,
+        sh.capacity,
+        sh.capacity_unit_prefix_factor,
+        ROW_NUMBER() OVER (
+            PARTITION BY og.geometry_uuid, og.source_type_id, o.observer_uuid
+            ORDER BY og.observation_timestamp_utc DESC
+        ) AS rn
+    FROM obs.observed_generation_values AS og
+        INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
+        INNER JOIN obs.observers AS o USING (observer_uuid)
+    WHERE
+        og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+        AND og.source_type_id = $1
+        AND o.observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
+        AND sh.sys_period @> og.observation_timestamp_utc
+        AND og.observation_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
+)
 SELECT
-    og.geometry_uuid,
-    og.source_type_id,
-    og.observation_timestamp_utc,
-    og.value_sip,
+    geometry_uuid,
+    source_type_id,
+    observation_timestamp_utc,
+    value_sip,
     COALESCE(
-        sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
+        capacity_limit_sip::REAL * capacity / 30000.0, capacity::REAL
     )::REAL AS capacity_inc_limit,
-    sh.capacity_unit_prefix_factor
-FROM obs.observed_generation_values AS og
-    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
-    INNER JOIN obs.observers AS o USING (observer_uuid)
-WHERE
-    og.geometry_uuid = $1
-    AND og.source_type_id = $2
-    AND o.observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
-    AND sh.sys_period @> og.observation_timestamp_utc
-    AND og.observation_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
-ORDER BY og.observation_timestamp_utc DESC
-LIMIT 1;
+    capacity,
+    capacity_unit_prefix_factor
+FROM ranked_observations
+WHERE rn = 1;
