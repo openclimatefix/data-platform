@@ -28,12 +28,14 @@ message TimeWindow {
    * Cannot be more than 7 days before end_timestamp_utc.
    */
   google.protobuf.Timestamp start_timestamp_utc = 1 [
+    (buf.validate.field).required = true,
     (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
   /* The end of the time window, inclusive.
    * Cannot be more than 7 days after start_timestamp_utc.
    */
   google.protobuf.Timestamp end_timestamp_utc = 2 [
+    (buf.validate.field).required = true,
     (buf.validate.field).timestamp.gt = { seconds: 112000000}
   ];
 
@@ -596,6 +598,34 @@ message ListLocationsResponse {
 
 
 message StreamForecastDataRequest {
+  message TimeWindow {
+    /* The start of the time window, inclusive.
+     * Cannot be more than 31 days before end_timestamp_utc.
+     */
+    google.protobuf.Timestamp start_timestamp_utc = 1 [
+      (buf.validate.field).required = true,
+      (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+    ];
+    /* The end of the time window, inclusive.
+     * Cannot be more than 31 days after start_timestamp_utc.
+     */
+    google.protobuf.Timestamp end_timestamp_utc = 2 [
+      (buf.validate.field).required = true,
+      (buf.validate.field).timestamp.gt = { seconds: 112000000}
+    ];
+
+    option (buf.validate.message).cel = {
+      id: "maximum_window_size"
+      message: "window size must not exceed 31 days"
+      expression: "this.end_timestamp_utc - this.start_timestamp_utc <= duration('2678400s')"
+    };
+    option (buf.validate.message).cel = {
+      id: "start_before_end"
+      message: "start_timestamp_utc must be before end_timestamp_utc"
+      expression: "this.start_timestamp_utc <= this.end_timestamp_utc"
+    };
+  }
+
   string location_uuid = 1 [
     (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
@@ -603,7 +633,7 @@ message StreamForecastDataRequest {
   EnergySource energy_source = 2 [
     (buf.validate.field).required = true 
   ];
-  TimeWindow time_window = 3 [
+  StreamForecastDataRequest.TimeWindow time_window = 3 [
     (buf.validate.field).required = true
   ];
   repeated Forecaster forecasters = 4 [
@@ -621,5 +651,6 @@ message StreamForecastDataResponse {
   float p50_fraction = 5;
   map<string, float> other_statistics_fractions = 6;
   google.protobuf.Timestamp created_timestamp_utc = 7;
+  uint64 effective_capacity_watts = 8;
 }
 

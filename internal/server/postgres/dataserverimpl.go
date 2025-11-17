@@ -610,12 +610,12 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 			)
 		}
 
-		for i := range dbPreds {
+		for _, pred := range dbPreds {
 			otherStatistics := make(map[string]float32)
-			if dbPreds[i].OtherStatsFractions != nil {
-				err = json.Unmarshal(dbPreds[i].OtherStatsFractions, &otherStatistics)
+			if pred.OtherStatsFractions != nil {
+				err = json.Unmarshal(pred.OtherStatsFractions, &otherStatistics)
 				if err != nil {
-					l.Err(err).Msgf("json.Unmarshal(%s)", string(dbPreds[i].OtherStatsFractions))
+					l.Err(err).Msgf("json.Unmarshal(%s)", string(pred.OtherStatsFractions))
 
 					return status.Errorf(
 						codes.Internal,
@@ -632,10 +632,15 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					forecast.ForecasterName,
 					forecast.ForecasterVersion,
 				),
-				HorizonMins:              uint32(dbPreds[i].HorizonMins),
-				P50Fraction:              float32(dbPreds[i].P50Sip) / 30000.0,
+				HorizonMins:              uint32(pred.HorizonMins),
+				P50Fraction:              float32(pred.P50Sip) / 30000.0,
 				OtherStatisticsFractions: otherStatistics,
 				CreatedTimestampUtc:      timestamppb.New(forecast.CreatedAtUtc.Time),
+				EffectiveCapacityWatts: uint64(
+					pred.CapacityIncLimit,
+				) * uint64(
+					math.Pow10(int(pred.CapacityUnitPrefixFactor)),
+				),
 			})
 			if err != nil {
 				return err

@@ -159,9 +159,16 @@ SELECT
     pg.p50_sip,
     pg.target_time_utc,
     pg.other_stats_fractions,
-    pg.metadata
+    pg.metadata,
+    COALESCE(
+        sv.capacity_limit_sip::REAL * sv.capacity / 30000.0, sv.capacity::REAL
+    )::REAL AS capacity_inc_limit,
+    sv.capacity,
+    sv.capacity_unit_prefix_factor
 FROM pred.predicted_generation_values AS pg
-WHERE pg.forecast_uuid = $1;
+    INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
+WHERE pg.forecast_uuid = $1
+    AND sv.sys_period @> pg.target_time_utc;
 
 -- name: ListPredictionsForLocation :many
 /* ListPredictionsForLocation retrieves predicted generation values as a timeseries.
