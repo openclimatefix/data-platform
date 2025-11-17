@@ -165,9 +165,10 @@ SELECT
     )::REAL AS capacity_inc_limit,
     sv.capacity,
     sv.capacity_unit_prefix_factor
-FROM pred.predicted_generation_values AS pg
+FROM pred.forecasts AS f
+    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
-WHERE pg.forecast_uuid = $1
+WHERE f.forecast_uuid = $1
     AND sv.sys_period @> pg.target_time_utc;
 
 -- name: ListPredictionsForLocation :many
