@@ -621,6 +621,7 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 						"p90": float32(sd.normalizedIrradiance()) * 1.05,
 					},
 					CreatedTimestampUtc: timestamppb.New(time.Now().UTC()),
+					EffectiveCapacityWatts: 150e6,
 				})
 				if err != nil {
 					return err
