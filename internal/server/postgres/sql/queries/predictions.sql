@@ -166,9 +166,9 @@ SELECT
     sv.capacity,
     sv.capacity_unit_prefix_factor
 FROM pred.predicted_generation_values AS pg
-INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
+    INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
 WHERE pg.forecast_uuid = $1
-AND sv.sys_period @> pg.target_time_utc;
+    AND sv.sys_period @> pg.target_time_utc;
 
 -- name: ListPredictionsForLocation :many
 /* ListPredictionsForLocation retrieves predicted generation values as a timeseries.
