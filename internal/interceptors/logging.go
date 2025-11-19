@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 )
@@ -32,7 +33,10 @@ func (li *loggingInterceptorBuilder) UnaryServerInterceptor(
 	callStart := time.Now().UTC()
 	// Use zerolog's context integration to add a logger to the request context.
 	// See https://github.com/rs/zerolog#contextcontext-integration
-	l := log.With().Str("grpc.method", info.FullMethod).Logger()
+	l := log.With().
+		Str("grpc.method", info.FullMethod).
+		Str("grpc.requestid", uuid.New().String()).
+		Logger()
 	l.Debug().Msg("started call")
 	ctx = l.WithContext(ctx)
 
@@ -58,7 +62,10 @@ func (li *loggingInterceptorBuilder) StreamServerInterceptor(
 ) error {
 	callStart := time.Now().UTC()
 	// Use zerolog's context integration to add a logger to the request context.
-	l := log.With().Str("grpc.method", info.FullMethod).Logger()
+	l := log.With().
+		Str("grpc.method", info.FullMethod).
+		Str("grpc.requestid", uuid.New().String()).
+		Logger()
 	l.Debug().Msg("started call")
 	ctx := l.WithContext(ss.Context())
 
