@@ -298,56 +298,88 @@ func TestCreateLocation(t *testing.T) {
 	})
 }
 
-func TestUpdateLocationCapacity(t *testing.T) {
+func TestUpdateLocation(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
-	pivotTime := time.Now().Truncate(time.Minute)
+	pivotTime := time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)
 
 	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_update_location_capacity_site",
+		LocationName:           "test_update_location_site",
 		GeometryWkt:            "POINT(-0.1 51.5)",
-		EffectiveCapacityWatts: 1000000,
+		EffectiveCapacityWatts: 1234e6,
 		Metadata:               metadata,
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-1 * time.Hour)),
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-10 * time.Hour)),
 	})
 
 	require.NoError(t, err)
 
+	newMetadata, err := structpb.NewStruct(map[string]any{"source": "test", "updated": true})
+	require.NoError(t, err)
+
 	testcases := []struct {
 		name string
-		req  *pb.UpdateLocationCapacityRequest
+		req  *pb.UpdateLocationRequest
+		expectedName string
+		expectedCapacityWatts uint64
+		expectedMetadata map[string]any
 	}{
 		{
 			name: "Should update capacity to higher value",
-			req: &pb.UpdateLocationCapacityRequest{
+			req: &pb.UpdateLocationRequest{
 				LocationUuid:              createResp.LocationUuid,
 				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				NewEffectiveCapacityWatts: 2000000,
+				NewEffectiveCapacityWatts: func () *uint64 { v := uint64(1235e6); return &v }(),
+				ValidFromUtc:              timestamppb.New(pivotTime.Add(-5 * time.Hour)),
+			},
+			expectedName: "test_update_location_site",
+			expectedCapacityWatts: 1235e6,
+			expectedMetadata: map[string]any{"source": "test"},
+		},
+		{
+			name: "Shouldn't update anything when nothing is set",
+			req: &pb.UpdateLocationRequest{
+				LocationUuid:              "invalid-uuid",
+				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ValidFromUtc:              timestamppb.New(pivotTime.Add(-4 * time.Hour)),
 			},
 		},
 		{
-			name: "Shouldn't update capacity with invalid location uuid",
-			req: &pb.UpdateLocationCapacityRequest{
-				LocationUuid:              "invalid-uuid",
-				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				NewEffectiveCapacityWatts: 1500000,
-				ValidFromUtc:              timestamppb.New(pivotTime.Add(3 * time.Hour)),
+			name: "Should update name and metadata",
+			req: &pb.UpdateLocationRequest{
+				LocationUuid:    createResp.LocationUuid,
+				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				NewLocationName: func () *string { s := "test_updated_location_site"; return &s }(),
+				NewMetadata: newMetadata,
+				ValidFromUtc:    timestamppb.New(pivotTime.Add(-3 * time.Hour)),
 			},
+			expectedName: "test_updated_location_site",
+			expectedCapacityWatts: 1235e6,
+			expectedMetadata: map[string]any{"source": "test", "updated": true},
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := dc.UpdateLocationCapacity(t.Context(), tc.req)
+			resp, err := dc.UpdateLocation(t.Context(), tc.req)
 
 			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				// TODO: Can't test this worked without putting a time into GetLocation request
+
+				newGetResp, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+					LocationUuid:    resp.LocationUuid,
+					EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					IncludeGeometry: false,
+					PivotTimestampUtc: timestamppb.New(tc.req.ValidFromUtc.AsTime().Add(time.Minute)),
+				})
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedName, newGetResp.LocationName)
+				require.Equal(t, int(tc.expectedCapacityWatts), int(newGetResp.EffectiveCapacityWatts))
+				require.Equal(t, tc.expectedMetadata, newGetResp.Metadata.AsMap())
 			}
 		})
 	}
@@ -662,10 +694,10 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// Update the capacity of the site to check it is reflected in the values
-	_, err = dc.UpdateLocationCapacity(t.Context(), &pb.UpdateLocationCapacityRequest{
+	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
 		LocationUuid:              siteResp.LocationUuid,
 		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		NewEffectiveCapacityWatts: 1500000,
+		NewEffectiveCapacityWatts: func () *uint64 { v := uint64(1500000); return &v }(),
 		ValidFromUtc:              timestamppb.New(pivotTime.Add(-time.Hour * 1)),
 	})
 	require.NoError(t, err)
@@ -1210,10 +1242,10 @@ func TestCreateObservations(t *testing.T) {
 	require.NoError(t, err)
 
 	// Update the capacity
-	updateResp, err := dc.UpdateLocationCapacity(t.Context(), &pb.UpdateLocationCapacityRequest{
+	updateResp, err := dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
 		LocationUuid:              siteResp.LocationUuid,
 		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		NewEffectiveCapacityWatts: 2000000,
+		NewEffectiveCapacityWatts: func () *uint64 { v := uint64(2000000); return &v }(),
 		ValidFromUtc:              timestamppb.New(pivotTime.Add(time.Hour * 1)),
 	})
 	require.NoError(t, err)

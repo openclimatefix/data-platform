@@ -297,14 +297,18 @@ func (d *DataPlatformDataServiceServerImpl) CreateLocation(
 	}, nil
 }
 
-// UpdateLocationCapacity implements dp.DataPlatformDataServiceServer.
-func (d *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
+// UpdateLocation implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) UpdateLocation(
 	ctx context.Context,
-	req *pb.UpdateLocationCapacityRequest,
-) (*pb.UpdateLocationCapacityResponse, error) {
-	return &pb.UpdateLocationCapacityResponse{
+	req *pb.UpdateLocationRequest,
+) (*pb.UpdateLocationResponse, error) {
+	cp := uint64(524e6)
+	if req.NewEffectiveCapacityWatts != nil {
+		cp = *req.NewEffectiveCapacityWatts
+	}
+	return &pb.UpdateLocationResponse{
 		LocationUuid:           req.LocationUuid,
-		EffectiveCapacityWatts: req.NewEffectiveCapacityWatts,
+		EffectiveCapacityWatts: cp,
 		LocationName:           "DummyLocation",
 	}, nil
 }

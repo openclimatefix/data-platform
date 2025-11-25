@@ -19,6 +19,7 @@ enum EnergySource {
 /* LocationType indicates the type of location.
  * NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
  * Do not change without considering this first!
+ * The values are spaced apart in order to allow for future expansion.
  */
 enum LocationType {
   LOCATION_TYPE_UNSPECIFIED = 0;
@@ -26,6 +27,9 @@ enum LocationType {
   LOCATION_TYPE_GSP = 2;
   LOCATION_TYPE_DNO = 3;
   LOCATION_TYPE_NATION = 4;
+  LOCATION_TYPE_STATE = 5;
+  LOCATION_TYPE_COUNTY = 6;
+  LOCATION_TYPE_CITY = 7;
 }
 
 /* Permission indicates the level of access a user has to a resource.
