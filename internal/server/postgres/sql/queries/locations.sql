@@ -55,7 +55,7 @@ SELECT
     s.metadata AS metadata_jsonb,
     s.geometry_uuid,
     l.geometry_name,
-	s.sys_period,
+    s.sys_period,
     ST_X(l.centroid)::REAL AS longitude,
     ST_Y(l.centroid)::REAL AS latitude
 FROM loc.sources_mv AS s

@@ -1325,6 +1325,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 
 	// Use existing capacity, unless a new capacity is provided
 	cp := dbSource.Capacity
+
 	ex := dbSource.CapacityUnitPrefixFactor
 	if req.NewEffectiveCapacityWatts != nil {
 		cp, ex, err = capacityToValueMultiplier(req.GetNewEffectiveCapacityWatts())
@@ -1358,6 +1359,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 			GeometryUuid:    dbSource.GeometryUuid,
 			NewGeometryName: req.GetNewLocationName(),
 		}
+
 		_, err = querier.RenameGeometry(ctx, rgprms)
 		if err != nil {
 			l.Err(err).Msgf("querier.RenameGeometry(%+v)", rgprms)
@@ -1406,9 +1408,13 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	l.Debug().Msg("refreshed sources materialised view")
 
 	return &pb.UpdateLocationResponse{
-		LocationUuid:           req.LocationUuid,
-		LocationName:           dbSource.GeometryName,
-		EffectiveCapacityWatts: uint64(dbNewSource.Capacity) * uint64(math.Pow10(int(dbNewSource.CapacityUnitPrefixFactor))),
+		LocationUuid: req.LocationUuid,
+		LocationName: dbSource.GeometryName,
+		EffectiveCapacityWatts: uint64(
+			dbNewSource.Capacity,
+		) * uint64(
+			math.Pow10(int(dbNewSource.CapacityUnitPrefixFactor)),
+		),
 	}, nil
 }
 

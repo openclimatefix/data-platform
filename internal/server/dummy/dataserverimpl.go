@@ -306,6 +306,7 @@ func (d *DataPlatformDataServiceServerImpl) UpdateLocation(
 	if req.NewEffectiveCapacityWatts != nil {
 		cp = *req.NewEffectiveCapacityWatts
 	}
+
 	return &pb.UpdateLocationResponse{
 		LocationUuid:           req.LocationUuid,
 		EffectiveCapacityWatts: cp,
