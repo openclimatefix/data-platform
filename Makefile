@@ -38,7 +38,7 @@ run: ${OUT}
 	@./${OUT}
 
 .PHONY: init
-init: tools gen
+init: path tools gen
 	@go mod tidy
 	@git config --local core.hooksPath .github/hooks
 
@@ -112,6 +112,13 @@ ${PROTO_GO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SO
 	@echo " * Success."
 
 # --- SUPPLEMENTARY TARGETS ---------------------------------------------------------------------- #
+
+.PHONY: path
+path:
+	@if ! echo "$$PATH" | tr ':' '\n' | grep -qx "$(GOBIN)"; then \
+		echo "Add 'export PATH=$$PATH:$(GOBIN)' to your shell profile to use installed tools."; \
+		exit 1; \
+	fi
 
 .PHONY: tools
 tools: ${TOOLS}
