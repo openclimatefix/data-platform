@@ -27,8 +27,8 @@ service DataPlatformDataService {
   rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
   /* CreateLocation registers a new location in which to log or forecast generation. */
   rpc CreateLocation(CreateLocationRequest) returns (CreateLocationResponse) {}
-  /* ExtendLocation increases the capacity of a specific location. */
-  rpc UpdateLocationCapacity(UpdateLocationCapacityRequest) returns (UpdateLocationCapacityResponse) {}
+  /* UpdateLocation modifies various attributes associated with a given location. */
+  rpc UpdateLocation(UpdateLocationRequest) returns (UpdateLocationResponse) {}
   /* ListLocations fetches a list of registered locations that match the supplied filters. */
   rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse) {}
 

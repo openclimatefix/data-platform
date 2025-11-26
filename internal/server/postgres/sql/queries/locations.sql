@@ -9,6 +9,12 @@ INSERT INTO loc.geometries AS l (
     $1
 ) RETURNING l.geometry_uuid, l.geometry_name, ST_X(l.centroid)::REAL AS longitude, ST_Y(l.centroid)::REAL AS latitude;
 
+-- name: RenameGeometry :one
+UPDATE loc.geometries AS l
+SET geometry_name = LOWER(sqlc.arg(new_geometry_name)::TEXT)
+WHERE l.geometry_uuid = $1
+RETURNING l.geometry_uuid, l.geometry_name, ST_X(l.centroid)::REAL AS longitude, ST_Y(l.centroid)::REAL AS latitude;
+
 -- name: GetGeometryGeoJSON :one
 /* GetLocationGeoJSON returns a GeoJSON FeatureCollection for the given geometries.
  * The simplification level can be adjusted via the `simplification_level` argument.
@@ -49,6 +55,7 @@ SELECT
     s.metadata AS metadata_jsonb,
     s.geometry_uuid,
     l.geometry_name,
+    s.sys_period,
     ST_X(l.centroid)::REAL AS longitude,
     ST_Y(l.centroid)::REAL AS latitude
 FROM loc.sources_mv AS s
@@ -77,7 +84,7 @@ INSERT INTO loc.sources_history (
     $5,
     $6,
     CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
-) RETURNING geometry_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc;
+) RETURNING geometry_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc, metadata;
 
 -- name: RefreshSourcesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;

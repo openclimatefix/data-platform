@@ -1120,12 +1120,17 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 ) (*pb.GetLocationResponse, error) {
 	l := zerolog.Ctx(ctx)
 
+	validTime := time.Now().UTC().Truncate(time.Minute)
+	if req.PivotTimestampUtc != nil {
+		validTime = req.PivotTimestampUtc.AsTime()
+	}
+
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	cfprms := db.GetSourceAtTimestampParams{
 		GeometryUuid:   uuid.MustParse(req.LocationUuid),
 		SourceTypeID:   int16(req.EnergySource.Number()),
-		AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+		AtTimestampUtc: pgtype.Timestamp{Time: validTime, Valid: true},
 	}
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, cfprms)
@@ -1137,6 +1142,13 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 			"No such location. Ensure the location exists and is currently operational.",
 		)
 	}
+
+	l.Debug().
+		Str("dp.source.geometry_uuid", dbSource.GeometryUuid.String()).
+		Int16("dp.source.type_id", dbSource.SourceTypeID).
+		Int64("dp.source.capacity", int64(dbSource.CapacityIncLimit)*int64(math.Pow10(int(dbSource.CapacityUnitPrefixFactor)))).
+		Str("dp.source.valid_from_utc", dbSource.SysPeriod.Lower.Time.String()).
+		Msg("found source")
 
 	metadata, err := jsonbToStruct(dbSource.MetadataJsonb)
 	if err != nil {
@@ -1267,23 +1279,33 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	}, nil
 }
 
-func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
+func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	ctx context.Context,
-	req *pb.UpdateLocationCapacityRequest,
-) (*pb.UpdateLocationCapacityResponse, error) {
+	req *pb.UpdateLocationRequest,
+) (*pb.UpdateLocationResponse, error) {
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	// Set the valid from time to now if not provided
-	if req.ValidFromUtc == nil {
-		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
+	if req.NewEffectiveCapacityWatts == nil &&
+		req.NewLocationName == nil &&
+		req.NewMetadata == nil {
+		return nil, status.Error(
+			codes.InvalidArgument,
+			"At least one of new effective capacity, new location name, or new metadata must be provided.",
+		)
 	}
 
-	// Get the location source
+	// Set the valid from time to now if not provided
+	validFrom := time.Now().UTC().Truncate(time.Minute)
+	if req.ValidFromUtc != nil {
+		validFrom = req.ValidFromUtc.AsTime().UTC()
+	}
+
+	// Get the location source as it stands at the valid time
 	lsprms := db.GetSourceAtTimestampParams{
 		GeometryUuid:   uuid.MustParse(req.LocationUuid),
 		SourceTypeID:   int16(req.EnergySource.Number()),
-		AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+		AtTimestampUtc: pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
 	}
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, lsprms)
@@ -1296,24 +1318,70 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
 		)
 	}
 
-	cp, ex, err := capacityToValueMultiplier(req.NewEffectiveCapacityWatts)
-	if err != nil {
-		l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.NewEffectiveCapacityWatts)
+	l.Debug().
+		Str("dp.source.geometry_uuid", dbSource.GeometryUuid.String()).
+		Int16("dp.source.type_id", dbSource.SourceTypeID).
+		Int64("dp.source.capacity", int64(dbSource.Capacity)*int64(math.Pow10(int(dbSource.CapacityUnitPrefixFactor)))).
+		Str("dp.source.valid_from_utc", dbSource.SysPeriod.Lower.Time.String()).
+		Msg("fetched source")
 
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid capacity. Ensure capacity is non-negative.",
-		)
+	// Use existing capacity, unless a new capacity is provided
+	cp := dbSource.Capacity
+
+	ex := dbSource.CapacityUnitPrefixFactor
+	if req.NewEffectiveCapacityWatts != nil {
+		cp, ex, err = capacityToValueMultiplier(req.GetNewEffectiveCapacityWatts())
+		if err != nil {
+			l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.NewEffectiveCapacityWatts)
+
+			return nil, status.Error(
+				codes.InvalidArgument,
+				"Invalid capacity. Ensure new capacity is non-negative.",
+			)
+		}
 	}
 
+	// Use existing metadata, unless new metadata is provided
+	metadata := dbSource.MetadataJsonb
+	if req.NewMetadata != nil {
+		metadata, err = req.NewMetadata.MarshalJSON()
+		if err != nil {
+			l.Err(err).Msgf("req.NewMetadata.MarshalJSON()")
+
+			return nil, status.Error(
+				codes.InvalidArgument,
+				"Invalid metadata. Ensure new metadata is a valid JSON object.",
+			)
+		}
+	}
+
+	// Update the location name, if provided
+	if req.NewLocationName != nil {
+		rgprms := db.RenameGeometryParams{
+			GeometryUuid:    dbSource.GeometryUuid,
+			NewGeometryName: req.GetNewLocationName(),
+		}
+
+		_, err = querier.RenameGeometry(ctx, rgprms)
+		if err != nil {
+			l.Err(err).Msgf("querier.RenameGeometry(%+v)", rgprms)
+
+			return nil, status.Error(
+				codes.InvalidArgument,
+				"Invalid location name. Ensure new name is not empty and unique.",
+			)
+		}
+	}
+
+	// Update the source history with a new entry
 	csprms := db.CreateSourceEntryParams{
 		GeometryUuid:             dbSource.GeometryUuid,
 		SourceTypeID:             dbSource.SourceTypeID,
 		Capacity:                 cp,
 		CapacityUnitPrefixFactor: ex,
 		CapacityLimitSip:         dbSource.CapacityLimitSip, // TODO: Enable updating this
-		ValidFromUtc:             pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
-		Metadata:                 dbSource.MetadataJsonb,
+		ValidFromUtc:             pgtype.Timestamp{Time: validFrom, Valid: true},
+		Metadata:                 metadata,
 	}
 
 	dbNewSource, err := querier.CreateSourceEntry(ctx, csprms)
@@ -1341,10 +1409,14 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationCapacity(
 
 	l.Debug().Msg("refreshed sources materialised view")
 
-	return &pb.UpdateLocationCapacityResponse{
-		LocationUuid:           req.LocationUuid,
-		LocationName:           dbSource.GeometryName,
-		EffectiveCapacityWatts: req.NewEffectiveCapacityWatts,
+	return &pb.UpdateLocationResponse{
+		LocationUuid: req.LocationUuid,
+		LocationName: dbSource.GeometryName,
+		EffectiveCapacityWatts: uint64(
+			dbNewSource.Capacity,
+		) * uint64(
+			math.Pow10(int(dbNewSource.CapacityUnitPrefixFactor)),
+		),
 	}, nil
 }
 
