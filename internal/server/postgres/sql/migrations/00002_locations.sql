@@ -107,7 +107,6 @@ CREATE TABLE loc.sources_history (
     capacity_unit_prefix_factor SMALLINT DEFAULT (0) NOT NULL,
     CONSTRAINT capacity_unit_prefix_factor_valid_siprefix_check CHECK (
         capacity_unit_prefix_factor >= 0
-        AND capacity_unit_prefix_factor % 3 = 0
         AND capacity_unit_prefix_factor <= 18 -- ExaWatts surely sufficient...
     ),
     -- Capacity cap, (for instance during curtailment or repair work),

@@ -31,7 +31,7 @@ import (
 // --- Reuseable Functions for Route Logic -------------------------------------------------------
 
 // capacityToValueMultiplier return a number, plus the index to raise 10 to the power to
-// to get the resultant number of Watts, to the closest power of 3.
+// to get the resultant number of Watts. 
 // This is an important function which tries to preserve accuracy whilst also enabling a
 // large range of values to be represented by two 16 bit integers.
 func capacityToValueMultiplier(capacityWatts uint64) (int16, int16, error) {
@@ -53,20 +53,22 @@ func capacityToValueMultiplier(capacityWatts uint64) (int16, int16, error) {
 			)
 		}
 
-		// Divide by 1000 to get to the next SI unit prefix
-		// * add on 500 to round up numbers that are over halfway to the next 10^3
-		nextValue := (currentValue + 500) / 1000
+		// Divide by 10 to get to the next power of 10
+		// * add on 5 to round up numbers that are over halfway to the next 10
+		nextValue := (currentValue + 5) / 10
+		// log this value
+		fmt.Println(nextValue)
 
 		// Check we haven't accidentally rounded to 0
 		if nextValue == 0 && currentValue > 0 {
-			return 0, exponent + 3, fmt.Errorf(
+			return 0, exponent + 1, fmt.Errorf(
 				"scaled value rounded to zero from large input %d at potential exponent %d",
-				capacityWatts, exponent+3)
+				capacityWatts, exponent+1)
 		}
 
 		currentValue = nextValue
 
-		exponent += 3
+		exponent += 1
 	}
 
 	// This is safe as currentValue is now less than or equal to int16 max

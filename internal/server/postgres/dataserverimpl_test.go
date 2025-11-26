@@ -120,12 +120,15 @@ func TestCapacityToMultiplier(t *testing.T) {
 
 	testcases := []TestCase{
 		{0, 0, 0, false},
-		{500000, 500, 3, false},
+		{500000, 5000, 2, false},
 		{32767000, 32767, 3, false},
-		{32768000, 33, 6, false}, // Needs rounding, should go to 33 MW
-		{33000000, 33, 6, false},
-		{1000000000000, 1000, 9, false}, // 1TW
+		{32768000, 3277, 4, false}, // Needs rounding, should go to 33.77 MW (4.s.f.)
+		{33000000, 3300, 4, false},
+		{1000000000000, 10000, 8, false}, // 1TW
 		{12345678000, 12346, 6, false},  // 12 GW
+		{20233169, 20233, 3, false},
+		{1398373, 13984, 2, false}, // 1.3 MW 
+		{444234720, 4442, 5, false}, // 444.2 MW (4.s.f.)
 	}
 
 	for _, test := range testcases {
