@@ -945,6 +945,50 @@ func TestListLocationsLocationFilters(t *testing.T) {
 			expectedCount: 3,
 		},
 		{
+			name: "Should filter by enclosing geometry and energy source",
+			req: &pb.ListLocationsRequest{
+				EnclosingLocationUuidFilter: &locationUuids[0],
+				EnergySourceFilter:          sourceFilter,
+				LocationUuidsFilter:         locationUuids,
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "Should filter by enclosing geometry and location type",
+			req: &pb.ListLocationsRequest{
+				EnclosingLocationUuidFilter: &locationUuids[0],
+				LocationTypeFilter:          typeFilter,
+				LocationUuidsFilter:         locationUuids,
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "Should filter by enclosed geometry",
+			req: &pb.ListLocationsRequest{
+				EnclosedLocationUuidFilter: &locationUuids[0],
+				LocationUuidsFilter:        locationUuids,
+			},
+			expectedCount: 3,
+		},
+		{
+			name: "Should filter by enclosed geometry and energy source",
+			req: &pb.ListLocationsRequest{
+				EnclosedLocationUuidFilter: &locationUuids[0],
+				EnergySourceFilter:         sourceFilter,
+				LocationUuidsFilter:        locationUuids,
+			},
+			expectedCount: 1,
+		},
+		{
+			name: "Should filter by enclosed geometry and location type",
+			req: &pb.ListLocationsRequest{
+				EnclosedLocationUuidFilter: &locationUuids[0],
+				LocationTypeFilter:         typeFilter,
+				LocationUuidsFilter:        locationUuids,
+			},
+			expectedCount: 1,
+		},
+		{
 			name: "Should return nothing for enclosing geometry containing nothing",
 			req: &pb.ListLocationsRequest{
 				EnclosingLocationUuidFilter: func() *string { s := uuid.New().String(); return &s }(),

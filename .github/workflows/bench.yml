@@ -77,7 +77,7 @@ jobs:
         if: github.event_name != 'pull_request'
         continue-on-error: true
         run: |
-          gh cache delete ${{ runner.os }}-bench-${{ steps.head-benchfile.outputs.name }} --succeed-on-no-caches
+          gh cache delete ${{ runner.os }}-bench-main.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

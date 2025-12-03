@@ -222,3 +222,62 @@ WHERE
     AND (sqlc.narg(geometry_type_id)::SMALLINT IS NULL OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT)
     AND (sqlc.narg(oauth_id)::TEXT IS NULL OR us.oauth_id = sqlc.arg(oauth_id)::TEXT)
     AND (sqlc.narg(permission_id)::SMALLINT IS NULL OR us.permission_id = sqlc.narg(permission_id)::SMALLINT);
+
+-- name: ListSourcesAtTimestampWithout :many
+/* ListSourcesAtTimestampWithout returns all sources that match the given filters
+ * and contain a given geometry.
+ * This has to be seperated from the ListSourcesAtTimestamp query due to the spatial join.
+ */
+WITH containing_geometries AS (
+    SELECT
+        l.geometry_uuid,
+        l.geometry_name,
+        l.geometry_type_id,
+        l.geom,
+        l.centroid,
+        l.metadata
+    FROM loc.geometries AS l
+        INNER JOIN
+            loc.geometries AS l_inner ON ST_WITHIN(
+                l_inner.geom,
+                l.geom
+            ) AND l_inner.geometry_uuid = sqlc.arg(inner_geometry_uuid)::UUID
+            AND l.geometry_uuid <> sqlc.arg(inner_geometry_uuid)::UUID
+),
+unfiltered_sources AS (
+    SELECT
+        u.oauth_id,
+        lp.permission_id,
+        ls.source_type_id,
+        ls.geometry_uuid,
+        ls.capacity,
+        ls.capacity_unit_prefix_factor,
+        ls.capacity_limit_sip,
+        l.geometry_name,
+        l.geometry_type_id,
+        ST_X(l.centroid)::REAL AS longitude,
+        ST_Y(l.centroid)::REAL AS latitude,
+        l.metadata AS geometry_metadata,
+        ls.metadata AS source_metadata
+    FROM loc.sources_mv AS ls
+        INNER JOIN containing_geometries AS l USING (geometry_uuid)
+        LEFT OUTER JOIN iam.location_policies AS lp USING (geometry_uuid, source_type_id)
+        LEFT OUTER JOIN iam.org_location_policy_groups USING (location_policy_group_uuid)
+        LEFT OUTER JOIN iam.users AS u USING (org_uuid)
+    WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
+)
+SELECT
+    *,
+    COALESCE(
+        us.capacity_limit_sip::REAL * us.capacity / 30000.0, us.capacity::REAL
+    )::REAL AS capacity_inc_limit
+FROM unfiltered_sources AS us
+WHERE
+    (sqlc.narg(source_type_id)::SMALLINT IS NULL OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT)
+    AND (
+        ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID [], 1) IS NULL
+        OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+    )
+    AND (sqlc.narg(geometry_type_id)::SMALLINT IS NULL OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT)
+    AND (sqlc.narg(oauth_id)::TEXT IS NULL OR us.oauth_id = sqlc.arg(oauth_id)::TEXT)
+    AND (sqlc.narg(permission_id)::SMALLINT IS NULL OR us.permission_id = sqlc.narg(permission_id)::SMALLINT);

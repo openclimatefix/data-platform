@@ -599,6 +599,18 @@ message ListLocationsRequest {
   optional string enclosing_location_uuid_filter = 6 [
     (buf.validate.field).string.uuid = true
   ];
+  // Optional filter to only return locations that enclose a specific location.
+  optional string enclosed_location_uuid_filter = 7 [
+    (buf.validate.field).string.uuid = true
+  ];
+
+
+  option (buf.validate.message).cel = {
+    id: "enclosing_and_enclosed_mutually_exclusive"
+    message: "enclosing_location_uuid_filter and enclosed_location_uuid_filter cannot both be set"
+    expression:
+      "!(has(this.enclosing_location_uuid_filter) && has(this.enclosed_location_uuid_filter))"
+  };
 }
 
 message ListLocationsResponse {
