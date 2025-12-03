@@ -50,7 +50,7 @@ CREATE TABLE loc.geometry_types (
     UNIQUE (geometry_type_name)
 );
 -- The ordering of insertion here matches the .proto enum definitions. Change with caution!
-INSERT INTO loc.geometry_types (geometry_type_name) VALUES ('site'), ('gsp'), ('dno'), ('nation'), ('state'), ('county'), ('city');
+INSERT INTO loc.geometry_types (geometry_type_name) VALUES ('site'), ('gsp'), ('dno'), ('nation'), ('state'), ('county'), ('city'), ('primary_substation');
 
 
 /*- Tables ----------------------------------------------------------------------------------*/

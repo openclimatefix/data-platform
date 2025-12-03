@@ -30,6 +30,7 @@ enum LocationType {
   LOCATION_TYPE_STATE = 5;
   LOCATION_TYPE_COUNTY = 6;
   LOCATION_TYPE_CITY = 7;
+  LOCATION_TYPE_PRIMARY_SUBSTATION = 8;
 }
 
 /* Permission indicates the level of access a user has to a resource.
