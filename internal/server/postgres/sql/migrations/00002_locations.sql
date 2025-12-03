@@ -145,6 +145,7 @@ SELECT
     sh.capacity_limit_sip,
     sh.metadata,
     g.geometry_name,
+    g.geometry_type_id,
     ST_X(g.centroid)::REAL AS longitude,
     ST_Y(g.centroid)::REAL AS latitude,
     TSRANGE(

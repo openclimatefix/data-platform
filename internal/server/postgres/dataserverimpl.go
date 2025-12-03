@@ -1608,19 +1608,60 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 
 	var locations []*pb.ListLocationsResponse_LocationSummary
 
-	if req.EnclosingLocationUuidFilter == nil {
-		lsprms := db.ListSourcesAtTimestampParams{
-			OauthID:        req.UserOauthIdFilter,
-			GeometryUuids:  parsedUuids,
-			AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
-			PermissionID:   permissionId,
-			SourceTypeID:   sourceTypeId,
-			GeometryTypeID: locationTypeId,
+	if req.EnclosingLocationUuidFilter != nil {
+		llprms := db.ListSourcesAtTimestampWithinParams{
+			OuterGeometryUuid: uuid.MustParse(*req.EnclosingLocationUuidFilter),
+			AtTimestampUtc:    pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			OauthID:           req.UserOauthIdFilter,
+			GeometryUuids:     parsedUuids,
+			PermissionID:      permissionId,
+			SourceTypeID:      sourceTypeId,
+			GeometryTypeID:    locationTypeId,
 		}
 
-		glResp, err := querier.ListSourcesAtTimestamp(ctx, lsprms)
+		glResp, err := querier.ListSourcesAtTimestampWithin(ctx, llprms)
 		if err != nil {
-			l.Err(err).Msgf("querier.ListSourcesAtTimestamp(%+v)", lsprms)
+			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithin(%+v)", llprms)
+		} else {
+			for _, loc := range glResp {
+				metadata, err := jsonbToStruct(loc.SourceMetadata)
+				if err != nil {
+					l.Err(err).Msgf("jsonbToStruct(%s)", loc.SourceMetadata)
+					metadata = nil
+				}
+
+				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
+					LocationUuid: loc.GeometryUuid.String(),
+					LocationName: loc.GeometryName,
+					Latlng: &pb.LatLng{
+						Latitude:  loc.Latitude,
+						Longitude: loc.Longitude,
+					},
+					EffectiveCapacityWatts: uint64(
+						loc.Capacity,
+					) * uint64(
+						math.Pow10(int(loc.CapacityUnitPrefixFactor)),
+					),
+					EnergySource: pb.EnergySource(loc.SourceTypeID),
+					LocationType: pb.LocationType(loc.GeometryTypeID),
+					Metadata:     metadata,
+				})
+			}
+		}
+	} else if req.EnclosedLocationUuidFilter != nil {
+		llprms := db.ListSourcesAtTimestampWithoutParams{
+			InnerGeometryUuid: uuid.MustParse(*req.EnclosedLocationUuidFilter),
+			AtTimestampUtc:    pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			OauthID:           req.UserOauthIdFilter,
+			GeometryUuids:     parsedUuids,
+			PermissionID:      permissionId,
+			SourceTypeID:      sourceTypeId,
+			GeometryTypeID:    locationTypeId,
+		}
+
+		glResp, err := querier.ListSourcesAtTimestampWithout(ctx, llprms)
+		if err != nil {
+			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithout(%+v)", llprms)
 		} else {
 			for _, loc := range glResp {
 				metadata, err := jsonbToStruct(loc.SourceMetadata)
@@ -1648,19 +1689,18 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			}
 		}
 	} else {
-		llprms := db.ListSourcesAtTimestampWithinParams{
-			OuterGeometryUuid: uuid.MustParse(*req.EnclosingLocationUuidFilter),
-			AtTimestampUtc:    pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
-			OauthID:           req.UserOauthIdFilter,
-			GeometryUuids:     parsedUuids,
-			PermissionID:      permissionId,
-			SourceTypeID:      sourceTypeId,
-			GeometryTypeID:    locationTypeId,
+		lsprms := db.ListSourcesAtTimestampParams{
+			OauthID:        req.UserOauthIdFilter,
+			GeometryUuids:  parsedUuids,
+			AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			PermissionID:   permissionId,
+			SourceTypeID:   sourceTypeId,
+			GeometryTypeID: locationTypeId,
 		}
 
-		glResp, err := querier.ListSourcesAtTimestampWithin(ctx, llprms)
+		glResp, err := querier.ListSourcesAtTimestamp(ctx, lsprms)
 		if err != nil {
-			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithin(%+v)", llprms)
+			l.Err(err).Msgf("querier.ListSourcesAtTimestamp(%+v)", lsprms)
 		} else {
 			for _, loc := range glResp {
 				metadata, err := jsonbToStruct(loc.SourceMetadata)
