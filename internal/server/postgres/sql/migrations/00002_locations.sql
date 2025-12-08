@@ -100,25 +100,19 @@ CREATE TABLE loc.sources_history (
     REFERENCES loc.source_types (source_type_id)
     ON UPDATE CASCADE
     ON DELETE RESTRICT,
-    -- Capacity in factors of powers of 10 Watts
-    capacity SMALLINT NOT NULL,
-    CONSTRAINT capacity_nonnegative_check CHECK (capacity >= 0),
-    -- Factor defining power of 10 to multiply the capacity by to get Watts
-    capacity_unit_prefix_factor SMALLINT DEFAULT (0) NOT NULL,
-    CONSTRAINT capacity_unit_prefix_factor_valid_siprefix_check CHECK (
-        capacity_unit_prefix_factor >= 0
-        AND capacity_unit_prefix_factor % 3 = 0
-        AND capacity_unit_prefix_factor <= 18 -- ExaWatts surely sufficient...
-    ),
     -- Capacity cap, (for instance during curtailment or repair work),
     -- encoded as a smallint percentage (sip) of the capacity; with 0 representing 0%
     -- AND 30000 representing 100% of the capacity. However, since things are mostly
     -- not limited, NULL indicates no limit, so 30000 is an invalid value.
+    -- NOTE: This is currently not used.
     capacity_limit_sip SMALLINT DEFAULT NULL,
     CONSTRAINT capacity_limit_sip_vaildity_check CHECK (
         capacity_limit_sip IS NULL
         OR (capacity_limit_sip >= 0 AND capacity_limit_sip < 30000)
     ),
+    -- Capacity in watts. This maxes out at ~9.22 petawatts, which should be sufficient
+    capacity_watts BIGINT NOT NULL,
+    CONSTRAINT capacity_nonnegative_check CHECK (capacity_watts >= 0),
     valid_from_utc TIMESTAMP DEFAULT NOW() NOT NULL,
     geometry_uuid UUID NOT NULL
     REFERENCES loc.geometries (geometry_uuid)
@@ -140,8 +134,7 @@ CREATE MATERIALIZED VIEW loc.sources_mv AS
 SELECT
     sh.geometry_uuid,
     sh.source_type_id,
-    sh.capacity,
-    sh.capacity_unit_prefix_factor,
+    sh.capacity_watts,
     sh.capacity_limit_sip,
     sh.metadata,
     g.geometry_name,

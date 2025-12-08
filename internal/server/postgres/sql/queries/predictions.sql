@@ -160,11 +160,7 @@ SELECT
     pg.target_time_utc,
     pg.other_stats_fractions,
     pg.metadata,
-    COALESCE(
-        sv.capacity_limit_sip::REAL * sv.capacity / 30000.0, sv.capacity::REAL
-    )::REAL AS capacity_inc_limit,
-    sv.capacity,
-    sv.capacity_unit_prefix_factor
+    sv.capacity_watts
 FROM pred.forecasts AS f
     INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
@@ -230,11 +226,7 @@ SELECT
     rp.init_time_utc,
     rp.metadata,
     rp.other_stats_fractions,
-    COALESCE(
-        sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
-    )::REAL AS capacity_inc_limit,
-    sh.capacity,
-    sh.capacity_unit_prefix_factor,
+    sh.capacity_watts,
     UUIDV7_EXTRACT_TIMESTAMP(rp.forecast_uuid) AS created_at_utc
 FROM ranked_predictions AS rp
     INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
@@ -291,11 +283,7 @@ SELECT
     rp.target_time_utc,
     rp.metadata,
     rp.other_stats_fractions,
-    COALESCE(
-        sv.capacity_limit_sip::REAL * sv.capacity / 30000.0, sv.capacity::REAL
-    )::REAL AS capacity_inc_limit,
-    sv.capacity,
-    sv.capacity_unit_prefix_factor,
+    sv.capacity_watts,
     sv.latitude,
     sv.longitude,
     sv.geometry_name

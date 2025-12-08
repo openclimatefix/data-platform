@@ -30,59 +30,6 @@ import (
 
 // --- Reuseable Functions for Route Logic -------------------------------------------------------
 
-// capacityToValueMultiplier return a number, plus the index to raise 10 to the power to
-// to get the resultant number of Watts, to the closest power of 3.
-// This is an important function which tries to preserve accuracy whilst also enabling a
-// large range of values to be represented by two 16 bit integers.
-func capacityToValueMultiplier(capacityWatts uint64) (int16, int16, error) {
-	if capacityWatts == 0 {
-		return 0, 0, nil
-	}
-
-	currentValue := capacityWatts
-	exponent := int16(0)
-
-	const maxExponent = 18 // Limit to ExaWatts - current generation is ~20PW for the whole world!
-
-	// Keep scaling up as long as the value exceeds the int16 limit
-	for currentValue > math.MaxInt16 {
-		if exponent >= maxExponent {
-			return 0, exponent, fmt.Errorf(
-				"input represents a value greater than %d ExaWatts, which is not supported",
-				math.MaxInt16,
-			)
-		}
-
-		// Divide by 1000 to get to the next SI unit prefix
-		// * add on 500 to round up numbers that are over halfway to the next 10^3
-		nextValue := (currentValue + 500) / 1000
-
-		// Check we haven't accidentally rounded to 0
-		if nextValue == 0 && currentValue > 0 {
-			return 0, exponent + 3, fmt.Errorf(
-				"scaled value rounded to zero from large input %d at potential exponent %d",
-				capacityWatts, exponent+3)
-		}
-
-		currentValue = nextValue
-
-		exponent += 3
-	}
-
-	// This is safe as currentValue is now less than or equal to int16 max
-	// but I've put a check to really be as safe as possible
-	if currentValue > math.MaxInt16 {
-		return 0, exponent, fmt.Errorf(
-			"scaled value %d exceeds int16 max %d at exponent %d",
-			currentValue, math.MaxInt16, exponent,
-		)
-	}
-
-	resultValue := int16(currentValue)
-
-	return resultValue, exponent, nil
-}
-
 // timeWindowToPgWindow converts a TimeWindow protobuf message to a pair of pgtype.Timestamp values.
 func timeWindowToPgWindow(
 	window *pb.TimeWindow,
@@ -636,11 +583,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 				P50Fraction:              float32(pred.P50Sip) / 30000.0,
 				OtherStatisticsFractions: otherStatistics,
 				CreatedTimestampUtc:      timestamppb.New(forecast.CreatedAtUtc.Time),
-				EffectiveCapacityWatts: uint64(
-					pred.CapacityIncLimit,
-				) * uint64(
-					math.Pow10(int(pred.CapacityUnitPrefixFactor)),
-				),
+				EffectiveCapacityWatts:   uint64(pred.CapacityWatts),
 			})
 			if err != nil {
 				return err
@@ -741,10 +684,8 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 			DeltaFraction: float32(delta.AvgDeltaSip) / 30000.0,
 			HorizonMins:   uint32(delta.HorizonMins),
 			EffectiveCapacityWatts: uint64(
-				dbSource.CapacityIncLimit,
-			) * uint64(
-				math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
-			), // Should this be done over time? I'm not sure how important this is to the response
+				dbSource.CapacityWatts,
+			), // Should this be done over time?
 		}
 	}
 
@@ -805,13 +746,9 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	values := make([]*pb.GetObservationsAsTimeseriesResponse_Value, len(dbObs))
 	for i, obs := range dbObs {
 		values[i] = &pb.GetObservationsAsTimeseriesResponse_Value{
-			ValueFraction: float32(obs.ValueSip) / 30000.0,
-			TimestampUtc:  timestamppb.New(obs.ObservationTimestampUtc.Time),
-			EffectiveCapacityWatts: uint64(
-				obs.EffectiveCapacity,
-			) * uint64(
-				math.Pow10(int(obs.CapacityUnitPrefixFactor)),
-			),
+			ValueFraction:          float32(obs.ValueSip) / 30000.0,
+			TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
+			EffectiveCapacityWatts: uint64(obs.CapacityWatts),
 		}
 	}
 
@@ -945,14 +882,10 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestObservations(
 	observations := make([]*pb.GetLatestObservationsResponse_Observation, len(dbObs))
 	for i, obs := range dbObs {
 		observations[i] = &pb.GetLatestObservationsResponse_Observation{
-			LocationUuid:  obs.GeometryUuid.String(),
-			TimestampUtc:  timestamppb.New(obs.ObservationTimestampUtc.Time),
-			ValueFraction: float32(obs.ValueSip) / 30000.0,
-			EffectiveCapacityWatts: uint64(
-				obs.CapacityIncLimit,
-			) * uint64(
-				math.Pow10(int(obs.CapacityUnitPrefixFactor)),
-			),
+			LocationUuid:           obs.GeometryUuid.String(),
+			TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
+			ValueFraction:          float32(obs.ValueSip) / 30000.0,
+			EffectiveCapacityWatts: uint64(obs.CapacityWatts),
 		}
 	}
 
@@ -1091,14 +1024,10 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	values := make([]*pb.GetForecastAtTimestampResponse_Value, len(dbPredictions))
 	for i, value := range dbPredictions {
 		values[i] = &pb.GetForecastAtTimestampResponse_Value{
-			ValueFraction: float32(value.P50Sip) / 30000.0,
-			EffectiveCapacityWatts: uint64(
-				value.CapacityIncLimit,
-			) * uint64(
-				math.Pow10(int(value.CapacityUnitPrefixFactor)),
-			),
-			LocationUuid: value.GeometryUuid.String(),
-			LocationName: value.GeometryName,
+			ValueFraction:          float32(value.P50Sip) / 30000.0,
+			EffectiveCapacityWatts: uint64(value.CapacityWatts),
+			LocationUuid:           value.GeometryUuid.String(),
+			LocationName:           value.GeometryName,
 			Latlng: &pb.LatLng{
 				Latitude:  value.Latitude,
 				Longitude: value.Longitude,
@@ -1144,7 +1073,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 	l.Debug().
 		Str("dp.source.geometry_uuid", dbSource.GeometryUuid.String()).
 		Int16("dp.source.type_id", dbSource.SourceTypeID).
-		Int64("dp.source.capacity", int64(dbSource.CapacityIncLimit)*int64(math.Pow10(int(dbSource.CapacityUnitPrefixFactor)))).
+		Int64("dp.source.capacity", int64(dbSource.CapacityWatts)).
 		Str("dp.source.valid_from_utc", dbSource.SysPeriod.Lower.Time.String()).
 		Msg("found source")
 
@@ -1166,12 +1095,8 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 			Latitude:  dbSource.Latitude,
 			Longitude: dbSource.Longitude,
 		},
-		EffectiveCapacityWatts: uint64(
-			dbSource.CapacityIncLimit,
-		) * uint64(
-			math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
-		),
-		Metadata: metadata,
+		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
+		Metadata:               metadata,
 	}, nil
 }
 
@@ -1217,28 +1142,17 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		)
 	}
 
-	cp, ex, err := capacityToValueMultiplier(req.EffectiveCapacityWatts)
-	if err != nil {
-		l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.EffectiveCapacityWatts)
-
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid capacity. Ensure capacity is non-negative.",
-		)
-	}
-
 	// Set valid from time to now if not provided
 	if req.ValidFromUtc == nil {
 		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
 	}
 
 	csprms := db.CreateSourceEntryParams{
-		GeometryUuid:             dbLocation.GeometryUuid,
-		SourceTypeID:             int16(req.EnergySource),
-		Capacity:                 cp,
-		CapacityUnitPrefixFactor: ex,
-		Metadata:                 metadata,
-		ValidFromUtc:             pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
+		GeometryUuid:  dbLocation.GeometryUuid,
+		SourceTypeID:  int16(req.EnergySource),
+		CapacityWatts: int64(req.EffectiveCapacityWatts),
+		Metadata:      metadata,
+		ValidFromUtc:  pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
 	}
 
 	dbSource, err := querier.CreateSourceEntry(ctx, csprms)
@@ -1254,7 +1168,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	l.Debug().
 		Str("dp.source.geometry_uuid", dbSource.GeometryUuid.String()).
 		Int16("dp.source.type_id", dbSource.SourceTypeID).
-		Int64("dp.source.capacity", int64(dbSource.Capacity)*int64(math.Pow10(int(dbSource.CapacityUnitPrefixFactor)))).
+		Int64("dp.source.capacity", int64(dbSource.CapacityWatts)).
 		Str("dp.source.valid_from_utc", dbSource.ValidFromUtc.Time.String()).
 		Msg("created source entry for location")
 
@@ -1267,13 +1181,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	l.Debug().Msg("refreshed sources materialised view")
 
 	return &pb.CreateLocationResponse{
-		LocationUuid: dbLocation.GeometryUuid.String(),
-		LocationName: dbLocation.GeometryName,
-		EffectiveCapacityWatts: uint64(
-			dbSource.Capacity,
-		) * uint64(
-			math.Pow10(int(dbSource.CapacityUnitPrefixFactor)),
-		),
+		LocationUuid:           dbLocation.GeometryUuid.String(),
+		LocationName:           dbLocation.GeometryName,
+		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
 	}, nil
 }
 
@@ -1319,24 +1229,13 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	l.Debug().
 		Str("dp.source.geometry_uuid", dbSource.GeometryUuid.String()).
 		Int16("dp.source.type_id", dbSource.SourceTypeID).
-		Int64("dp.source.capacity", int64(dbSource.Capacity)*int64(math.Pow10(int(dbSource.CapacityUnitPrefixFactor)))).
+		Int64("dp.source.capacity", int64(dbSource.CapacityWatts)).
 		Str("dp.source.valid_from_utc", dbSource.SysPeriod.Lower.Time.String()).
 		Msg("fetched source")
 
-	// Use existing capacity, unless a new capacity is provided
-	cp := dbSource.Capacity
-
-	ex := dbSource.CapacityUnitPrefixFactor
+	capacity := dbSource.CapacityWatts
 	if req.NewEffectiveCapacityWatts != nil {
-		cp, ex, err = capacityToValueMultiplier(req.GetNewEffectiveCapacityWatts())
-		if err != nil {
-			l.Err(err).Msgf("capacityMwToValueMultiplier(%d)", req.NewEffectiveCapacityWatts)
-
-			return nil, status.Error(
-				codes.InvalidArgument,
-				"Invalid capacity. Ensure new capacity is non-negative.",
-			)
-		}
+		capacity = int64(*req.NewEffectiveCapacityWatts)
 	}
 
 	// Use existing metadata, unless new metadata is provided
@@ -1373,13 +1272,12 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 
 	// Update the source history with a new entry
 	csprms := db.CreateSourceEntryParams{
-		GeometryUuid:             dbSource.GeometryUuid,
-		SourceTypeID:             dbSource.SourceTypeID,
-		Capacity:                 cp,
-		CapacityUnitPrefixFactor: ex,
-		CapacityLimitSip:         dbSource.CapacityLimitSip, // TODO: Enable updating this
-		ValidFromUtc:             pgtype.Timestamp{Time: validFrom, Valid: true},
-		Metadata:                 metadata,
+		GeometryUuid:     dbSource.GeometryUuid,
+		SourceTypeID:     dbSource.SourceTypeID,
+		CapacityWatts:    capacity,
+		CapacityLimitSip: dbSource.CapacityLimitSip, // TODO: Enable updating this
+		ValidFromUtc:     pgtype.Timestamp{Time: validFrom, Valid: true},
+		Metadata:         metadata,
 	}
 
 	dbNewSource, err := querier.CreateSourceEntry(ctx, csprms)
@@ -1395,7 +1293,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	l.Debug().
 		Str("dp.source.geometry_uuid", dbSource.GeometryUuid.String()).
 		Int16("dp.source.type_id", dbSource.SourceTypeID).
-		Int64("dp.source.new_capacity", int64(dbNewSource.Capacity)*int64(math.Pow10(int(dbNewSource.CapacityUnitPrefixFactor)))).
+		Int64("dp.source.new_capacity", int64(dbNewSource.CapacityWatts)).
 		Str("dp.source.valid_from_utc", dbNewSource.ValidFromUtc.Time.String()).
 		Msg("updated source")
 
@@ -1408,13 +1306,9 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	l.Debug().Msg("refreshed sources materialised view")
 
 	return &pb.UpdateLocationResponse{
-		LocationUuid: req.LocationUuid,
-		LocationName: dbSource.GeometryName,
-		EffectiveCapacityWatts: uint64(
-			dbNewSource.Capacity,
-		) * uint64(
-			math.Pow10(int(dbNewSource.CapacityUnitPrefixFactor)),
-		),
+		LocationUuid:           req.LocationUuid,
+		LocationName:           dbSource.GeometryName,
+		EffectiveCapacityWatts: uint64(dbNewSource.CapacityWatts),
 	}, nil
 }
 
@@ -1555,14 +1449,10 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
-			TargetTimestampUtc:       timestamppb.New(value.TargetTimeUtc.Time),
-			P50ValueFraction:         float32(value.P50Sip) / 30000.0,
-			OtherStatisticsFractions: otherStats,
-			EffectiveCapacityWatts: uint64(
-				value.CapacityIncLimit,
-			) * uint64(
-				math.Pow10(int(value.CapacityUnitPrefixFactor)),
-			),
+			TargetTimestampUtc:         timestamppb.New(value.TargetTimeUtc.Time),
+			P50ValueFraction:           float32(value.P50Sip) / 30000.0,
+			OtherStatisticsFractions:   otherStats,
+			EffectiveCapacityWatts:     uint64(value.CapacityWatts),
 			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
 		}
@@ -1637,14 +1527,10 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 						Latitude:  loc.Latitude,
 						Longitude: loc.Longitude,
 					},
-					EffectiveCapacityWatts: uint64(
-						loc.Capacity,
-					) * uint64(
-						math.Pow10(int(loc.CapacityUnitPrefixFactor)),
-					),
-					EnergySource: pb.EnergySource(loc.SourceTypeID),
-					LocationType: pb.LocationType(loc.GeometryTypeID),
-					Metadata:     metadata,
+					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
+					EnergySource:           pb.EnergySource(loc.SourceTypeID),
+					LocationType:           pb.LocationType(loc.GeometryTypeID),
+					Metadata:               metadata,
 				})
 			}
 		}
@@ -1677,14 +1563,10 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 						Latitude:  loc.Latitude,
 						Longitude: loc.Longitude,
 					},
-					EffectiveCapacityWatts: uint64(
-						loc.Capacity,
-					) * uint64(
-						math.Pow10(int(loc.CapacityUnitPrefixFactor)),
-					),
-					EnergySource: pb.EnergySource(loc.SourceTypeID),
-					LocationType: pb.LocationType(loc.GeometryTypeID),
-					Metadata:     metadata,
+					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
+					EnergySource:           pb.EnergySource(loc.SourceTypeID),
+					LocationType:           pb.LocationType(loc.GeometryTypeID),
+					Metadata:               metadata,
 				})
 			}
 		}
@@ -1716,14 +1598,10 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 						Latitude:  loc.Latitude,
 						Longitude: loc.Longitude,
 					},
-					EffectiveCapacityWatts: uint64(
-						loc.Capacity,
-					) * uint64(
-						math.Pow10(int(loc.CapacityUnitPrefixFactor)),
-					),
-					EnergySource: pb.EnergySource(loc.SourceTypeID),
-					LocationType: pb.LocationType(loc.GeometryTypeID),
-					Metadata:     metadata,
+					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
+					EnergySource:           pb.EnergySource(loc.SourceTypeID),
+					LocationType:           pb.LocationType(loc.GeometryTypeID),
+					Metadata:               metadata,
 				})
 			}
 		}
