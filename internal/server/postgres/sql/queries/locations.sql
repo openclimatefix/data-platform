@@ -45,12 +45,8 @@ FROM (
  * specific timestamp.
  */
 SELECT
-    s.capacity,
+    s.capacity_watts,
     s.capacity_limit_sip,
-    s.capacity_unit_prefix_factor,
-    COALESCE(
-        s.capacity_limit_sip::REAL * s.capacity / 30000.0, s.capacity::REAL
-    )::REAL AS capacity_inc_limit,
     s.source_type_id,
     s.metadata AS metadata_jsonb,
     s.geometry_uuid,
@@ -71,8 +67,7 @@ WHERE
 INSERT INTO loc.sources_history (
     geometry_uuid,
     source_type_id,
-    capacity,
-    capacity_unit_prefix_factor,
+    capacity_watts,
     capacity_limit_sip,
     valid_from_utc,
     metadata
@@ -82,9 +77,8 @@ INSERT INTO loc.sources_history (
     $3,
     $4,
     $5,
-    $6,
     CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
-) RETURNING geometry_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc, metadata;
+) RETURNING geometry_uuid, source_type_id, capacity_watts, valid_from_utc, metadata;
 
 -- name: RefreshSourcesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;
@@ -95,15 +89,13 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;
 INSERT INTO loc.sources_history (
     geometry_uuid,
     source_type_id,
-    capacity,
-    capacity_unit_prefix_factor,
+    capacity_watts,
     capacity_limit_sip,
     valid_from_utc,
     metadata
 ) VALUES (
     $1,
     $2,
-    0,
     0,
     NULL,
     DATE_TRUNC('minute', CURRENT_TIMESTAMP),
@@ -113,8 +105,7 @@ INSERT INTO loc.sources_history (
 -- name: GetSourceHistory :many
 /* GetSourceHistory shows all the historical records for a given geometry and source type. */
 SELECT
-    sh.capacity,
-    sh.capacity_unit_prefix_factor,
+    sh.capacity_watts,
     sh.capacity_limit_sip,
     sh.valid_from_utc
 FROM loc.sources_history AS sh
@@ -132,8 +123,7 @@ WITH unfiltered_sources AS (
         lp.permission_id,
         ls.source_type_id,
         ls.geometry_uuid,
-        ls.capacity,
-        ls.capacity_unit_prefix_factor,
+        ls.capacity_watts,
         ls.capacity_limit_sip,
         l.geometry_name,
         l.geometry_type_id,
@@ -148,11 +138,7 @@ WITH unfiltered_sources AS (
         LEFT OUTER JOIN iam.users AS u USING (org_uuid)
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
 )
-SELECT
-    *,
-    COALESCE(
-        us.capacity_limit_sip::REAL * us.capacity / 30000.0, us.capacity::REAL
-    )::REAL AS capacity_inc_limit
+SELECT *
 FROM unfiltered_sources AS us
 WHERE
     (sqlc.narg(source_type_id)::SMALLINT IS NULL OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT)
@@ -191,8 +177,7 @@ unfiltered_sources AS (
         lp.permission_id,
         ls.source_type_id,
         ls.geometry_uuid,
-        ls.capacity,
-        ls.capacity_unit_prefix_factor,
+        ls.capacity_watts,
         ls.capacity_limit_sip,
         l.geometry_name,
         l.geometry_type_id,
@@ -207,11 +192,7 @@ unfiltered_sources AS (
         LEFT OUTER JOIN iam.users AS u USING (org_uuid)
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
 )
-SELECT
-    *,
-    COALESCE(
-        us.capacity_limit_sip::REAL * us.capacity / 30000.0, us.capacity::REAL
-    )::REAL AS capacity_inc_limit
+SELECT *
 FROM unfiltered_sources AS us
 WHERE
     (sqlc.narg(source_type_id)::SMALLINT IS NULL OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT)
@@ -250,8 +231,7 @@ unfiltered_sources AS (
         lp.permission_id,
         ls.source_type_id,
         ls.geometry_uuid,
-        ls.capacity,
-        ls.capacity_unit_prefix_factor,
+        ls.capacity_watts,
         ls.capacity_limit_sip,
         l.geometry_name,
         l.geometry_type_id,
@@ -266,11 +246,7 @@ unfiltered_sources AS (
         LEFT OUTER JOIN iam.users AS u USING (org_uuid)
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
 )
-SELECT
-    *,
-    COALESCE(
-        us.capacity_limit_sip::REAL * us.capacity / 30000.0, us.capacity::REAL
-    )::REAL AS capacity_inc_limit
+SELECT *
 FROM unfiltered_sources AS us
 WHERE
     (sqlc.narg(source_type_id)::SMALLINT IS NULL OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT)

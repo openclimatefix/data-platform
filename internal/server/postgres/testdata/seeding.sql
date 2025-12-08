@@ -36,12 +36,11 @@ BEGIN
     FOR geo_id IN SELECT geometry_uuid FROM loc.geometries LOOP
 
         INSERT INTO loc.sources_history
-            (geometry_uuid, source_type_id, capacity, capacity_unit_prefix_factor, valid_from_utc)
+            (geometry_uuid, source_type_id, capacity_watts, valid_from_utc)
         SELECT
             geo_id,
             1,
-            200 * i::SMALLINT,
-            3,
+            200000 * i::BIGINT,
             pivot_time + make_interval(years=>i-5)
         FROM generate_series(1, 5) AS i;
 

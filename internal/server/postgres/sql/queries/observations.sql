@@ -49,10 +49,7 @@ SELECT
     mv.source_type_id,
     sqlc.arg(observer_uuid)::UUID,
     sqlc.arg(observation_timestamp_utc)::TIMESTAMP,
-    (
-        (sqlc.arg(value_watts)::BIGINT / (mv.capacity::REAL * POWER(10.0, mv.capacity_unit_prefix_factor)::REAL))
-        * 30000.0
-    )::SMALLINT AS calculated_value_sip
+    ((sqlc.arg(value_watts)::BIGINT::DOUBLE PRECISION / mv.capacity_watts) * 30000.0)::SMALLINT AS calculated_value_sip
 FROM loc.sources_mv AS mv
 WHERE mv.geometry_uuid = sqlc.arg(geometry_uuid)::UUID
     AND mv.source_type_id = sqlc.arg(source_type_id)::SMALLINT
@@ -71,10 +68,7 @@ SELECT
     og.source_type_id,
     og.observation_timestamp_utc,
     og.value_sip,
-    COALESCE(
-        sh.capacity_limit_sip::REAL * sh.capacity / 30000.0, sh.capacity::REAL
-    )::REAL AS effective_capacity,
-    sh.capacity_unit_prefix_factor
+    sh.capacity_watts
 FROM obs.observed_generation_values AS og
     INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
 WHERE
@@ -96,8 +90,7 @@ WITH ranked_observations AS (
         og.observation_timestamp_utc,
         og.value_sip,
         sh.capacity_limit_sip,
-        sh.capacity,
-        sh.capacity_unit_prefix_factor,
+        sh.capacity_watts,
         ROW_NUMBER() OVER (
             PARTITION BY og.geometry_uuid, og.source_type_id, o.observer_uuid
             ORDER BY og.observation_timestamp_utc DESC
@@ -117,10 +110,6 @@ SELECT
     source_type_id,
     observation_timestamp_utc,
     value_sip,
-    COALESCE(
-        capacity_limit_sip::REAL * capacity / 30000.0, capacity::REAL
-    )::REAL AS capacity_inc_limit,
-    capacity,
-    capacity_unit_prefix_factor
+    capacity_watts
 FROM ranked_observations
 WHERE rn = 1;

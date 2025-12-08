@@ -110,38 +110,6 @@ func (s *seedDBParams) NumPgvRows() int {
 
 // --- Tests --------------------------------------------------------------------------------------
 
-func TestCapacityToMultiplier(t *testing.T) {
-	type TestCase struct {
-		capacityWatts      uint64
-		expectedValue      int16
-		expectedMultiplier int16
-		shouldError        bool
-	}
-
-	testcases := []TestCase{
-		{0, 0, 0, false},
-		{500000, 500, 3, false},
-		{32767000, 32767, 3, false},
-		{32768000, 33, 6, false}, // Needs rounding, should go to 33 MW
-		{33000000, 33, 6, false},
-		{1000000000000, 1000, 9, false}, // 1TW
-		{12345678000, 12346, 6, false},  // 12 GW
-	}
-
-	for _, test := range testcases {
-		t.Run(fmt.Sprintf("capacityWatts=%d", test.capacityWatts), func(t *testing.T) {
-			capacity, prefix, err := capacityToValueMultiplier(test.capacityWatts)
-			if test.shouldError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, test.expectedValue, capacity)
-				require.Equal(t, test.expectedMultiplier, prefix)
-			}
-		})
-	}
-}
-
 func TestCreateLocation(t *testing.T) {
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
