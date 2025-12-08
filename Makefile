@@ -187,6 +187,7 @@ gen.proto.python: ${PROTOC}
         --python_betterproto_opt=typing.310 \
         --python_betterproto_out=gen/python/src/dp_sdk
 	@printf "%s" "$$pyproj" > gen/python/pyproject.toml
+	@touch gen/python/src/dp_sdk/py.typed
 	@echo "$$GEN_PYPROJ" > gen/python/pyproject.toml
 	@echo "Building wheel..."
 	@cd gen/python && echo $$(uv run python -m setuptools_git_versioning) && uv build && cd ../..
