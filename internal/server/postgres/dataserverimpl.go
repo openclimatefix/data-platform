@@ -683,7 +683,9 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 		deltas[i] = &pb.GetWeekAverageDeltasResponse_AverageDelta{
 			DeltaFraction: float32(delta.AvgDeltaSip) / 30000.0,
 			HorizonMins:   uint32(delta.HorizonMins),
-			EffectiveCapacityWatts: uint64(dbSource.CapacityWatts), // Should this be done over time?
+			EffectiveCapacityWatts: uint64(
+				dbSource.CapacityWatts,
+			), // Should this be done over time?
 		}
 	}
 
@@ -744,8 +746,8 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	values := make([]*pb.GetObservationsAsTimeseriesResponse_Value, len(dbObs))
 	for i, obs := range dbObs {
 		values[i] = &pb.GetObservationsAsTimeseriesResponse_Value{
-			ValueFraction: float32(obs.ValueSip) / 30000.0,
-			TimestampUtc:  timestamppb.New(obs.ObservationTimestampUtc.Time),
+			ValueFraction:          float32(obs.ValueSip) / 30000.0,
+			TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
 			EffectiveCapacityWatts: uint64(obs.CapacityWatts),
 		}
 	}
@@ -880,9 +882,9 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestObservations(
 	observations := make([]*pb.GetLatestObservationsResponse_Observation, len(dbObs))
 	for i, obs := range dbObs {
 		observations[i] = &pb.GetLatestObservationsResponse_Observation{
-			LocationUuid:  obs.GeometryUuid.String(),
-			TimestampUtc:  timestamppb.New(obs.ObservationTimestampUtc.Time),
-			ValueFraction: float32(obs.ValueSip) / 30000.0,
+			LocationUuid:           obs.GeometryUuid.String(),
+			TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
+			ValueFraction:          float32(obs.ValueSip) / 30000.0,
 			EffectiveCapacityWatts: uint64(obs.CapacityWatts),
 		}
 	}
@@ -1022,10 +1024,10 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	values := make([]*pb.GetForecastAtTimestampResponse_Value, len(dbPredictions))
 	for i, value := range dbPredictions {
 		values[i] = &pb.GetForecastAtTimestampResponse_Value{
-			ValueFraction: float32(value.P50Sip) / 30000.0,
+			ValueFraction:          float32(value.P50Sip) / 30000.0,
 			EffectiveCapacityWatts: uint64(value.CapacityWatts),
-			LocationUuid: value.GeometryUuid.String(),
-			LocationName: value.GeometryName,
+			LocationUuid:           value.GeometryUuid.String(),
+			LocationName:           value.GeometryName,
 			Latlng: &pb.LatLng{
 				Latitude:  value.Latitude,
 				Longitude: value.Longitude,
@@ -1094,7 +1096,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 			Longitude: dbSource.Longitude,
 		},
 		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
-		Metadata: metadata,
+		Metadata:               metadata,
 	}, nil
 }
 
@@ -1146,11 +1148,11 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	}
 
 	csprms := db.CreateSourceEntryParams{
-		GeometryUuid:             dbLocation.GeometryUuid,
-		SourceTypeID:             int16(req.EnergySource),
-		CapacityWatts:            int64(req.EffectiveCapacityWatts),
-		Metadata:                 metadata,
-		ValidFromUtc:             pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
+		GeometryUuid:  dbLocation.GeometryUuid,
+		SourceTypeID:  int16(req.EnergySource),
+		CapacityWatts: int64(req.EffectiveCapacityWatts),
+		Metadata:      metadata,
+		ValidFromUtc:  pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
 	}
 
 	dbSource, err := querier.CreateSourceEntry(ctx, csprms)
@@ -1179,8 +1181,8 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	l.Debug().Msg("refreshed sources materialised view")
 
 	return &pb.CreateLocationResponse{
-		LocationUuid: dbLocation.GeometryUuid.String(),
-		LocationName: dbLocation.GeometryName,
+		LocationUuid:           dbLocation.GeometryUuid.String(),
+		LocationName:           dbLocation.GeometryName,
 		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
 	}, nil
 }
@@ -1270,12 +1272,12 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 
 	// Update the source history with a new entry
 	csprms := db.CreateSourceEntryParams{
-		GeometryUuid:             dbSource.GeometryUuid,
-		SourceTypeID:             dbSource.SourceTypeID,
-		CapacityWatts:            capacity,
-		CapacityLimitSip:         dbSource.CapacityLimitSip, // TODO: Enable updating this
-		ValidFromUtc:             pgtype.Timestamp{Time: validFrom, Valid: true},
-		Metadata:                 metadata,
+		GeometryUuid:     dbSource.GeometryUuid,
+		SourceTypeID:     dbSource.SourceTypeID,
+		CapacityWatts:    capacity,
+		CapacityLimitSip: dbSource.CapacityLimitSip, // TODO: Enable updating this
+		ValidFromUtc:     pgtype.Timestamp{Time: validFrom, Valid: true},
+		Metadata:         metadata,
 	}
 
 	dbNewSource, err := querier.CreateSourceEntry(ctx, csprms)
@@ -1304,8 +1306,8 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	l.Debug().Msg("refreshed sources materialised view")
 
 	return &pb.UpdateLocationResponse{
-		LocationUuid: req.LocationUuid,
-		LocationName: dbSource.GeometryName,
+		LocationUuid:           req.LocationUuid,
+		LocationName:           dbSource.GeometryName,
 		EffectiveCapacityWatts: uint64(dbNewSource.CapacityWatts),
 	}, nil
 }
@@ -1447,10 +1449,10 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
-			TargetTimestampUtc:       timestamppb.New(value.TargetTimeUtc.Time),
-			P50ValueFraction:         float32(value.P50Sip) / 30000.0,
-			OtherStatisticsFractions: otherStats,
-			EffectiveCapacityWatts: uint64(value.CapacityWatts),
+			TargetTimestampUtc:         timestamppb.New(value.TargetTimeUtc.Time),
+			P50ValueFraction:           float32(value.P50Sip) / 30000.0,
+			OtherStatisticsFractions:   otherStats,
+			EffectiveCapacityWatts:     uint64(value.CapacityWatts),
 			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
 		}
@@ -1526,9 +1528,9 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 						Longitude: loc.Longitude,
 					},
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-					EnergySource: pb.EnergySource(loc.SourceTypeID),
-					LocationType: pb.LocationType(loc.GeometryTypeID),
-					Metadata:     metadata,
+					EnergySource:           pb.EnergySource(loc.SourceTypeID),
+					LocationType:           pb.LocationType(loc.GeometryTypeID),
+					Metadata:               metadata,
 				})
 			}
 		}
@@ -1562,9 +1564,9 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 						Longitude: loc.Longitude,
 					},
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-					EnergySource: pb.EnergySource(loc.SourceTypeID),
-					LocationType: pb.LocationType(loc.GeometryTypeID),
-					Metadata:     metadata,
+					EnergySource:           pb.EnergySource(loc.SourceTypeID),
+					LocationType:           pb.LocationType(loc.GeometryTypeID),
+					Metadata:               metadata,
 				})
 			}
 		}
@@ -1597,9 +1599,9 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 						Longitude: loc.Longitude,
 					},
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-					EnergySource: pb.EnergySource(loc.SourceTypeID),
-					LocationType: pb.LocationType(loc.GeometryTypeID),
-					Metadata:     metadata,
+					EnergySource:           pb.EnergySource(loc.SourceTypeID),
+					LocationType:           pb.LocationType(loc.GeometryTypeID),
+					Metadata:               metadata,
 				})
 			}
 		}
