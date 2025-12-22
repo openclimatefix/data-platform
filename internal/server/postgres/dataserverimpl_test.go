@@ -115,8 +115,8 @@ func TestCreateLocation(t *testing.T) {
 	require.NoError(t, err)
 
 	testcases := []struct {
-		name string
-		req  *pb.CreateLocationRequest
+		name           string
+		req            *pb.CreateLocationRequest
 		expectedLatLng *pb.LatLng
 	}{
 		{

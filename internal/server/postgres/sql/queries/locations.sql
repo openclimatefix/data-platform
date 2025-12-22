@@ -8,16 +8,18 @@ INSERT INTO loc.geometries AS l (
     ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326),
     $1,
     COALESCE(
-	ST_GEOMFROMTEXT(sqlc.narg(associated_point)::TEXT, 4326),
-	ST_CENTROID(ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326))
+        ST_GEOMFROMTEXT(sqlc.narg(associated_point)::TEXT, 4326),
+        ST_CENTROID(ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326))
     )
-) RETURNING l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
+) RETURNING
+    l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
 
 -- name: RenameGeometry :one
 UPDATE loc.geometries AS l
 SET geometry_name = LOWER(sqlc.arg(new_geometry_name)::TEXT)
 WHERE l.geometry_uuid = $1
-RETURNING l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
+RETURNING
+    l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
 
 -- name: GetGeometryGeoJSON :one
 /* GetLocationGeoJSON returns a GeoJSON FeatureCollection for the given geometries.
