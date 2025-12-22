@@ -337,6 +337,16 @@ message CreateLocationRequest {
   optional google.protobuf.Timestamp valid_from_utc = 7 [
     (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
+  // Optional latitude/longitude to associate with the location.
+  // Defaults to the centroid of the geometry if not provided. Not required for Point geometries.
+  optional LatLng associated_latlng = 8;
+
+  option (buf.validate.message).cel = {
+    id: "latlng_invalid_for_point"
+    message: "latlng must not be provided for Point geometries"
+    expression:
+      "this.geometry_wkt.startsWith('POINT') ? !has(this.associated_latlng) : true"
+  };
 }
 
 message CreateLocationResponse {

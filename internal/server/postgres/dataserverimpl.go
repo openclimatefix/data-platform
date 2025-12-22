@@ -1108,10 +1108,21 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
+	var associated_point *string
+	if req.AssociatedLatlng != nil {
+		point := fmt.Sprintf(
+			"POINT(%f %f)",
+			req.AssociatedLatlng.Longitude,
+			req.AssociatedLatlng.Latitude,
+		)
+		associated_point = &point
+	}
+
 	cgprms := db.CreateGeometryParams{
-		GeometryName:   req.LocationName,
-		Geom:           req.GeometryWkt,
-		GeometryTypeID: int16(req.LocationType),
+		GeometryName:    req.LocationName,
+		Geom:            req.GeometryWkt,
+		GeometryTypeID:  int16(req.LocationType),
+		AssociatedPoint: associated_point,
 	}
 
 	dbLocation, err := querier.CreateGeometry(ctx, cgprms)
