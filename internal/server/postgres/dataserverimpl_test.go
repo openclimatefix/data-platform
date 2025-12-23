@@ -115,8 +115,9 @@ func TestCreateLocation(t *testing.T) {
 	require.NoError(t, err)
 
 	testcases := []struct {
-		name string
-		req  *pb.CreateLocationRequest
+		name           string
+		req            *pb.CreateLocationRequest
+		expectedLatLng *pb.LatLng
 	}{
 		{
 			name: "Should create solar location",
@@ -127,6 +128,10 @@ func TestCreateLocation(t *testing.T) {
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 				Metadata:               metadata,
+			},
+			expectedLatLng: &pb.LatLng{
+				Latitude:  51.5,
+				Longitude: 0.0,
 			},
 		},
 		{
@@ -149,6 +154,10 @@ func TestCreateLocation(t *testing.T) {
 				EffectiveCapacityWatts: 4560,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 				Metadata:               metadata,
+			},
+			expectedLatLng: &pb.LatLng{
+				Latitude:  51.5,
+				Longitude: 0.0,
 			},
 		},
 		{
@@ -183,6 +192,10 @@ func TestCreateLocation(t *testing.T) {
 				LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
 				Metadata:               metadata,
 			},
+			expectedLatLng: &pb.LatLng{
+				Latitude:  51.75,
+				Longitude: 0.5,
+			},
 		},
 		{
 			name: "Shouldn't create location with non-closed POLYGON geometry",
@@ -205,6 +218,10 @@ func TestCreateLocation(t *testing.T) {
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
 				Metadata:               metadata,
 			},
+			expectedLatLng: &pb.LatLng{
+				Latitude:  51.75,
+				Longitude: 1.5,
+			},
 		},
 		{
 			name: "Shouldn't create location with non-closed MULTIPOLYGON geometry",
@@ -226,6 +243,25 @@ func TestCreateLocation(t *testing.T) {
 				EffectiveCapacityWatts: 10289e3,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 				Metadata:               metadata,
+			},
+		},
+		{
+			name: "Should create location with associated lat long",
+			req: &pb.CreateLocationRequest{
+				LocationName:           "closed_multipolygon_with_latlng",
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_WIND,
+				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0, 2.0 51.5)))",
+				EffectiveCapacityWatts: 14e6,
+				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
+				Metadata:               metadata,
+				AssociatedLatlng: &pb.LatLng{
+					Latitude:  51.5074,
+					Longitude: -0.1278,
+				},
+			},
+			expectedLatLng: &pb.LatLng{
+				Latitude:  51.5074,
+				Longitude: -0.1278,
 			},
 		},
 	}
@@ -253,6 +289,7 @@ func TestCreateLocation(t *testing.T) {
 				// require.Equal(t, tc.req.GeometryWkt, string(resp2.GeometryWkb))
 				require.Equal(t, tc.req.EffectiveCapacityWatts, resp2.EffectiveCapacityWatts)
 				require.Equal(t, tc.req.Metadata.AsMap(), resp2.Metadata.AsMap())
+				require.Equal(t, tc.expectedLatLng, resp2.Latlng)
 			}
 		})
 	}

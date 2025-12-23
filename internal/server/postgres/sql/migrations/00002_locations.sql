@@ -76,7 +76,14 @@ CREATE TABLE loc.geometries (
     REFERENCES loc.geometry_types (geometry_type_id)
     ON UPDATE CASCADE
     ON DELETE RESTRICT,
-    centroid GEOMETRY (POINT, 4326) GENERATED ALWAYS AS (ST_CENTROID(geom)) STORED,
+    associated_point GEOMETRY (POINT, 4326) NOT NULL,
+    CONSTRAINT associated_point_validity_check CHECK (
+	ST_SRID(associated_point) = 4326
+	AND ST_NDIMS(associated_point) = 2
+	AND ST_ISVALID(associated_point)
+	AND ST_X(associated_point) >= -180 AND ST_X(associated_point) <= 180
+	AND ST_Y(associated_point) >= -90 AND ST_Y(associated_point) <= 90
+    ),
     geom_hash TEXT GENERATED ALWAYS AS (MD5(ST_ASBINARY(geom))) STORED,
     metadata JSONB DEFAULT NULL,
     PRIMARY KEY (geometry_uuid),
@@ -139,8 +146,8 @@ SELECT
     sh.metadata,
     g.geometry_name,
     g.geometry_type_id,
-    ST_X(g.centroid)::REAL AS longitude,
-    ST_Y(g.centroid)::REAL AS latitude,
+    ST_X(g.associated_point)::REAL AS longitude,
+    ST_Y(g.associated_point)::REAL AS latitude,
     TSRANGE(
         sh.valid_from_utc,
         LEAD(sh.valid_from_utc, 1) OVER (

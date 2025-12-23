@@ -2,18 +2,24 @@
 
 -- name: CreateGeometry :one
 INSERT INTO loc.geometries AS l (
-    geometry_name, geom, geometry_type_id
+    geometry_name, geom, geometry_type_id, associated_point
 ) VALUES (
     LOWER(sqlc.arg(geometry_name)::TEXT),
-    ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326), --Ensure in WSG84
-    $1
-) RETURNING l.geometry_uuid, l.geometry_name, ST_X(l.centroid)::REAL AS longitude, ST_Y(l.centroid)::REAL AS latitude;
+    ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326),
+    $1,
+    COALESCE(
+        ST_GEOMFROMTEXT(sqlc.narg(associated_point)::TEXT, 4326),
+        ST_CENTROID(ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326))
+    )
+) RETURNING
+    l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
 
 -- name: RenameGeometry :one
 UPDATE loc.geometries AS l
 SET geometry_name = LOWER(sqlc.arg(new_geometry_name)::TEXT)
 WHERE l.geometry_uuid = $1
-RETURNING l.geometry_uuid, l.geometry_name, ST_X(l.centroid)::REAL AS longitude, ST_Y(l.centroid)::REAL AS latitude;
+RETURNING
+    l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
 
 -- name: GetGeometryGeoJSON :one
 /* GetLocationGeoJSON returns a GeoJSON FeatureCollection for the given geometries.
@@ -52,8 +58,8 @@ SELECT
     s.geometry_uuid,
     l.geometry_name,
     s.sys_period,
-    ST_X(l.centroid)::REAL AS longitude,
-    ST_Y(l.centroid)::REAL AS latitude
+    ST_X(l.associated_point)::REAL AS longitude,
+    ST_Y(l.associated_point)::REAL AS latitude
 FROM loc.sources_mv AS s
     INNER JOIN loc.geometries AS l USING (geometry_uuid)
 WHERE
@@ -127,8 +133,8 @@ WITH unfiltered_sources AS (
         ls.capacity_limit_sip,
         l.geometry_name,
         l.geometry_type_id,
-        ST_X(l.centroid)::REAL AS longitude,
-        ST_Y(l.centroid)::REAL AS latitude,
+        ST_X(l.associated_point)::REAL AS longitude,
+        ST_Y(l.associated_point)::REAL AS latitude,
         l.metadata AS geometry_metadata,
         ls.metadata AS source_metadata
     FROM loc.sources_mv AS ls
@@ -161,7 +167,7 @@ WITH contained_geometries AS (
         l.geometry_name,
         l.geometry_type_id,
         l.geom,
-        l.centroid,
+        l.associated_point,
         l.metadata
     FROM loc.geometries AS l
         INNER JOIN
@@ -181,8 +187,8 @@ unfiltered_sources AS (
         ls.capacity_limit_sip,
         l.geometry_name,
         l.geometry_type_id,
-        ST_X(l.centroid)::REAL AS longitude,
-        ST_Y(l.centroid)::REAL AS latitude,
+        ST_X(l.associated_point)::REAL AS longitude,
+        ST_Y(l.associated_point)::REAL AS latitude,
         l.metadata AS geometry_metadata,
         ls.metadata AS source_metadata
     FROM loc.sources_mv AS ls
@@ -215,12 +221,12 @@ WITH containing_geometries AS (
         l.geometry_name,
         l.geometry_type_id,
         l.geom,
-        l.centroid,
+        l.associated_point,
         l.metadata
     FROM loc.geometries AS l
         INNER JOIN
             loc.geometries AS l_inner ON ST_WITHIN(
-                l_inner.geom,
+                l_inner.associated_point,
                 l.geom
             ) AND l_inner.geometry_uuid = sqlc.arg(inner_geometry_uuid)::UUID
             AND l.geometry_uuid <> sqlc.arg(inner_geometry_uuid)::UUID
@@ -235,8 +241,8 @@ unfiltered_sources AS (
         ls.capacity_limit_sip,
         l.geometry_name,
         l.geometry_type_id,
-        ST_X(l.centroid)::REAL AS longitude,
-        ST_Y(l.centroid)::REAL AS latitude,
+        ST_X(l.associated_point)::REAL AS longitude,
+        ST_Y(l.associated_point)::REAL AS latitude,
         l.metadata AS geometry_metadata,
         ls.metadata AS source_metadata
     FROM loc.sources_mv AS ls
