@@ -22,10 +22,11 @@ BEGIN
 
     -- Insert geometries
     INSERT INTO loc.geometries
-      (geometry_name, geometry_type_id, geom)
+      (geometry_name, geometry_type_id, geom, associated_point)
     SELECT
         LOWER(name_prefix) || '_testgeometry' || i AS geometry_name,
         1,
+        ST_SetSRID(ST_MakePoint(random() * 355 - 180, random() * 175 - 90), 4326),
         ST_SetSRID(ST_MakePoint(random() * 355 - 180, random() * 175 - 90), 4326)
     FROM generate_series(0, num_locations - 1) as i;
     RAISE NOTICE 'Inserted % geometries', (SELECT COUNT(*) FROM loc.geometries);
