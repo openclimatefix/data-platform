@@ -37,12 +37,14 @@ func (li *loggingInterceptorBuilder) UnaryServerInterceptor(
 	l := log.With().
 		Str("grpc.method", info.FullMethod).
 		Logger()
+
 	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
 		if len(md.Get("traceid")) > 0 {
-			  l = log.With().Str("grpc.traceid", md.Get("traceid")[0]).Logger()
-		  }
-  	}
+			l = log.With().Str("grpc.traceid", md.Get("traceid")[0]).Logger()
+		}
+	}
+
 	l.Debug().Msg("started call")
 	ctx = l.WithContext(ctx)
 
@@ -72,10 +74,12 @@ func (li *loggingInterceptorBuilder) StreamServerInterceptor(
 		Str("grpc.method", info.FullMethod).
 		Str("grpc.requestid", uuid.New().String()).
 		Logger()
+
 	md, ok := metadata.FromIncomingContext(ss.Context())
 	if ok {
-	  l = log.With().Str("grpc.traceid", md.Get("trace-id")[0]).Logger()
-  	}
+		l = log.With().Str("grpc.traceid", md.Get("trace-id")[0]).Logger()
+	}
+
 	l.Debug().Msg("started call")
 	ctx := l.WithContext(ss.Context())
 
