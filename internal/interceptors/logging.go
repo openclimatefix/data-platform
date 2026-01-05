@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // loggingInterceptorBuilder builds gRPC interceptors for logging.
@@ -35,8 +36,13 @@ func (li *loggingInterceptorBuilder) UnaryServerInterceptor(
 	// See https://github.com/rs/zerolog#contextcontext-integration
 	l := log.With().
 		Str("grpc.method", info.FullMethod).
-		Str("grpc.requestid", uuid.New().String()).
 		Logger()
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		if len(md.Get("traceid")) > 0 {
+			  l = log.With().Str("grpc.traceid", md.Get("traceid")[0]).Logger()
+		  }
+  	}
 	l.Debug().Msg("started call")
 	ctx = l.WithContext(ctx)
 
@@ -66,6 +72,10 @@ func (li *loggingInterceptorBuilder) StreamServerInterceptor(
 		Str("grpc.method", info.FullMethod).
 		Str("grpc.requestid", uuid.New().String()).
 		Logger()
+	md, ok := metadata.FromIncomingContext(ss.Context())
+	if ok {
+	  l = log.With().Str("grpc.traceid", md.Get("trace-id")[0]).Logger()
+  	}
 	l.Debug().Msg("started call")
 	ctx := l.WithContext(ss.Context())
 
