@@ -77,7 +77,9 @@ func (li *loggingInterceptorBuilder) StreamServerInterceptor(
 
 	md, ok := metadata.FromIncomingContext(ss.Context())
 	if ok {
-		l = log.With().Str("grpc.traceid", md.Get("trace-id")[0]).Logger()
+		if len(md.Get("traceid")) > 0 {
+			l = log.With().Str("grpc.traceid", md.Get("traceid")[0]).Logger()
+		}
 	}
 
 	l.Debug().Msg("started call")
