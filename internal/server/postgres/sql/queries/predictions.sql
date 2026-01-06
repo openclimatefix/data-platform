@@ -106,7 +106,7 @@ INSERT INTO pred.predicted_generation_values (
  * and source type made by all forecasters. Only forecasts that are older than the pivot time
  * minus the specified horizon are considered.
  */
-SELECT
+SELECT DISTINCT ON (fr.forecaster_name)
     f.forecast_uuid,
     f.init_time_utc,
     f.source_type_id,
@@ -119,7 +119,10 @@ FROM pred.forecasts AS f
 WHERE f.geometry_uuid = $1
     AND f.source_type_id = $2
     AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-ORDER BY f.init_time_utc DESC;
+    AND f.target_period @> sqlc.arg(pivot_timestamp)::TIMESTAMP
+ORDER BY
+    fr.forecaster_name ASC,
+    f.init_time_utc DESC;
 
 -- name: ListForecasts :many
 /* ListForecasts retrieves all the forecasts for a given location, source type, and forecaster

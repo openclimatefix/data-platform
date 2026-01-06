@@ -1711,7 +1711,7 @@ func TestGetLatestForecasts(t *testing.T) {
 		expectedInitTimes []time.Time
 	}{
 		{
-			name: "Should return latest forecasts for all forecasters",
+			name: "Should return latest forecasts for each forecaster name",
 			req: &pb.GetLatestForecastsRequest{
 				LocationUuid:      siteResp.LocationUuid,
 				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
@@ -1719,8 +1719,6 @@ func TestGetLatestForecasts(t *testing.T) {
 			},
 			expectedInitTimes: []time.Time{
 				pivotTime,
-				pivotTime.Add(-time.Hour * 1),
-				pivotTime.Add(-time.Hour * 2),
 			},
 		},
 		{
@@ -1732,7 +1730,6 @@ func TestGetLatestForecasts(t *testing.T) {
 			},
 			expectedInitTimes: []time.Time{
 				pivotTime.Add(-time.Hour * 1),
-				pivotTime.Add(-time.Hour * 2),
 			},
 		},
 	}
