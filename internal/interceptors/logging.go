@@ -41,7 +41,7 @@ func (li *loggingInterceptorBuilder) UnaryServerInterceptor(
 	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
 		if len(md.Get("traceid")) > 0 {
-			l = log.With().Str("grpc.traceid", md.Get("traceid")[0]).Logger()
+			l = l.With().Str("grpc.traceid", md.Get("traceid")[0]).Logger()
 		}
 	}
 
@@ -78,7 +78,7 @@ func (li *loggingInterceptorBuilder) StreamServerInterceptor(
 	md, ok := metadata.FromIncomingContext(ss.Context())
 	if ok {
 		if len(md.Get("traceid")) > 0 {
-			l = log.With().Str("grpc.traceid", md.Get("traceid")[0]).Logger()
+			l = l.With().Str("grpc.traceid", md.Get("traceid")[0]).Logger()
 		}
 	}
 

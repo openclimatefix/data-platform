@@ -327,6 +327,11 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 		)
 	}
 
+	l.Debug().Str("dp.geometry.uuid", req.LocationUuid).
+		Int16("dp.source.type_id", glfprms.SourceTypeID).
+		Int("dp.forecasts.count", len(dbListForecasts)).
+		Msg("fetched latest forecasts")
+
 	forecasts := make([]*pb.GetLatestForecastsResponse_Forecast, len(dbListForecasts))
 	for i, fc := range dbListForecasts {
 		forecasts[i] = &pb.GetLatestForecastsResponse_Forecast{
@@ -1432,6 +1437,13 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	}
 
 	if len(dbValues) == 0 {
+		l.Debug().
+			Str("dp.geometry.uuid", dbSource.GeometryUuid.String()).
+			Int16("dp.source.type_id", dbSource.SourceTypeID).
+			Int32("dp.forecaster.id", dbExistingForecaster.ForecasterID).
+			Str("dp.time_window", fmt.Sprintf("%s - %s", start.Time.String(), end.Time.String())).
+			Msg("no predictions found")
+
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No predicted values found for the given location at the given horizon.",
@@ -1454,9 +1466,11 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	for i, value := range dbValues {
 		otherStats := make(map[string]float32)
 
-		err := json.Unmarshal(value.OtherStatsFractions, &otherStats)
-		if err != nil {
-			l.Err(err).Msgf("json.Unmarshal(%s)", value.OtherStatsFractions)
+		if value.OtherStatsFractions != nil {
+			err := json.Unmarshal(value.OtherStatsFractions, &otherStats)
+			if err != nil {
+				l.Err(err).Msgf("json.Unmarshal(%s)", value.OtherStatsFractions)
+			}
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
