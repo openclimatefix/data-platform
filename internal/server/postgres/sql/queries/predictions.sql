@@ -256,10 +256,6 @@ WITH relevant_forecasts AS (
         AND f.forecaster_id = $2
         AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
     ORDER BY f.geometry_uuid, f.init_time_utc
-    LIMIT (
-        SELECT COUNT(*) FROM loc.geometries
-        WHERE geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
-    )
 ),
 ranked_predictions AS (
     SELECT
