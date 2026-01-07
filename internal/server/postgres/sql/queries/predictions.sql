@@ -245,7 +245,7 @@ ORDER BY rp.target_time_utc ASC;
  * Predicted values are 16-bit integers, with 0 representing 0% and 30000 representing 100% of capacity.
  */
 WITH relevant_forecasts AS (
-    SELECT
+    SELECT DISTINCT ON (f.geometry_uuid)
         f.forecast_uuid,
         f.geometry_uuid,
         f.source_type_id,
@@ -256,13 +256,13 @@ WITH relevant_forecasts AS (
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
+    ORDER BY f.geometry_uuid, f.init_time_utc
 ),
 ranked_predictions AS (
     SELECT
         rf.forecast_uuid,
         rf.geometry_uuid,
         rf.source_type_id,
-        rf.init_time_utc,
         pg.horizon_mins,
         pg.p50_sip,
         pg.target_time_utc,
