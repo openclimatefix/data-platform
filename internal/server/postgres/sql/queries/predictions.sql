@@ -189,6 +189,7 @@ WITH relevant_forecasts AS (
     WHERE f.geometry_uuid = $1
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
+        AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP
         AND f.target_period && TSRANGE(
             sqlc.arg(start_timestamp_utc)::TIMESTAMP,
             sqlc.arg(end_timestamp_utc)::TIMESTAMP,
