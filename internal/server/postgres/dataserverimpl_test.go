@@ -746,9 +746,12 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 	testcases := []struct {
 		name           string
 		horizonMins    int32
+		pivotTime      time.Time
 		expectedValues []float32
 	}{
 		{
+			name:        "Should return expected values for horizon 0 mins",
+			horizonMins: 0,
 			// For horizon 0, we should get all the values from the latest forecast,
 			// plus the values from the previous forecasts that have the lowest horizon
 			// for each target time.
@@ -760,8 +763,6 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			// 0, 8, 16, 24, 32, 40 (horizons 0 to 25 minutes from forecast 3)
 			// Then the same from forecast 2, as it's horizon is smaller - likewise then forecast 1
 			// 0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88 (horizons 0 to 55 minutes from forecast 0)
-			name:        "Should return expected values for horizon 0 mins",
-			horizonMins: 0,
 			expectedValues: []float32{
 				0.00, 0.08, 0.16, 0.24, 0.32, 0.40,
 				0.00, 0.08, 0.16, 0.24, 0.32, 0.40,
@@ -770,10 +771,10 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			},
 		},
 		{
-			// For horizon of 14 minutes, anything with a lesser horizon should not be included.
-			// So the value for 0, 5, and 10 minutes should not be included.
 			name:        "Should return expected values for horizon 14 mins",
 			horizonMins: 14,
+			// For horizon of 14 minutes, anything with a lesser horizon should not be included.
+			// So the value for 0, 5, and 10 minutes should not be included.
 			expectedValues: []float32{
 				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
 				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
@@ -795,15 +796,34 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			name:        "Shouldn't return successfully for horizon 60 mins",
 			horizonMins: 60,
 		},
+		{
+			name:        "Should return expected values for horizon 14 minutes with pivot time",
+			horizonMins: 14,
+			pivotTime:   pivotTime.Add(-15 * time.Minute),
+			// For horizon of 14 minutes and a pivot time of 15 minutes before the latest,
+			// we should expect the same as for the 14 minute horizon no pivot time case,
+			// only this time the latest forecast should not be included at all.
+			// Hence we only see data for three forecasts.
+			expectedValues: []float32{
+				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
+				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
+				0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
+			},
+		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("Horizon %d mins", tc.horizonMins), func(t *testing.T) {
+			if tc.pivotTime.Equal((time.Time{})) {
+				tc.pivotTime = pivotTime
+			}
+
 			resp, err := dc.GetForecastAsTimeseries(t.Context(), &pb.GetForecastAsTimeseriesRequest{
-				LocationUuid: siteResp.LocationUuid,
-				HorizonMins:  uint32(tc.horizonMins),
-				Forecaster:   forecasterResp.Forecaster,
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				LocationUuid:      siteResp.LocationUuid,
+				HorizonMins:       uint32(tc.horizonMins),
+				Forecaster:        forecasterResp.Forecaster,
+				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				PivotTimestampUtc: timestamppb.New(tc.pivotTime),
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),

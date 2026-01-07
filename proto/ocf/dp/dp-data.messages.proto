@@ -69,6 +69,12 @@ message GetForecastAsTimeseriesRequest {
   Forecaster forecaster = 5 [
     (buf.validate.field).required = true
   ];
+  /* The time to search backwards from to find forecasts.
+   * If not specified, the current time will be used.
+   */
+  optional google.protobuf.Timestamp pivot_timestamp_utc = 6 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+  ];
 }
 
 message GetForecastAsTimeseriesResponse {
