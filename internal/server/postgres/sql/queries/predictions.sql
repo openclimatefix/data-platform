@@ -73,8 +73,8 @@ INSERT INTO pred.forecasts (
     $4,
     $5,
     TSRANGE(
-        $4::TIMESTAMP + MAKE_INTERVAL(mins => sqlc.arg(first_horizon_mins)::INTEGER),
-        $4::TIMESTAMP + MAKE_INTERVAL(mins => sqlc.arg(last_horizon_mins)::INTEGER),
+        $4:: + MAKE_INTERVAL(mins => sqlc.arg(first_horizon_mins)::INTEGER),
+        $4:: + MAKE_INTERVAL(mins => sqlc.arg(last_horizon_mins)::INTEGER),
         '[]'
     )
 ) RETURNING
@@ -113,13 +113,13 @@ SELECT DISTINCT ON (fr.forecaster_name)
     f.geometry_uuid,
     fr.forecaster_name,
     fr.forecaster_version,
-    UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid) AS created_at_utc
+    UUIDV7_EXTRACT_(f.forecast_uuid) AS created_at_utc
 FROM pred.forecasts AS f
     INNER JOIN pred.forecasters AS fr USING (forecaster_id)
 WHERE f.geometry_uuid = $1
     AND f.source_type_id = $2
-    AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-    AND f.target_period @> sqlc.arg(pivot_timestamp)::TIMESTAMP
+    AND f.init_time_utc <= sqlc.arg(pivot_):: - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
+    AND f.target_period @> sqlc.arg(pivot_)::
 ORDER BY
     fr.forecaster_name ASC,
     f.init_time_utc DESC;
@@ -143,14 +143,14 @@ SELECT
     forecasts.geometry_uuid,
     desired_forecaster.forecaster_name,
     desired_forecaster.forecaster_version,
-    UUIDV7_EXTRACT_TIMESTAMP(forecasts.forecast_uuid) AS created_at_utc
+    UUIDV7_EXTRACT_(forecasts.forecast_uuid) AS created_at_utc
 FROM pred.forecasts AS forecasts
     INNER JOIN desired_forecaster USING (forecaster_id)
 WHERE forecasts.geometry_uuid = $1
     AND forecasts.source_type_id = $2
     AND forecasts.init_time_utc BETWEEN
-    sqlc.arg(start_timestamp)::TIMESTAMP
-    AND sqlc.arg(end_timestamp)::TIMESTAMP;
+    sqlc.arg(start_)::
+    AND sqlc.arg(end_)::TIMESTAMP;
 
 -- name: ListPredictionsForForecast :many
 /* ListPredictionsForForecast retrieves predicted generation values
@@ -256,7 +256,7 @@ WITH relevant_forecasts AS (
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
-    ORDER BY f.geometry_uuid, f.init_time_utc
+    ORDER BY f.geometry_uuid, f.init_time_utc desc
 ),
 ranked_predictions AS (
     SELECT
