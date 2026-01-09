@@ -256,7 +256,7 @@ WITH relevant_forecasts AS (
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
-    ORDER BY f.geometry_uuid, f.init_time_utc DESC
+    ORDER BY f.geometry_uuid ASC, f.init_time_utc DESC
 ),
 ranked_predictions AS (
     SELECT
