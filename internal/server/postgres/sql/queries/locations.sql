@@ -54,12 +54,12 @@ SELECT
     s.capacity_watts,
     s.capacity_limit_sip,
     s.source_type_id,
-    s.metadata AS metadata_jsonb,
     s.geometry_uuid,
     l.geometry_name,
     s.sys_period,
     ST_X(l.associated_point)::REAL AS longitude,
-    ST_Y(l.associated_point)::REAL AS latitude
+    ST_Y(l.associated_point)::REAL AS latitude,
+    COALESCE(s.metadata || l.metadata, s.metadata, l.metadata)::JSONB AS metadata_jsonb
 FROM loc.sources_mv AS s
     INNER JOIN loc.geometries AS l USING (geometry_uuid)
 WHERE
