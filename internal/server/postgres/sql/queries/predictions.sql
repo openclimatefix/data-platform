@@ -106,23 +106,33 @@ INSERT INTO pred.predicted_generation_values (
  * and source type made by all forecasters. Only forecasts that are older than the pivot time
  * minus the specified horizon are considered.
  */
+WITH latest_forecasts AS (
+    SELECT DISTINCT ON (f.forecaster_id)
+        f.forecast_uuid,
+        f.init_time_utc,
+        f.source_type_id,
+        f.geometry_uuid,
+        f.forecaster_id
+    FROM pred.forecasts AS f
+    WHERE f.geometry_uuid = $1
+        AND f.source_type_id = $2
+        AND f.init_time_utc
+        <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
+        AND f.target_period @> sqlc.arg(pivot_timestamp)::TIMESTAMP
+    ORDER BY
+        f.forecaster_id ASC,
+        f.forecast_uuid DESC
+)
+-- Only join to forecaster table to sort by name once forecasts have been filtered
 SELECT DISTINCT ON (fr.forecaster_name)
-    f.forecast_uuid,
-    f.init_time_utc,
-    f.source_type_id,
-    f.geometry_uuid,
+    lf.*,
     fr.forecaster_name,
     fr.forecaster_version,
-    UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid) AS created_at_utc
-FROM pred.forecasts AS f
+    UUIDV7_EXTRACT_TIMESTAMP(lf.forecast_uuid) AS created_at_utc
+FROM latest_forecasts AS lf
     INNER JOIN pred.forecasters AS fr USING (forecaster_id)
-WHERE f.geometry_uuid = $1
-    AND f.source_type_id = $2
-    AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-    AND f.target_period @> sqlc.arg(pivot_timestamp)::TIMESTAMP
 ORDER BY
-    fr.forecaster_name ASC,
-    f.init_time_utc DESC;
+    fr.forecaster_name ASC;
 
 -- name: ListForecasts :many
 /* ListForecasts retrieves all the forecasts for a given location, source type, and forecaster
