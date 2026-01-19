@@ -89,6 +89,7 @@ WHERE parent_table = 'obs.observed_generation_values';
 SELECT partman.run_maintenance('obs.observed_generation_values');
 -- Schedule regular maintenance for the partitioned observed generation values table.
 SELECT cron.schedule('partman-maintenance', '@hourly', $$CALL partman.run_maintenance_proc()$$);
+SELECT cron.schedule('cron-details-cleanup', '0 12 * * *', $$DELETE FROM cron.job_run_details WHERE end_time < now() - interval '7 days'$$);
 
 
 -- +goose Down
