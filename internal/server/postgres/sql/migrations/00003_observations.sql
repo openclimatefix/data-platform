@@ -8,6 +8,10 @@
  * with these providers provide access to the data in order to test the accuracy of predictions.
 */
 
+CREATE SCHEMA IF NOT EXISTS partman;
+CREATE EXTENSION IF NOT EXISTS pg_partman WITH SCHEMA partman;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
 CREATE SCHEMA obs;
 
 /*- Tables ----------------------------------------------------------------------------------*/
@@ -83,6 +87,14 @@ SET
     infinite_time_partitions = TRUE
 WHERE parent_table = 'obs.observed_generation_values';
 SELECT partman.run_maintenance('obs.observed_generation_values');
+-- Schedule regular maintenance for the partitioned observed generation values table.
+SELECT cron.schedule('partman-maintenance', '@hourly', $$CALL partman.run_maintenance_proc()$$);
+
 
 -- +goose Down
+SELECT cron.unschedule('partman-maintenance');
 DROP SCHEMA obs CASCADE;
+
+DROP EXTENSION IF EXISTS pg_cron CASCADE;
+DROP EXTENSION IF EXISTS pg_partman CASCADE;
+DROP SCHEMA IF EXISTS partman CASCADE;

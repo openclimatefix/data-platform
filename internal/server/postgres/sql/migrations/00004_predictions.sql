@@ -200,3 +200,4 @@ SELECT partman.run_maintenance('pred.predicted_generation_values');
 
 -- +goose Down
 DROP SCHEMA pred CASCADE;
+

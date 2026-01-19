@@ -197,7 +197,7 @@ gen.proto.python: ${PROTOC}
 .PHONY: run.db # Run an instance of Postgres with the required extensions
 run.db:
 	docker build -f internal/server/postgres/infra/Containerfile internal/server/postgres/infra -t data-platform-pgdb:local
-	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" data-platform-pgdb:local
+	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" data-platform-pgdb:local postgres -c 'shared_preload_libraries=pg_cron' -c 'cron.database_name=postgres'
 
 .PHONY: run.notebook # Run a python notebook to inspect the API
 run.notebook: gen.proto.python
