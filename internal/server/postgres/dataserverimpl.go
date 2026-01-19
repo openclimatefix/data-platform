@@ -1544,9 +1544,9 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithin(%+v)", llprms)
 		} else {
 			for _, loc := range glResp {
-				metadata, err := jsonbToStruct(loc.SourceMetadata)
+				metadata, err := jsonbToStruct(loc.MetadataJsonb)
 				if err != nil {
-					l.Err(err).Msgf("jsonbToStruct(%s)", loc.SourceMetadata)
+					l.Err(err).Msgf("jsonbToStruct(%s)", loc.MetadataJsonb)
 					metadata = nil
 				}
 
@@ -1580,9 +1580,9 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithout(%+v)", llprms)
 		} else {
 			for _, loc := range glResp {
-				metadata, err := jsonbToStruct(loc.SourceMetadata)
+				metadata, err := jsonbToStruct(loc.MetadataJsonb)
 				if err != nil {
-					l.Err(err).Msgf("jsonbToStruct(%s)", loc.SourceMetadata)
+					l.Err(err).Msgf("jsonbToStruct(%s)", loc.MetadataJsonb)
 					metadata = nil
 				}
 
@@ -1615,9 +1615,9 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			l.Err(err).Msgf("querier.ListSourcesAtTimestamp(%+v)", lsprms)
 		} else {
 			for _, loc := range glResp {
-				metadata, err := jsonbToStruct(loc.SourceMetadata)
+				metadata, err := jsonbToStruct(loc.MetadataJsonb)
 				if err != nil {
-					l.Err(err).Msgf("jsonbToStruct(%s)", loc.SourceMetadata)
+					l.Err(err).Msgf("jsonbToStruct(%s)", loc.MetadataJsonb)
 					metadata = nil
 				}
 

@@ -135,8 +135,7 @@ WITH unfiltered_sources AS (
         l.geometry_type_id,
         ST_X(l.associated_point)::REAL AS longitude,
         ST_Y(l.associated_point)::REAL AS latitude,
-        l.metadata AS geometry_metadata,
-        ls.metadata AS source_metadata
+        COALESCE(l.metadata || ls.metadata, l.metadata, ls.metadata)::JSONB AS metadata_jsonb
     FROM loc.sources_mv AS ls
         INNER JOIN loc.geometries AS l USING (geometry_uuid)
         LEFT OUTER JOIN iam.location_policies AS lp USING (geometry_uuid, source_type_id)
@@ -189,8 +188,7 @@ unfiltered_sources AS (
         l.geometry_type_id,
         ST_X(l.associated_point)::REAL AS longitude,
         ST_Y(l.associated_point)::REAL AS latitude,
-        l.metadata AS geometry_metadata,
-        ls.metadata AS source_metadata
+        COALESCE(l.metadata || ls.metadata, l.metadata, ls.metadata)::JSONB AS metadata_jsonb
     FROM loc.sources_mv AS ls
         INNER JOIN contained_geometries AS l USING (geometry_uuid)
         LEFT OUTER JOIN iam.location_policies AS lp USING (geometry_uuid, source_type_id)
@@ -243,8 +241,7 @@ unfiltered_sources AS (
         l.geometry_type_id,
         ST_X(l.associated_point)::REAL AS longitude,
         ST_Y(l.associated_point)::REAL AS latitude,
-        l.metadata AS geometry_metadata,
-        ls.metadata AS source_metadata
+        COALESCE(l.metadata || ls.metadata, l.metadata, ls.metadata)::JSONB AS metadata_jsonb
     FROM loc.sources_mv AS ls
         INNER JOIN containing_geometries AS l USING (geometry_uuid)
         LEFT OUTER JOIN iam.location_policies AS lp USING (geometry_uuid, source_type_id)
