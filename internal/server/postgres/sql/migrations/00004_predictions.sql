@@ -132,6 +132,8 @@ CREATE INDEX idx_forecasts_filter ON pred.forecasts (
     init_time_utc DESC
 ) INCLUDE (target_period);
 
+SELECT cron.schedule('forecasts-vacuum', '30 4 * * *', $$VACUUM ANALYZE pred.forecasts$$);
+
 /*
  * Table to store predicted generation values.
  * Predicted generation values are the output of a forecast model. There can only be one predicted
