@@ -16,9 +16,12 @@
  * One geometry can have multiple sources, e.g. the UK nation geometry can have solar, wind, etc.
  */
 
-CREATE SCHEMA loc;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
-CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
+CREATE SCHEMA IF NOT EXISTS topology;
+CREATE EXTENSION IF NOT EXISTS postgis_topology WITH SCHEMA topology;
+
+CREATE SCHEMA loc;
 
 /*- Lookups -----------------------------------------------------------------------------------*/
 
@@ -164,3 +167,6 @@ CREATE INDEX ON loc.sources_mv USING gist (sys_period);
 
 -- +goose Down
 DROP SCHEMA loc CASCADE;
+DROP EXTENSION IF EXISTS postgis_topology;
+DROP EXTENSION IF EXISTS postgis;
+DROP EXTENSION IF EXISTS btree_gist;

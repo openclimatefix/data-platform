@@ -58,7 +58,13 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 			"POSTGRES_PASSWORD": "postgres",
 			"POSTGRES_DB":       "postgres",
 		},
-		Cmd:          []string{"postgres", "-c", "fsync=off"},
+		Cmd: []string{
+			"postgres",
+			"-c",
+			"fsync=off",
+			"-c",
+			"shared_preload_libraries=pg_cron",
+		},
 		ExposedPorts: []string{"5432/tcp"},
 		WaitingFor: wait.ForAll(
 			wait.ForLog(

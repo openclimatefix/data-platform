@@ -6,7 +6,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         postgresql-16-postgis-3 \
         postgresql-16-postgis-3-scripts \
+    && apt-get install -y --no-install-recommends postgresql-16-cron \
     && rm -rf /var/lib/apt/lists/*
 
-COPY init_postgis.sh /docker-entrypoint-initdb.d/10_init_postgis.sh
-COPY init_partman_bgw.sh /docker-entrypoint-initdb.d/99_init_partman_bgw.sh

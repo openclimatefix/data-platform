@@ -125,7 +125,7 @@ CREATE TABLE pred.forecasts (
     PRIMARY KEY (forecast_uuid),
     UNIQUE (geometry_uuid, source_type_id, forecaster_id, init_time_utc)
 );
-CREATE INDEX ON pred.forecasts USING GIST (target_period);
+CREATE INDEX idx_forecasts_filter ON pred.forecasts USING GIST (geometry_uuid, source_type_id, target_period);
 
 /*
  * Table to store predicted generation values.
@@ -200,3 +200,4 @@ SELECT partman.run_maintenance('pred.predicted_generation_values');
 
 -- +goose Down
 DROP SCHEMA pred CASCADE;
+
