@@ -53,7 +53,6 @@ func NewTransactionInterceptor(
 		log.Fatal().Msg("Unable to connect to database. Ensure DATABASE_URL is set correctly")
 	}
 
-	log.Debug().Msg("Running migrations")
 	goose.SetBaseFS(migrations)
 	goose.SetLogger(goose.NopLogger())
 
@@ -70,6 +69,8 @@ func NewTransactionInterceptor(
 	if err != nil {
 		log.Fatal().Msgf("Unable to close database connection: %v", err)
 	}
+
+	log.Debug().Msg("Completed migrations")
 
 	return &transactionInterceptorBuilder{pool: pool}
 }

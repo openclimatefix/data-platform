@@ -103,36 +103,36 @@ INSERT INTO pred.predicted_generation_values (
 
 -- name: GetLatestForecastsAtHorizonSincePivot :many
 /* GetLatestForecastAtHorizonSincePivot retrieves the latest forecasts for a given location
- * and source type made by all forecasters. Only forecasts that are older than the pivot time
- * minus the specified horizon are considered.
+ * and source type made by each individual forecaster name.
+ * Only forecasts that are older than the pivot time minus the specified horizon are considered.
+ *
+ * The LATERAL cross join defers querying the forecasts table until each forecaster id is known.
  */
-WITH latest_forecasts AS (
-    SELECT DISTINCT ON (f.forecaster_id)
-        f.forecast_uuid,
-        f.init_time_utc,
-        f.source_type_id,
-        f.geometry_uuid,
-        f.forecaster_id
-    FROM pred.forecasts AS f
-    WHERE f.geometry_uuid = $1
-        AND f.source_type_id = $2
-        AND f.init_time_utc
-        <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-        AND f.target_period @> sqlc.arg(pivot_timestamp)::TIMESTAMP
-    ORDER BY
-        f.forecaster_id ASC,
-        f.forecast_uuid DESC
-)
--- Only join to forecaster table to sort by name once forecasts have been filtered
 SELECT DISTINCT ON (fr.forecaster_name)
-    lf.*,
+    f.forecast_uuid,
+    f.init_time_utc,
+    f.source_type_id,
+    f.geometry_uuid,
+    fr.forecaster_id,
     fr.forecaster_name,
-    fr.forecaster_version,
-    UUIDV7_EXTRACT_TIMESTAMP(lf.forecast_uuid) AS created_at_utc
-FROM latest_forecasts AS lf
-    INNER JOIN pred.forecasters AS fr USING (forecaster_id)
-ORDER BY
-    fr.forecaster_name ASC;
+    fr.forecaster_version
+FROM pred.forecasters AS fr
+    CROSS JOIN LATERAL (
+        SELECT
+            forecast_uuid,
+            init_time_utc,
+            source_type_id,
+            geometry_uuid
+        FROM pred.forecasts
+        WHERE geometry_uuid = $1
+            AND source_type_id = $2
+            AND forecaster_id = fr.forecaster_id
+            AND init_time_utc
+            <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
+        ORDER BY init_time_utc DESC
+        LIMIT 1
+    ) AS f
+ORDER BY fr.forecaster_name ASC;
 
 -- name: ListForecasts :many
 /* ListForecasts retrieves all the forecasts for a given location, source type, and forecaster
@@ -187,66 +187,39 @@ WHERE f.forecast_uuid = $1
  * Predicted values are smallint percentages (sip) of capcity;
  * with 0 representing 0% and 30000 representing 100% of capacity.
  */
-WITH relevant_forecasts AS (
-    /* First, filter the forecasts to return only those that have predictions within the target
-     * period. */
-    SELECT
-        f.forecast_uuid,
-        f.geometry_uuid,
-        f.source_type_id,
-        f.init_time_utc
-    FROM pred.forecasts AS f
-    WHERE f.geometry_uuid = $1
-        AND f.source_type_id = $2
-        AND f.forecaster_id = $3
-        AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP
-        AND f.target_period && TSRANGE(
-            sqlc.arg(start_timestamp_utc)::TIMESTAMP,
-            sqlc.arg(end_timestamp_utc)::TIMESTAMP,
-            '[]'
-        )
-),
-ranked_predictions AS (
-    /* Then, pull all the predicted values for said forecasts, and rank values with matching target
-     * times according to their horizon. Only values with a horizon greater than or equal to the
-     * input horizon are considered. */
-    SELECT
-        pg.horizon_mins,
-        pg.p50_sip,
-        pg.target_time_utc,
-        pg.metadata,
-        pg.other_stats_fractions,
-        rf.init_time_utc,
-        rf.forecast_uuid,
-        rf.geometry_uuid,
-        rf.source_type_id,
-        ROW_NUMBER() OVER (
-            PARTITION BY pg.target_time_utc
-            ORDER BY pg.horizon_mins ASC
-        ) AS rn
-    FROM pred.predicted_generation_values AS pg
-        INNER JOIN relevant_forecasts AS rf USING (forecast_uuid)
-    WHERE
-        pg.target_time_utc BETWEEN
-        sqlc.arg(start_timestamp_utc)::TIMESTAMP
-        AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
-        AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
-)
-SELECT
-    /* For each target time, choose the value with the lowest allowable horizon. */
-    rp.horizon_mins,
-    rp.p50_sip,
-    rp.target_time_utc,
-    rp.init_time_utc,
-    rp.metadata,
-    rp.other_stats_fractions,
-    sh.capacity_watts,
-    UUIDV7_EXTRACT_TIMESTAMP(rp.forecast_uuid) AS created_at_utc
-FROM ranked_predictions AS rp
-    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
-WHERE rp.rn = 1
-    AND sh.sys_period @> rp.target_time_utc
-ORDER BY rp.target_time_utc ASC;
+SELECT DISTINCT ON (pg.target_time_utc)
+    pg.horizon_mins,
+    pg.p50_sip,
+    pg.target_time_utc,
+    pg.other_stats_fractions,
+    pg.metadata,
+    f.init_time_utc,
+    sv.capacity_watts,
+    sv.latitude,
+    sv.longitude,
+    sv.geometry_name,
+    UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid) AS created_at_utc
+FROM pred.forecasts AS f
+    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
+    INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
+WHERE
+    f.geometry_uuid = $1
+    AND f.source_type_id = $2
+    AND f.forecaster_id = $3
+    -- Check the forecast actually overlaps the desired window
+    AND f.target_period && TSRANGE(
+        sqlc.arg(start_timestamp_utc)::TIMESTAMP,
+        sqlc.arg(end_timestamp_utc)::TIMESTAMP,
+        '[]'
+    )
+    AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP
+    AND pg.target_time_utc BETWEEN sqlc.arg(start_timestamp_utc)::TIMESTAMP AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
+    AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
+    -- Ensure the source was active at the predicted time
+    AND sv.sys_period @> pg.target_time_utc
+ORDER BY
+    pg.target_time_utc ASC,
+    pg.horizon_mins ASC;
 
 -- name: ListPredictionsAtTimeForLocations :many
 /* ListPredictionsAtTimeForLocations retrieves predicted generation values as percentages
