@@ -54,19 +54,11 @@ func seed(tb testing.TB, pgConnString string, params seedDBParams) (output struc
 			fmt.Sprintf(
 				"SELECT seed_db("+
 					"name_prefix=>'%s'::TEXT,"+
-					"num_locations=>%d,"+
-					"gv_resolution_mins=>%d,"+
-					"forecast_resolution_mins=>%d,"+
-					"forecast_length_mins=>%d,"+
-					"num_forecasts_per_location=>%d,"+
+					"target_total_forecasts=>%d::INTEGER,"+
 					"pivot_time=>'%s'::TIMESTAMP"+
 					");",
 				params.NamePrefix,
-				params.NumLocations,
-				params.PgvResolutionMins,
-				params.ForecastResolutionMins,
-				params.ForecastLengthHours*60,
-				params.NumForecastsPerLocation,
+				params.TargetTotalForecasts,
 				params.PivotTime.UTC().Format(time.RFC3339),
 			),
 		).Scan(&result)
@@ -90,22 +82,9 @@ func seed(tb testing.TB, pgConnString string, params seedDBParams) (output struc
 }
 
 type seedDBParams struct {
-	NamePrefix              string
-	NumLocations            int
-	NumForecasters          int
-	NumForecastsPerLocation int
-	PgvResolutionMins       int
-	ForecastResolutionMins  int
-	ForecastLengthHours     int
-	PivotTime               time.Time
-}
-
-func (s *seedDBParams) NumPgvsPerForecast() int {
-	return (s.ForecastLengthHours * 60) / s.PgvResolutionMins
-}
-
-func (s *seedDBParams) NumPgvRows() int {
-	return s.NumLocations * s.NumForecastsPerLocation * s.NumPgvsPerForecast()
+	NamePrefix           string
+	TargetTotalForecasts int
+	PivotTime            time.Time
 }
 
 // --- Tests --------------------------------------------------------------------------------------
@@ -1783,26 +1762,21 @@ func TestGetLatestForecasts(t *testing.T) {
 func BenchmarkPostgresClient(b *testing.B) {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	pivotTime := time.Date(2010, 1, 1, 1, 0, 0, 0, time.UTC)
+	pivotTime := time.Now().Truncate(24 * time.Hour).Add(-7 * 24 * time.Hour)
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(b, err)
 
 	testcases := []seedDBParams{
 		{
-			NamePrefix:              "benchmark_6m",
-			NumLocations:            500,
-			PgvResolutionMins:       30,
-			ForecastResolutionMins:  30,
-			ForecastLengthHours:     24,
-			NumForecastsPerLocation: 256,
-			PivotTime:               pivotTime,
+			TargetTotalForecasts: 100000,
+			PivotTime:            pivotTime,
 		},
 	}
 	for _, tc := range testcases {
 		output := seed(b, pgConnString, tc)
 
 		// Create some test yields
-		yields := make([]*pb.CreateForecastRequest_ForecastValue, tc.NumPgvsPerForecast())
+		yields := make([]*pb.CreateForecastRequest_ForecastValue, 48)
 		for i := range yields {
 			yields[i] = &pb.CreateForecastRequest_ForecastValue{
 				HorizonMins: uint32(i * 30),
@@ -1823,7 +1797,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 						LocationUuid: output.LocationUuids[0],
 						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 						Forecaster: &pb.Forecaster{
-							ForecasterName:    tc.NamePrefix + "_forecaster",
+							ForecasterName:    tc.NamePrefix + "_forecaster_1",
 							ForecasterVersion: "v1",
 						},
 						TimeWindow: &pb.TimeWindow{
@@ -1835,11 +1809,11 @@ func BenchmarkPostgresClient(b *testing.B) {
 				require.NoError(b, err)
 				// There is a forecast value every 30 minutes, and the window is 84 hours long
 				// But the forecast made at the pivot time is the latest one, and that is only
-				// tc.ForecastLengthHours long
-				require.Equal(
+				// 12 hours long
+				require.GreaterOrEqual(
 					b,
-					(48+tc.ForecastLengthHours)*60/tc.PgvResolutionMins,
 					len(resp.Values),
+					(48+12)*60/30,
 				)
 			}
 		})
@@ -1855,7 +1829,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 						EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
 						LocationUuids: output.LocationUuids,
 						Forecaster: &pb.Forecaster{
-							ForecasterName:    tc.NamePrefix + "_forecaster",
+							ForecasterName:    tc.NamePrefix + "_forecaster_1",
 							ForecasterVersion: "v1",
 						},
 						TimestampUtc: timestamppb.New(pivotTime),
@@ -1881,21 +1855,21 @@ func BenchmarkPostgresClient(b *testing.B) {
 					},
 				)
 				require.NoError(b, err)
-				require.GreaterOrEqual(b, len(obsResp.Values), 36*60/tc.PgvResolutionMins)
+				require.GreaterOrEqual(b, len(obsResp.Values), 36*60/30)
 			}
 		})
 		b.Run(fmt.Sprintf("%d/CreateForecast", output.NumPgvs), func(b *testing.B) {
 			for b.Loop() {
 				resp, err := dc.CreateForecast(b.Context(), &pb.CreateForecastRequest{
 					Forecaster: &pb.Forecaster{
-						ForecasterName:    tc.NamePrefix + "_forecaster",
+						ForecasterName:    tc.NamePrefix + "_forecaster_1",
 						ForecasterVersion: "v1",
 					},
 					LocationUuid: output.LocationUuids[0],
 					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 					InitTimeUtc: timestamppb.New(
 						pivotTime.Add(
-							time.Duration(tc.ForecastLengthHours+2) * time.Hour,
+							time.Duration(12+2) * time.Hour,
 						),
 					),
 					Values: yields,
