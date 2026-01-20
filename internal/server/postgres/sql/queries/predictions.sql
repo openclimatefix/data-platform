@@ -111,6 +111,7 @@ INSERT INTO pred.predicted_generation_values (
 SELECT DISTINCT ON (fr.forecaster_name)
     f.forecast_uuid,
     f.init_time_utc,
+    f.created_at_utc,
     f.source_type_id,
     f.geometry_uuid,
     fr.forecaster_id,
@@ -122,17 +123,19 @@ FROM pred.forecasters AS fr
             forecast_uuid,
             init_time_utc,
             source_type_id,
-            geometry_uuid
+            geometry_uuid,
+            UUIDV7_EXTRACT_TIMESTAMP(forecast_uuid) AS created_at_utc
         FROM pred.forecasts
         WHERE geometry_uuid = $1
             AND source_type_id = $2
             AND forecaster_id = fr.forecaster_id
             AND init_time_utc
             <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
+            -- AND target_period @> (sqlc.arg(pivot_timestamp)::TIMESTAMP)
         ORDER BY init_time_utc DESC
         LIMIT 1
     ) AS f
-ORDER BY fr.forecaster_name ASC;
+ORDER BY fr.forecaster_name ASC, f.init_time_utc DESC;
 
 -- name: ListForecasts :many
 /* ListForecasts retrieves all the forecasts for a given location, source type, and forecaster
