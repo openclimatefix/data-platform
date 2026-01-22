@@ -1417,8 +1417,9 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		return nil, status.Error(codes.InvalidArgument, "Invalid time window.")
 	}
 
-	if req.PivotTimestampUtc == nil {
-		req.PivotTimestampUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
+	pivotTime := pgtype.Timestamp{Valid: false}
+	if req.PivotTimestampUtc != nil {
+		pivotTime = pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true}
 	}
 
 	lpprms := db.ListPredictionsForLocationParams{
@@ -1428,7 +1429,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		HorizonMins:       int32(req.HorizonMins),
 		StartTimestampUtc: start,
 		EndTimestampUtc:   end,
-		PivotTimestamp:    pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true},
+		PivotTimestamp:    pivotTime,
 	}
 
 	dbValues, err := querier.ListPredictionsForLocation(ctx, lpprms)

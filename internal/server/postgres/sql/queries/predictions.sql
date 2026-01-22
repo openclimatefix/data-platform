@@ -190,39 +190,72 @@ WHERE f.forecast_uuid = $1
  * Predicted values are smallint percentages (sip) of capcity;
  * with 0 representing 0% and 30000 representing 100% of capacity.
  */
-SELECT DISTINCT ON (pg.target_time_utc)
-    pg.horizon_mins,
-    pg.p50_sip,
-    pg.target_time_utc,
-    pg.other_stats_fractions,
-    pg.metadata,
-    f.init_time_utc,
+WITH relevant_forecasts AS (
+    SELECT
+        f.forecast_uuid,
+        f.init_time_utc,
+        f.geometry_uuid,
+        f.source_type_id
+    FROM pred.forecasts AS f
+    WHERE
+        f.geometry_uuid = $1
+        AND f.source_type_id = $2
+        AND f.forecaster_id = $3
+        AND f.init_time_utc BETWEEN
+        COALESCE(
+            sqlc.narg(pivot_timestamp)::TIMESTAMP,
+            sqlc.arg(start_timestamp_utc)::TIMESTAMP
+        ) - INTERVAL '2 days'
+        AND COALESCE(
+            sqlc.narg(pivot_timestamp)::TIMESTAMP,
+            sqlc.arg(end_timestamp_utc)::TIMESTAMP
+        )
+        AND f.target_period && TSRANGE(
+            sqlc.arg(start_timestamp_utc)::TIMESTAMP,
+            sqlc.arg(end_timestamp_utc)::TIMESTAMP,
+            '[]'
+        )
+),
+collapsed_values AS (
+    SELECT DISTINCT ON (pg.target_time_utc)
+        pg.forecast_uuid,
+        pg.target_time_utc,
+        pg.horizon_mins,
+        rf.init_time_utc,
+        rf.geometry_uuid,
+        rf.source_type_id
+    FROM pred.predicted_generation_values AS pg
+        INNER JOIN relevant_forecasts AS rf USING (forecast_uuid)
+    WHERE
+        pg.target_time_utc BETWEEN
+        sqlc.arg(start_timestamp_utc)::TIMESTAMP
+        AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
+        AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
+    ORDER BY
+        pg.target_time_utc ASC,
+        pg.horizon_mins ASC
+)
+SELECT
+    cv.horizon_mins,
+    pgv.p50_sip,
+    cv.target_time_utc,
+    pgv.other_stats_fractions,
+    pgv.metadata,
+    cv.init_time_utc,
     sv.capacity_watts,
     sv.latitude,
     sv.longitude,
     sv.geometry_name,
-    UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid) AS created_at_utc
-FROM pred.forecasts AS f
-    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
-    INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
+    UUIDV7_EXTRACT_TIMESTAMP(cv.forecast_uuid) AS created_at_utc
+FROM collapsed_values AS cv
+    INNER JOIN pred.predicted_generation_values AS pgv
+    USING (forecast_uuid, target_time_utc, horizon_mins)
+    INNER JOIN loc.sources_mv AS sv
+    USING (geometry_uuid, source_type_id)
 WHERE
-    f.geometry_uuid = $1
-    AND f.source_type_id = $2
-    AND f.forecaster_id = $3
-    -- Check the forecast actually overlaps the desired window
-    AND f.target_period && TSRANGE(
-        sqlc.arg(start_timestamp_utc)::TIMESTAMP,
-        sqlc.arg(end_timestamp_utc)::TIMESTAMP,
-        '[]'
-    )
-    AND f.init_time_utc <= sqlc.arg(pivot_timestamp)::TIMESTAMP
-    AND pg.target_time_utc BETWEEN sqlc.arg(start_timestamp_utc)::TIMESTAMP AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
-    AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
-    -- Ensure the source was active at the predicted time
-    AND sv.sys_period @> pg.target_time_utc
+    sv.sys_period @> cv.target_time_utc
 ORDER BY
-    pg.target_time_utc ASC,
-    pg.horizon_mins ASC;
+    cv.target_time_utc ASC;
 
 -- name: ListPredictionsAtTimeForLocations :many
 /* ListPredictionsAtTimeForLocations retrieves predicted generation values as percentages
