@@ -101,7 +101,7 @@ ${SQLC_STAMP_FILE}: ${SQLC} ${SQLC_SOURCES} ${SQLC_SOURCE_CONFIG}
 ${PROTO_GO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SOURCES}
 	@echo "Generating internal protobuf code..."
 	@rm -rf internal/gen && mkdir -p internal/gen
-	@${PROTOC} \
+	@PATH="$(GOBIN):$$PATH" ${PROTOC} \
 		${PROTO_SOURCES} \
 		-I=proto \
 		--go_out=internal/gen \
@@ -116,8 +116,7 @@ ${PROTO_GO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SO
 .PHONY: path
 path:
 	@if ! echo "$$PATH" | tr ':' '\n' | grep -qx "$(GOBIN)"; then \
-		echo "Add 'export PATH=$$PATH:$(GOBIN)' to your shell profile to use installed tools."; \
-		exit 1; \
+		echo "Warning: $(GOBIN) is not in PATH. Add 'export PATH=$$PATH:$(GOBIN)' to your shell profile to use installed tools."; \
 	fi
 
 .PHONY: tools
