@@ -59,7 +59,7 @@ lint:
 			--config=internal/server/postgres/sql/.sqlfluff.toml \
 			internal/server/postgres/sql/queries; \
 	else \
-		echo "Warning: uvx not found, skipping SQL linting"; \
+		echo "Warning: uvx not found, skipping SQL linting" >&2; \
 	fi
 
 .PHONY: bench
