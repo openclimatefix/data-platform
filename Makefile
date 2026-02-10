@@ -120,7 +120,7 @@ ${PROTO_GO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SO
 .PHONY: path
 path:
 	@if ! echo "$$PATH" | tr ':' '\n' | grep -qx "$(GOBIN)"; then \
-		echo "Warning: $(GOBIN) is not in PATH. Add 'export PATH=$$PATH:$(GOBIN)' to your shell profile to use installed tools."; \
+		echo "Warning: $(GOBIN) is not in PATH. Add 'export PATH=$(GOBIN):$$PATH' to your shell profile to use installed tools."; \
 	fi
 
 .PHONY: tools
