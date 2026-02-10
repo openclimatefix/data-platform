@@ -53,10 +53,14 @@ lint:
 		--show-stats=false --fix
 	@gofmt -l . # Lists files that are likely to be changed by the next command
 	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0 fmt
-	@uvx -q sqlfluff fix -q \
-		--disable-progress-bar \
-		--config=internal/server/postgres/sql/.sqlfluff.toml \
-		internal/server/postgres/sql/queries
+	@if command -v uvx > /dev/null 2>&1; then \
+		uvx -q sqlfluff fix -q \
+			--disable-progress-bar \
+			--config=internal/server/postgres/sql/.sqlfluff.toml \
+			internal/server/postgres/sql/queries; \
+	else \
+		echo "Warning: uvx not found, skipping SQL linting"; \
+	fi
 
 .PHONY: bench
 bench: gen
@@ -178,6 +182,11 @@ endef
 export GEN_PYPROJ
 .PHONY: gen.proto.python
 gen.proto.python: ${PROTOC}
+	@if ! command -v uvx > /dev/null 2>&1; then \
+		echo "Error: uvx is required for Python bindings generation but not found."; \
+		echo "Please install uv: https://docs.astral.sh/uv/getting-started/installation/"; \
+		exit 1; \
+	fi
 	@echo "Generating Python client bindings..."
 	@rm -rf gen/python && mkdir -p gen/python/src/dp_sdk
 	@uvx --from 'betterproto[compiler]==2.0.0b7' ${PROTOC} \
