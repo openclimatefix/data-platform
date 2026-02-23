@@ -155,7 +155,6 @@ SELECT partman.create_parent(
 );
 UPDATE partman.part_config
 SET
-    retention = '1 month',
     retention_keep_table = TRUE,
     retention_keep_index = FALSE,
     infinite_time_partitions = TRUE
