@@ -59,8 +59,8 @@ BEGIN
     -- Insert all forecasts at once
     WITH inserted_forecasts AS (
         INSERT INTO pred.forecasts 
-            (source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period)
-        SELECT 1, u.geo_id, f.forecaster_id,
+            (forecast_uuid, source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period)
+        SELECT UUIDV7(pivot_time - (s.idx * INTERVAL '15 minutes')), 1, u.geo_id, f.forecaster_id,
             pivot_time - (s.idx * INTERVAL '15 minutes'),
             pgv_res_mins::SMALLINT,
             TSRANGE(pivot_time - (s.idx * INTERVAL '15 minutes'),
