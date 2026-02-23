@@ -7,7 +7,7 @@ processes = 4
 
 [sqlfluff:indentation]
 indented_using_on = False
-allow_implicit_indents = True
+implicit_indents = allow
 indented_on_contents = True
 tab_space_size = 4
 indent_units = space
@@ -30,10 +30,10 @@ capitalisation_policy = upper
 extended_capitalisation_policy = upper
 
 [sqlfluff:rules:aliasing.table]
-aliasing.table = explicit
+aliasing = explicit
 
 [sqlfluff:rules:aliasing.column]
-aliasing.column = explicit
+aliasing = explicit
 
 [sqlfluff:rules:ambiguous.join]
 fully_qualify_join_types = both
