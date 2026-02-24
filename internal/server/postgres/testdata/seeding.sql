@@ -57,26 +57,48 @@ BEGIN
     FROM unnest(geo_list) u, generate_series(0, 100) AS s(idx);
 
     -- Insert all forecasts at once
-    WITH inserted_forecasts AS (
-        INSERT INTO pred.forecasts 
-            (forecast_uuid, source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period)
-        SELECT UUIDV7(pivot_time - (s.idx * INTERVAL '15 minutes')), 1, u.geo_id, f.forecaster_id,
-            pivot_time - (s.idx * INTERVAL '15 minutes'),
-            pgv_res_mins::SMALLINT,
-            TSRANGE(pivot_time - (s.idx * INTERVAL '15 minutes'),
-                    pivot_time - (s.idx * INTERVAL '15 minutes') + (forecast_len_mins * INTERVAL '1 minute'))
+    WITH generated_data AS (
+        SELECT
+            u.geo_id,
+            f.forecaster_id,
+            pivot_time - (s.idx * INTERVAL '15 minutes') AS init_time_utc
         FROM unnest(geo_list) AS u(geo_id)
         CROSS JOIN (SELECT forecaster_id FROM pred.forecasters WHERE forecaster_name LIKE name_prefix || '%') f
         CROSS JOIN generate_series(0, (history_window_mins / forecast_freq_mins) - 1) AS s(idx)
+        ORDER BY init_time_utc ASC
+    ),
+    inserted_forecasts AS (
+        INSERT INTO pred.forecasts
+            (forecast_uuid, source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period)
+        SELECT
+            UUIDV7(init_time_utc),
+            1,
+            geo_id,
+            forecaster_id,
+            init_time_utc,
+            pgv_res_mins::SMALLINT,
+            TSRANGE(init_time_utc, init_time_utc + (forecast_len_mins * INTERVAL '1 minute'))
+        FROM generated_data
         RETURNING forecast_uuid, init_time_utc
+    ),
+    static_json AS (
+        SELECT
+            '{"source": "benchmark"}'::jsonb AS meta,
+            '{"p10": 0.1, "p90": 0.9}'::jsonb AS stats
     )
-    -- Use inserted forecasts to create predicted generation values
-    INSERT INTO pred.predicted_generation_values 
+    INSERT INTO pred.predicted_generation_values
         (horizon_mins, p50_sip, forecast_uuid, target_time_utc, metadata, other_stats_fractions)
-    SELECT gs.h, (random() * 30000)::SMALLINT, inf.forecast_uuid, inf.init_time_utc + (gs.h * INTERVAL '1 minute'),
-        '{"source": "benchmark"}'::jsonb, '{"p10": 0.1, "p90": 0.9}'::jsonb
+    SELECT
+        gs.h,
+        (random() * 30000)::SMALLINT,
+        inf.forecast_uuid,
+        inf.init_time_utc + (gs.h * INTERVAL '1 minute') AS target_time_utc,
+        sj.meta,
+        sj.stats
     FROM inserted_forecasts inf
-    CROSS JOIN LATERAL generate_series(0, forecast_len_mins - pgv_res_mins, pgv_res_mins) AS gs(h);
+    CROSS JOIN static_json sj
+    CROSS JOIN LATERAL generate_series(0, forecast_len_mins - pgv_res_mins, pgv_res_mins) AS gs(h)
+    ORDER BY target_time_utc ASC;
 
     -- Spoof the table size so indexes used in queries reflect production
     UPDATE pg_class SET reltuples = 346000000, relpages = 5000000 WHERE relname = 'predicted_generation_values';

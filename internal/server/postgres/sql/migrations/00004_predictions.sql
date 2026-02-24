@@ -153,12 +153,6 @@ SELECT partman.create_parent(
     p_time_encoder => 'partman.uuid7_time_encoder',
     p_time_decoder => 'partman.uuid7_time_decoder'
 );
-UPDATE partman.part_config
-SET
-    retention_keep_table = TRUE,
-    retention_keep_index = FALSE,
-    infinite_time_partitions = TRUE
-WHERE parent_table = 'pred.forecasts';
 SELECT partman.run_maintenance('pred.forecasts');
 SELECT cron.schedule('forecasts-vacuum', '30 4 * * *', $$VACUUM ANALYZE pred.forecasts$$);
 
