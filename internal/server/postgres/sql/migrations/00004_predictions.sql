@@ -104,6 +104,8 @@ CREATE TABLE pred.forecasts (
     REFERENCES pred.forecasters (forecaster_id)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
+    created_at_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT created_at_utc_valid_check CHECK (created_at_utc <= CURRENT_TIMESTAMP),
     init_time_utc TIMESTAMP NOT NULL,
     CONSTRAINT init_time_utc_recency_check CHECK (
         init_time_utc >= '2000-01-01 00:00:00'::TIMESTAMP
@@ -113,7 +115,8 @@ CREATE TABLE pred.forecasts (
     REFERENCES loc.geometries (geometry_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
-    forecast_uuid UUID DEFAULT UUIDV7() NOT NULL,
+    /* The forecast uuid should be generated using the init time as the time component */
+    forecast_uuid UUID NOT NULL,
     target_period TSRANGE NOT NULL,
     CONSTRAINT target_period_valid_check CHECK (
         UPPER(target_period) > LOWER(target_period)
@@ -122,16 +125,35 @@ CREATE TABLE pred.forecasts (
         LOWER(target_period) >= '2000-01-01 00:00:00'::TIMESTAMP
         AND UPPER(target_period) < CURRENT_TIMESTAMP + MAKE_INTERVAL(days => 30)
     ),
-    PRIMARY KEY (forecast_uuid),
-    UNIQUE (geometry_uuid, source_type_id, forecaster_id, init_time_utc)
-);
+    PRIMARY KEY (forecast_uuid)
+)
+PARTITION BY RANGE (forecast_uuid);
+
 CREATE INDEX idx_forecasts_filter ON pred.forecasts (
     geometry_uuid,
     source_type_id,
     forecaster_id,
-    init_time_utc DESC
+    forecast_uuid DESC
 ) INCLUDE (target_period);
 
+/*
+ * Manage partitions with pg_partman.
+ * Highlights:
+ * - `retention_keep_table = true`: detach old partitions instead of dropping them
+ * - `infinite_time_partitions = true`: retain detached partitions indefinitely for processing
+ */
+SELECT partman.create_parent(
+    p_parent_table => 'pred.forecasts',
+    p_control => 'forecast_uuid',
+    p_type => 'range',
+    p_interval => '1 week',
+    p_automatic_maintenance => 'on',
+    p_jobmon => FALSE,
+    p_premake => 7,
+    p_time_encoder => 'partman.uuid7_time_encoder',
+    p_time_decoder => 'partman.uuid7_time_decoder'
+);
+SELECT partman.run_maintenance('pred.forecasts');
 SELECT cron.schedule('forecasts-vacuum', '30 4 * * *', $$VACUUM ANALYZE pred.forecasts$$);
 
 /*

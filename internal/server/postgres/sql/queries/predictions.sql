@@ -65,8 +65,9 @@ ORDER BY forecaster_name ASC, created_at_utc DESC;
 
 -- name: CreateForecast :one
 INSERT INTO pred.forecasts (
-    geometry_uuid, source_type_id, forecaster_id, init_time_utc, value_resolution_mins, target_period
+    forecast_uuid, geometry_uuid, source_type_id, forecaster_id, init_time_utc, value_resolution_mins, target_period
 ) VALUES (
+    UUIDV7($4::TIMESTAMP),
     $1,
     $2,
     $3,
@@ -107,6 +108,8 @@ INSERT INTO pred.predicted_generation_values (
  * Only forecasts that are older than the pivot time minus the specified horizon are considered.
  *
  * The LATERAL cross join defers querying the forecasts table until each forecaster id is known.
+ *
+ * Note that forecasts older than 30 days from the pivot time are not considered.
  */
 SELECT DISTINCT ON (fr.forecaster_name)
     f.forecast_uuid,
@@ -129,10 +132,12 @@ FROM pred.forecasters AS fr
         WHERE geometry_uuid = $1
             AND source_type_id = $2
             AND forecaster_id = fr.forecaster_id
-            AND init_time_utc
-            <= sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-            -- AND target_period @> (sqlc.arg(pivot_timestamp)::TIMESTAMP)
-        ORDER BY init_time_utc DESC
+            AND forecast_uuid < UUIDV7_BOUNDARY(
+                sqlc.arg(pivot_timestamp)::TIMESTAMP - MAKE_INTERVAL(
+                    mins => sqlc.arg(horizon_mins)::INTEGER
+                ) + INTERVAL '1 millisecond'
+            )
+        ORDER BY forecast_uuid DESC
         LIMIT 1
     ) AS f
 ORDER BY fr.forecaster_name ASC, f.init_time_utc DESC;
@@ -161,9 +166,10 @@ FROM pred.forecasts AS forecasts
     INNER JOIN desired_forecaster USING (forecaster_id)
 WHERE forecasts.geometry_uuid = $1
     AND forecasts.source_type_id = $2
-    AND forecasts.init_time_utc BETWEEN
-    sqlc.arg(start_timestamp)::TIMESTAMP
-    AND sqlc.arg(end_timestamp)::TIMESTAMP;
+    AND forecasts.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(start_timestamp)::TIMESTAMP)
+    AND forecasts.forecast_uuid < UUIDV7_BOUNDARY(
+        sqlc.arg(end_timestamp)::TIMESTAMP + INTERVAL '1 millisecond'
+    );
 
 -- name: ListPredictionsForForecast :many
 /* ListPredictionsForForecast retrieves predicted generation values
@@ -189,11 +195,15 @@ WHERE f.forecast_uuid = $1
  * are filtered by lowest allowable horizon (i.e. predicted closest to their target time).
  * Predicted values are smallint percentages (sip) of capcity;
  * with 0 representing 0% and 30000 representing 100% of capacity.
+ *
+ * Note that the 2 day intervals are due to our forecasts only going out to 2 days.
+ * If we increase that horizon, these will need to be increased.
  */
 WITH relevant_forecasts AS (
     SELECT
         f.forecast_uuid,
-        f.init_time_utc,
+        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
+        f.created_at_utc,
         f.geometry_uuid,
         f.source_type_id
     FROM pred.forecasts AS f
@@ -201,14 +211,17 @@ WITH relevant_forecasts AS (
         f.geometry_uuid = $1
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
-        AND f.init_time_utc BETWEEN
-        COALESCE(
-            sqlc.narg(pivot_timestamp)::TIMESTAMP,
-            sqlc.arg(start_timestamp_utc)::TIMESTAMP
-        ) - INTERVAL '2 days'
-        AND COALESCE(
-            sqlc.narg(pivot_timestamp)::TIMESTAMP,
-            sqlc.arg(end_timestamp_utc)::TIMESTAMP
+        AND f.forecast_uuid >= UUIDV7_BOUNDARY(
+            COALESCE(
+                sqlc.narg(pivot_timestamp)::TIMESTAMP,
+                sqlc.arg(start_timestamp_utc)::TIMESTAMP
+            ) - INTERVAL '2 days'
+        )
+        AND f.forecast_uuid < UUIDV7_BOUNDARY(
+            COALESCE(
+                sqlc.narg(pivot_timestamp)::TIMESTAMP,
+                sqlc.arg(end_timestamp_utc)::TIMESTAMP
+            ) + INTERVAL '1 millisecond'
         )
         AND f.target_period && TSRANGE(
             sqlc.arg(start_timestamp_utc)::TIMESTAMP,
@@ -222,6 +235,7 @@ collapsed_values AS (
         pg.target_time_utc,
         pg.horizon_mins,
         rf.init_time_utc,
+        rf.created_at_utc,
         rf.geometry_uuid,
         rf.source_type_id
     FROM pred.predicted_generation_values AS pg
@@ -242,11 +256,11 @@ SELECT
     pgv.other_stats_fractions,
     pgv.metadata,
     cv.init_time_utc,
+    cv.created_at_utc,
     sv.capacity_watts,
     sv.latitude,
     sv.longitude,
-    sv.geometry_name,
-    UUIDV7_EXTRACT_TIMESTAMP(cv.forecast_uuid) AS created_at_utc
+    sv.geometry_name
 FROM collapsed_values AS cv
     INNER JOIN pred.predicted_generation_values AS pgv
     USING (forecast_uuid, target_time_utc, horizon_mins)
@@ -262,26 +276,44 @@ ORDER BY
  * of capacity for a specific time and horizon.
  * This is useful for comparing predictions across multiple locations.
  * Predicted values are 16-bit integers, with 0 representing 0% and 30000 representing 100% of capacity.
+ *
+ * Note that the 2 day intervals are due to our forecasts only going out to 2 days.
+ * If we increase that horizon, these will need to be increased.
  */
 WITH relevant_forecasts AS (
     SELECT DISTINCT ON (f.geometry_uuid)
         f.forecast_uuid,
         f.geometry_uuid,
         f.source_type_id,
-        f.init_time_utc
+        f.created_at_utc,
+        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc
     FROM pred.forecasts AS f
     WHERE
         f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
+        AND f.forecast_uuid >= UUIDV7_BOUNDARY(
+            COALESCE(
+                sqlc.narg(pivot_timestamp)::TIMESTAMP,
+                sqlc.arg(target_timestamp_utc)::TIMESTAMP
+            ) - INTERVAL '2 days'
+        )
+        AND f.forecast_uuid < UUIDV7_BOUNDARY(
+            COALESCE(
+                sqlc.narg(pivot_timestamp)::TIMESTAMP,
+                sqlc.arg(target_timestamp_utc)::TIMESTAMP
+            ) + INTERVAL '1 millisecond'
+        )
         AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
-    ORDER BY f.geometry_uuid ASC, f.init_time_utc DESC
+    ORDER BY f.geometry_uuid ASC, f.forecast_uuid DESC
 ),
 ranked_predictions AS (
     SELECT
         rf.forecast_uuid,
         rf.geometry_uuid,
         rf.source_type_id,
+        rf.created_at_utc,
+        rf.init_time_utc,
         pg.horizon_mins,
         pg.p50_sip,
         pg.target_time_utc,
@@ -304,6 +336,8 @@ SELECT
     rp.horizon_mins,
     rp.p50_sip,
     rp.target_time_utc,
+    rp.created_at_utc,
+    rp.init_time_utc,
     rp.metadata,
     rp.other_stats_fractions,
     sv.capacity_watts,
@@ -334,15 +368,18 @@ WITH desired_init_times AS (
 relevant_forecasts AS (
     SELECT
         f.forecast_uuid,
-        f.init_time_utc,
+        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
         f.source_type_id,
         f.geometry_uuid,
         f.forecaster_id
     FROM pred.forecasts AS f
-        INNER JOIN desired_init_times AS dit ON f.init_time_utc = dit.init_time_utc
+        INNER JOIN desired_init_times AS dit
+        ON UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP = dit.init_time_utc
     WHERE f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
+        AND f.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days')
+        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 millisecond')
 ),
 relevant_predicted_values AS (
     SELECT
