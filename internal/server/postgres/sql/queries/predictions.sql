@@ -65,7 +65,14 @@ ORDER BY forecaster_name ASC, created_at_utc DESC;
 
 -- name: CreateForecast :one
 INSERT INTO pred.forecasts (
-    forecast_uuid, geometry_uuid, source_type_id, forecaster_id, init_time_utc, value_resolution_mins, target_period
+    forecast_uuid,
+    geometry_uuid,
+    source_type_id,
+    forecaster_id,
+    init_time_utc,
+    value_resolution_mins,
+    target_period,
+    metadata
 ) VALUES (
     UUIDV7($4::TIMESTAMP),
     $1,
@@ -77,14 +84,16 @@ INSERT INTO pred.forecasts (
         $4::TIMESTAMP + MAKE_INTERVAL(mins => sqlc.arg(first_horizon_mins)::INTEGER),
         $4::TIMESTAMP + MAKE_INTERVAL(mins => sqlc.arg(last_horizon_mins)::INTEGER),
         '[]'
-    )
+    ),
+    CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
 ) RETURNING
     forecast_uuid,
     init_time_utc,
     source_type_id,
     geometry_uuid,
     forecaster_id,
-    target_period;
+    target_period,
+    metadata;
 
 -- name: DeleteForecast :exec
 DELETE FROM pred.forecasts
@@ -108,8 +117,6 @@ INSERT INTO pred.predicted_generation_values (
  * Only forecasts that are older than the pivot time minus the specified horizon are considered.
  *
  * The LATERAL cross join defers querying the forecasts table until each forecaster id is known.
- *
- * Note that forecasts older than 30 days from the pivot time are not considered.
  */
 SELECT DISTINCT ON (fr.forecaster_name)
     f.forecast_uuid,
@@ -117,6 +124,7 @@ SELECT DISTINCT ON (fr.forecaster_name)
     f.created_at_utc,
     f.source_type_id,
     f.geometry_uuid,
+    f.metadata,
     fr.forecaster_id,
     fr.forecaster_name,
     fr.forecaster_version
@@ -127,6 +135,7 @@ FROM pred.forecasters AS fr
             init_time_utc,
             source_type_id,
             geometry_uuid,
+            metadata,
             UUIDV7_EXTRACT_TIMESTAMP(forecast_uuid) AS created_at_utc
         FROM pred.forecasts
         WHERE geometry_uuid = $1
@@ -159,6 +168,7 @@ SELECT
     forecasts.forecast_uuid,
     forecasts.init_time_utc,
     forecasts.geometry_uuid,
+    forecasts.metadata,
     desired_forecaster.forecaster_name,
     desired_forecaster.forecaster_version,
     UUIDV7_EXTRACT_TIMESTAMP(forecasts.forecast_uuid) AS created_at_utc
@@ -205,7 +215,8 @@ WITH relevant_forecasts AS (
         UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
         f.created_at_utc,
         f.geometry_uuid,
-        f.source_type_id
+        f.source_type_id,
+        f.metadata
     FROM pred.forecasts AS f
     WHERE
         f.geometry_uuid = $1
@@ -237,7 +248,8 @@ collapsed_values AS (
         rf.init_time_utc,
         rf.created_at_utc,
         rf.geometry_uuid,
-        rf.source_type_id
+        rf.source_type_id,
+        COALESCE(pg.metadata || rf.metadata, pg.metadata, rf.metadata) AS metadata
     FROM pred.predicted_generation_values AS pg
         INNER JOIN relevant_forecasts AS rf USING (forecast_uuid)
     WHERE
@@ -254,7 +266,7 @@ SELECT
     pgv.p50_sip,
     cv.target_time_utc,
     pgv.other_stats_fractions,
-    pgv.metadata,
+    cv.metadata,
     cv.init_time_utc,
     cv.created_at_utc,
     sv.capacity_watts,
@@ -286,7 +298,8 @@ WITH relevant_forecasts AS (
         f.geometry_uuid,
         f.source_type_id,
         f.created_at_utc,
-        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc
+        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
+        f.metadata
     FROM pred.forecasts AS f
     WHERE
         f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
@@ -317,8 +330,8 @@ ranked_predictions AS (
         pg.horizon_mins,
         pg.p50_sip,
         pg.target_time_utc,
-        pg.metadata,
         pg.other_stats_fractions,
+        COALESCE(pg.metadata || rf.metadata, pg.metadata, rf.metadata) AS metadata,
         ROW_NUMBER() OVER (
             PARTITION BY rf.geometry_uuid
             ORDER BY pg.horizon_mins ASC

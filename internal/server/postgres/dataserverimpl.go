@@ -161,6 +161,21 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		Str("dp.forecaster.version", dbForecaster.ForecasterVersion).
 		Msg("found forecaster")
 
+	var metadataJSONB []byte
+	if req.Metadata == nil || len(req.Metadata.Fields) == 0 {
+		metadataJSONB = nil
+	} else {
+		metadataJSONB, err = req.Metadata.MarshalJSON()
+		if err != nil {
+			l.Err(err).Msgf("req.Metadata.MarshalJSON()")
+
+			return nil, status.Error(
+				codes.InvalidArgument,
+				"Invalid metadata.",
+			)
+		}
+	}
+
 	// Create a new forecast
 	cfprms := db.CreateForecastParams{
 		GeometryUuid:        uuid.MustParse(req.LocationUuid),
@@ -171,6 +186,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		FirstHorizonMins:    int32(req.Values[0].HorizonMins),
 		// Okay to take the last value as we checked it was monotonically increasing above
 		LastHorizonMins: int32(req.Values[len(req.Values)-1].HorizonMins),
+		Metadata:        metadataJSONB,
 	}
 
 	dbForecast, err := querier.CreateForecast(ctx, cfprms)
@@ -259,6 +275,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		Str("dp.forecast.uuid", dbForecast.ForecastUuid.String()).
 		Str("dp.geometry.uuid", dbForecast.GeometryUuid.String()).
 		Str("dp.forecast.init_time", dbForecast.InitTimeUtc.Time.String()).
+		Str("dp.forecast.metadata", string(metadataJSONB)).
 		Str("dp.forecast.target_period", fmt.Sprintf(
 			"%s - %s",
 			dbForecast.TargetPeriod.Lower.Time.String(),
@@ -334,6 +351,16 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 
 	forecasts := make([]*pb.GetLatestForecastsResponse_Forecast, len(dbListForecasts))
 	for i, fc := range dbListForecasts {
+		md, err := jsonbToStruct(fc.Metadata)
+		if err != nil {
+			l.Err(err).Msgf("jsonbToStruct(%s)", string(fc.Metadata))
+
+			return nil, status.Error(
+				codes.Internal,
+				"Backend communication error.",
+			)
+		}
+
 		forecasts[i] = &pb.GetLatestForecastsResponse_Forecast{
 			InitializationTimestampUtc: timestamppb.New(fc.InitTimeUtc.Time),
 			Forecaster: &pb.Forecaster{
@@ -341,6 +368,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 				ForecasterVersion: fc.ForecasterVersion,
 			},
 			LocationUuid: fc.GeometryUuid.String(),
+			Metadata:     md,
 		}
 	}
 
@@ -1028,6 +1056,16 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	values := make([]*pb.GetForecastAtTimestampResponse_Value, len(dbPredictions))
 	for i, value := range dbPredictions {
+		md, err := jsonbToStruct(value.Metadata)
+		if err != nil {
+			l.Err(err).Msgf("jsonbToStruct(%s)", value.Metadata)
+
+			return nil, status.Errorf(
+				codes.Internal,
+				"Backend communication error.",
+			)
+		}
+
 		values[i] = &pb.GetForecastAtTimestampResponse_Value{
 			ValueFraction:          float32(value.P50Sip) / 30000.0,
 			EffectiveCapacityWatts: uint64(value.CapacityWatts),
@@ -1037,6 +1075,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 				Latitude:  value.Latitude,
 				Longitude: value.Longitude,
 			},
+			Metadata: md,
 		}
 	}
 
@@ -1479,6 +1518,16 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			}
 		}
 
+		md, err := jsonbToStruct(value.Metadata)
+		if err != nil {
+			l.Err(err).Msgf("jsonbToStruct(%s)", value.Metadata)
+
+			return nil, status.Errorf(
+				codes.Internal,
+				"Backend communication error.",
+			)
+		}
+
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
 			TargetTimestampUtc:         timestamppb.New(value.TargetTimeUtc.Time),
 			P50ValueFraction:           float32(value.P50Sip) / 30000.0,
@@ -1486,6 +1535,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			EffectiveCapacityWatts:     uint64(value.CapacityWatts),
 			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
+			Metadata:                   md,
 		}
 	}
 
