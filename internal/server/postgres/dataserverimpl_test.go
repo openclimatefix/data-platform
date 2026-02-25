@@ -1770,6 +1770,11 @@ func TestGetLatestForecasts(t *testing.T) {
 				}
 
 				require.Equal(t, tc.expectedInitTimes, actualTimes)
+
+				// check that created utc is not null
+				for _, forecast := range resp.Forecasts {
+					require.NotNil(t, forecast.CreatedTimestampUtc)
+				}
 			}
 		})
 	}
