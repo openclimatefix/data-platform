@@ -125,6 +125,7 @@ CREATE TABLE pred.forecasts (
         LOWER(target_period) >= '2000-01-01 00:00:00'::TIMESTAMP
         AND UPPER(target_period) < CURRENT_TIMESTAMP + MAKE_INTERVAL(days => 30)
     ),
+    metadata JSONB DEFAULT NULL,
     PRIMARY KEY (forecast_uuid)
 )
 PARTITION BY RANGE (forecast_uuid);

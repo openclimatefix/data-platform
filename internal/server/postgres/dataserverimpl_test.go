@@ -3,6 +3,7 @@ package postgres
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -1476,6 +1477,8 @@ func TestCreateForecast(t *testing.T) {
 	pivotTime := time.Date(2024, 5, 5, 0, 30, 0, 0, time.UTC)
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
+	metadata2, err := structpb.NewStruct(map[string]any{"source": "test", "extra": "value"})
+	require.NoError(t, err)
 
 	// Create a site to attach the forecast to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
@@ -1612,6 +1615,17 @@ func TestCreateForecast(t *testing.T) {
 				Values:       yieldsInvalid,
 			},
 		},
+		{
+			name: "Should create forecast with extra metadata",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fcResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				InitTimeUtc:  timestamppb.New(pivotTime),
+				Values:       yieldsPopulated,
+				Metadata:     metadata2,
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -1638,6 +1652,13 @@ func TestCreateForecast(t *testing.T) {
 					ForecastUuid: resp.ForecastUuid,
 				})
 				require.NoError(t, err)
+
+				expectedMetadata := tc.req.Values[0].Metadata.AsMap()
+				maps.Copy(expectedMetadata, tc.req.Metadata.AsMap())
+
+				for _, val := range fResp.Values {
+					require.Equal(t, expectedMetadata, val.Metadata.AsMap())
+				}
 			}
 		})
 	}

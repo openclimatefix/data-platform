@@ -1,11 +1,11 @@
-FROM postgres:16-bookworm
+FROM postgres:18-trixie
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-16-partman \
-    && apt-cache showpkg postgresql-16-postgis-3 \
+    && apt-get install -y --no-install-recommends postgresql-18-partman \
+    && apt-cache showpkg postgresql-18-postgis-3 \
     && apt-get install -y --no-install-recommends \
-        postgresql-16-postgis-3 \
-        postgresql-16-postgis-3-scripts \
-    && apt-get install -y --no-install-recommends postgresql-16-cron \
+        postgresql-18-postgis-3 \
+        postgresql-18-postgis-3-scripts \
+    && apt-get install -y --no-install-recommends postgresql-18-cron \
     && rm -rf /var/lib/apt/lists/*
 
