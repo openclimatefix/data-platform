@@ -340,7 +340,8 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 				ForecasterName:    fc.ForecasterName,
 				ForecasterVersion: fc.ForecasterVersion,
 			},
-			LocationUuid: fc.GeometryUuid.String(),
+			LocationUuid:        fc.GeometryUuid.String(),
+			CreatedTimestampUtc: timestamppb.New(fc.CreatedAtUtc.Time),
 		}
 	}
 
