@@ -341,6 +341,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 				ForecasterVersion: fc.ForecasterVersion,
 			},
 			LocationUuid: fc.GeometryUuid.String(),
+			CreatedTimestampUtc: timestamppb.New(fc.CreatedAtUtc.Time),
 		}
 	}
 
