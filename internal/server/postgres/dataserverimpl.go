@@ -8,7 +8,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -46,25 +45,6 @@ func timeWindowToPgWindow(
 	}
 
 	return start, end, err
-}
-
-// jsonbToStruct converts a JSONB byte array to a protobuf Struct.
-func jsonbToStruct(data []byte) (*structpb.Struct, error) {
-	if len(data) == 0 {
-		return &structpb.Struct{}, nil
-	}
-
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("json.Unmarshal: %w", err)
-	}
-
-	s, err := structpb.NewStruct(m)
-	if err != nil {
-		return nil, fmt.Errorf("structpb.NewStruct: %w", err)
-	}
-
-	return s, nil
 }
 
 // timeptrToPgTimestamp converts a protobuf Timestamp pointer to a pgtype.Timestamp.
@@ -161,21 +141,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		Str("dp.forecaster.version", dbForecaster.ForecasterVersion).
 		Msg("found forecaster")
 
-	var metadataJSONB []byte
-	if req.Metadata == nil || len(req.Metadata.Fields) == 0 {
-		metadataJSONB = nil
-	} else {
-		metadataJSONB, err = req.Metadata.MarshalJSON()
-		if err != nil {
-			l.Err(err).Msgf("req.Metadata.MarshalJSON()")
-
-			return nil, status.Error(
-				codes.InvalidArgument,
-				"Invalid metadata.",
-			)
-		}
-	}
-
 	// Create a new forecast
 	cfprms := db.CreateForecastParams{
 		GeometryUuid:        uuid.MustParse(req.LocationUuid),
@@ -186,7 +151,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		FirstHorizonMins:    int32(req.Values[0].HorizonMins),
 		// Okay to take the last value as we checked it was monotonically increasing above
 		LastHorizonMins: int32(req.Values[len(req.Values)-1].HorizonMins),
-		Metadata:        metadataJSONB,
+		Metadata:        req.Metadata,
 	}
 
 	dbForecast, err := querier.CreateForecast(ctx, cfprms)
@@ -202,47 +167,27 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	// Create the forecast data
 	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
 	for i, value := range req.Values {
-		// Parse the metadata. Because this query uses COPYFROM, the metadata must be set
-		// to NULL explicitly in the Go code in the instance there is no metadata.
-		var metadataJSONB []byte
-		if value.Metadata == nil || len(value.Metadata.Fields) == 0 {
-			metadataJSONB = nil
-		} else {
-			metadataJSONB, err = value.Metadata.MarshalJSON()
-			if err != nil {
-				l.Err(err).Msgf("value.Metadata.MarshalJSON()")
-
-				return nil, status.Error(
-					codes.InvalidArgument,
-					"Invalid metadata.",
-				)
-			}
-		}
-
-		// Parse the other stats fractions map to JSONB.
 		// Since the database wants each numeric value to have 4 significant figures,
 		// the float32 values need to be rounded accordingly.
-		var otherStatsJSONB []byte
-		if len(value.OtherStatisticsFractions) == 0 {
-			otherStatsJSONB = nil
-		} else {
-			roundedStats := make(map[string]float64, len(value.OtherStatisticsFractions))
-			for key, val32 := range value.OtherStatisticsFractions {
-				val64 := float64(val32)
+		roundedStats := make(map[string]any)
+		for k, val32 := range value.OtherStatisticsFractions {
+			val64 := float64(val32)
 
-				var roundedVal float64
-				if val64 < 1 {
-					roundedVal = math.Round(val64*10000) / 10000
-				} else {
-					roundedVal = math.Round(val64*1000) / 1000
-				}
-				roundedStats[key] = roundedVal
+			var roundedVal float64
+			if val64 < 1 {
+				roundedVal = math.Round(val64*10000) / 10000
+			} else {
+				roundedVal = math.Round(val64*1000) / 1000
 			}
+			roundedStats[k] = roundedVal
+		}
 
-			otherStatsJSONB, err = json.Marshal(roundedStats)
+		var otherStats *structpb.Struct
+
+		if len(roundedStats) > 0 {
+			otherStats, err = structpb.NewStruct(roundedStats)
 			if err != nil {
-				l.Err(err).Msgf("json.Marshal(roundedStats: %+v)", roundedStats)
-				return nil, status.Error(codes.Internal, "Failed to serialise statistics")
+				l.Err(err).Msgf("structpb.NewStruct(%+v)", roundedStats)
 			}
 		}
 
@@ -256,8 +201,8 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 				),
 				Valid: true,
 			},
-			OtherStatsFractions: otherStatsJSONB,
-			Metadata:            metadataJSONB,
+			OtherStatsFractions: otherStats,
+			Metadata:            value.Metadata,
 		}
 	}
 
@@ -275,7 +220,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		Str("dp.forecast.uuid", dbForecast.ForecastUuid.String()).
 		Str("dp.geometry.uuid", dbForecast.GeometryUuid.String()).
 		Str("dp.forecast.init_time", dbForecast.InitTimeUtc.Time.String()).
-		Str("dp.forecast.metadata", string(metadataJSONB)).
 		Str("dp.forecast.target_period", fmt.Sprintf(
 			"%s - %s",
 			dbForecast.TargetPeriod.Lower.Time.String(),
@@ -351,16 +295,6 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 
 	forecasts := make([]*pb.GetLatestForecastsResponse_Forecast, len(dbListForecasts))
 	for i, fc := range dbListForecasts {
-		md, err := jsonbToStruct(fc.Metadata)
-		if err != nil {
-			l.Err(err).Msgf("jsonbToStruct(%s)", string(fc.Metadata))
-
-			return nil, status.Error(
-				codes.Internal,
-				"Backend communication error.",
-			)
-		}
-
 		forecasts[i] = &pb.GetLatestForecastsResponse_Forecast{
 			InitializationTimestampUtc: timestamppb.New(fc.InitTimeUtc.Time),
 			Forecaster: &pb.Forecaster{
@@ -368,7 +302,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 				ForecasterVersion: fc.ForecasterVersion,
 			},
 			LocationUuid: fc.GeometryUuid.String(),
-			Metadata:     md,
+			Metadata:     fc.Metadata,
 		}
 	}
 
@@ -593,14 +527,8 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 		for _, pred := range dbPreds {
 			otherStatistics := make(map[string]float32)
 			if pred.OtherStatsFractions != nil {
-				err = json.Unmarshal(pred.OtherStatsFractions, &otherStatistics)
-				if err != nil {
-					l.Err(err).Msgf("json.Unmarshal(%s)", string(pred.OtherStatsFractions))
-
-					return status.Errorf(
-						codes.Internal,
-						"Backend communication error.",
-					)
+				for k, v := range pred.OtherStatsFractions.AsMap() {
+					otherStatistics[k] = float32(v.(float64))
 				}
 			}
 
@@ -1056,16 +984,6 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	values := make([]*pb.GetForecastAtTimestampResponse_Value, len(dbPredictions))
 	for i, value := range dbPredictions {
-		md, err := jsonbToStruct(value.Metadata)
-		if err != nil {
-			l.Err(err).Msgf("jsonbToStruct(%s)", value.Metadata)
-
-			return nil, status.Errorf(
-				codes.Internal,
-				"Backend communication error.",
-			)
-		}
-
 		values[i] = &pb.GetForecastAtTimestampResponse_Value{
 			ValueFraction:          float32(value.P50Sip) / 30000.0,
 			EffectiveCapacityWatts: uint64(value.CapacityWatts),
@@ -1075,7 +993,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 				Latitude:  value.Latitude,
 				Longitude: value.Longitude,
 			},
-			Metadata: md,
+			Metadata: value.Metadata,
 		}
 	}
 
@@ -1121,17 +1039,6 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 		Str("dp.source.valid_from_utc", dbSource.SysPeriod.Lower.Time.String()).
 		Msg("found source")
 
-	metadata, err := jsonbToStruct(dbSource.MetadataJsonb)
-	if err != nil {
-		l.Err(err).Msgf("jsonToStruct(%s)", dbSource.MetadataJsonb)
-
-		return nil, status.Errorf(
-			codes.Internal,
-			"Failed to convert metadata for location '%s'",
-			req.LocationUuid,
-		)
-	}
-
 	return &pb.GetLocationResponse{
 		LocationUuid: dbSource.GeometryUuid.String(),
 		LocationName: dbSource.GeometryName,
@@ -1140,7 +1047,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 			Longitude: dbSource.Longitude,
 		},
 		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
-		Metadata:               metadata,
+		Metadata:               dbSource.MetadataJsonb,
 	}, nil
 }
 
@@ -1187,15 +1094,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		Msgf("created geometry")
 
 	// Create a source associated with the location
-	metadata, err := req.Metadata.MarshalJSON()
-	if err != nil {
-		l.Err(err).Msgf("req.Metadata.MarshalJSON()")
-
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid metadata. Ensure metadata is a valid JSON object.",
-		)
-	}
 
 	// Set valid from time to now if not provided
 	if req.ValidFromUtc == nil {
@@ -1206,7 +1104,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		GeometryUuid:  dbLocation.GeometryUuid,
 		SourceTypeID:  int16(req.EnergySource),
 		CapacityWatts: int64(req.EffectiveCapacityWatts),
-		Metadata:      metadata,
+		Metadata:      req.Metadata,
 		ValidFromUtc:  pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
 	}
 
@@ -1296,15 +1194,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	// Use existing metadata, unless new metadata is provided
 	metadata := dbSource.MetadataJsonb
 	if req.NewMetadata != nil {
-		metadata, err = req.NewMetadata.MarshalJSON()
-		if err != nil {
-			l.Err(err).Msgf("req.NewMetadata.MarshalJSON()")
-
-			return nil, status.Error(
-				codes.InvalidArgument,
-				"Invalid metadata. Ensure new metadata is a valid JSON object.",
-			)
-		}
+		metadata = req.NewMetadata
 	}
 
 	// Update the location name, if provided
@@ -1510,22 +1400,13 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	values := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbValues))
 	for i, value := range dbValues {
 		otherStats := make(map[string]float32)
-
-		if value.OtherStatsFractions != nil {
-			err := json.Unmarshal(value.OtherStatsFractions, &otherStats)
-			if err != nil {
-				l.Err(err).Msgf("json.Unmarshal(%s)", value.OtherStatsFractions)
+		for k, v := range value.OtherStatsFractions.AsMap() {
+			floatVal, ok := v.(float64)
+			if !ok {
+				l.Warn().Str("key", k).Interface("value", v).Msg("skipping non-float statistic")
+				continue
 			}
-		}
-
-		md, err := jsonbToStruct(value.Metadata)
-		if err != nil {
-			l.Err(err).Msgf("jsonbToStruct(%s)", value.Metadata)
-
-			return nil, status.Errorf(
-				codes.Internal,
-				"Backend communication error.",
-			)
+			otherStats[k] = float32(floatVal)
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
@@ -1535,7 +1416,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			EffectiveCapacityWatts:     uint64(value.CapacityWatts),
 			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
-			Metadata:                   md,
+			Metadata:                   value.Metadata,
 		}
 	}
 
@@ -1595,12 +1476,6 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithin(%+v)", llprms)
 		} else {
 			for _, loc := range glResp {
-				metadata, err := jsonbToStruct(loc.MetadataJsonb)
-				if err != nil {
-					l.Err(err).Msgf("jsonbToStruct(%s)", loc.MetadataJsonb)
-					metadata = nil
-				}
-
 				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
 					LocationUuid: loc.GeometryUuid.String(),
 					LocationName: loc.GeometryName,
@@ -1611,7 +1486,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
 					EnergySource:           pb.EnergySource(loc.SourceTypeID),
 					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               metadata,
+					Metadata:               loc.MetadataJsonb,
 				})
 			}
 		}
@@ -1631,12 +1506,6 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithout(%+v)", llprms)
 		} else {
 			for _, loc := range glResp {
-				metadata, err := jsonbToStruct(loc.MetadataJsonb)
-				if err != nil {
-					l.Err(err).Msgf("jsonbToStruct(%s)", loc.MetadataJsonb)
-					metadata = nil
-				}
-
 				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
 					LocationUuid: loc.GeometryUuid.String(),
 					LocationName: loc.GeometryName,
@@ -1647,7 +1516,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
 					EnergySource:           pb.EnergySource(loc.SourceTypeID),
 					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               metadata,
+					Metadata:               loc.MetadataJsonb,
 				})
 			}
 		}
@@ -1666,12 +1535,6 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			l.Err(err).Msgf("querier.ListSourcesAtTimestamp(%+v)", lsprms)
 		} else {
 			for _, loc := range glResp {
-				metadata, err := jsonbToStruct(loc.MetadataJsonb)
-				if err != nil {
-					l.Err(err).Msgf("jsonbToStruct(%s)", loc.MetadataJsonb)
-					metadata = nil
-				}
-
 				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
 					LocationUuid: loc.GeometryUuid.String(),
 					LocationName: loc.GeometryName,
@@ -1682,7 +1545,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
 					EnergySource:           pb.EnergySource(loc.SourceTypeID),
 					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               metadata,
+					Metadata:               loc.MetadataJsonb,
 				})
 			}
 		}

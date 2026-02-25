@@ -98,19 +98,9 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateOrganisation(
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	metadata, err := req.Metadata.MarshalJSON()
-	if err != nil {
-		l.Err(err).Msgf("req.Metadata.MarshalJSON()")
-
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid metadata. Ensure object is JSON serializable.",
-		)
-	}
-
 	coprms := db.CreateOrgParams{
 		OrgName:  req.OrgName,
-		Metadata: metadata,
+		Metadata: req.Metadata,
 	}
 
 	dbOrg, err := querier.CreateOrg(ctx, coprms)
@@ -159,20 +149,10 @@ func (d *DataPlatformAdministrationServiceServerImpl) CreateUser(
 		)
 	}
 
-	metadata, err := req.Metadata.MarshalJSON()
-	if err != nil {
-		l.Err(err).Msgf("req.Metadata.MarshalJSON()")
-
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid metadata. Ensure object is JSON serializable.",
-		)
-	}
-
 	cuParams := db.CreateUserParams{
 		OrgUuid:  dbOrg.OrgUuid,
 		OauthID:  req.OauthId,
-		Metadata: metadata,
+		Metadata: req.Metadata,
 	}
 
 	dbUser, err := querier.CreateUser(ctx, cuParams)
@@ -381,17 +361,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 		)
 	}
 
-	metadata, err := jsonbToStruct(dbOrg.Metadata)
-	if err != nil {
-		l.Error().Err(err).Msgf("jsonbToStruct(%s)", dbOrg.Metadata)
-
-		return nil, status.Errorf(
-			codes.Internal,
-			"Error parsing metadata for organisation with name '%s'",
-			req.OrgName,
-		)
-	}
-
 	l.Debug().
 		Str("dp.organisation.name", dbOrg.OrgName).
 		Str("dp.organisation.uuid", dbOrg.OrgUuid.String()).
@@ -400,7 +369,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetOrganisation(
 	return &pb.GetOrganisationResponse{
 		OrgId:                dbOrg.OrgUuid.String(),
 		OrgName:              dbOrg.OrgName,
-		Metadata:             metadata,
+		Metadata:             dbOrg.Metadata,
 		CreatedAt:            timestamppb.New(dbOrg.CreatedAtUtc.Time),
 		LocationPolicyGroups: dbOrg.LocationPolicyGroupNames,
 		UserOauthIds:         dbOrg.OauthIds,
@@ -426,17 +395,6 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 		return nil, status.Errorf(
 			codes.NotFound,
 			"User with OAuth ID '%s' not found",
-			req.OauthId,
-		)
-	}
-
-	metadata, err := jsonbToStruct(dbUser.Metadata)
-	if err != nil {
-		l.Error().Err(err).Msgf("jsonbToStruct(%s)", dbUser.Metadata)
-
-		return nil, status.Errorf(
-			codes.Internal,
-			"Error parsing metadata for user with OAuth ID '%s'",
 			req.OauthId,
 		)
 	}
@@ -468,7 +426,7 @@ func (d *DataPlatformAdministrationServiceServerImpl) GetUser(
 		Organisation:         dbUser.OrgName,
 		LocationPolicyGroups: dbOrg.LocationPolicyGroupNames,
 		CreatedAt:            &timestamppb.Timestamp{},
-		Metadata:             metadata,
+		Metadata:             dbUser.Metadata,
 	}, nil
 }
 
