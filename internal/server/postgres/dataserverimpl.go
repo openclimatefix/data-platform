@@ -182,6 +182,11 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 			roundedStats[k] = roundedVal
 		}
 
+		// Since CreatePredictedValues uses COPYFROM, manually coerce empty metadata to nil
+		if value.Metadata != nil && len(value.Metadata.Fields) == 0 {
+			value.Metadata = nil
+		}
+
 		var otherStats *structpb.Struct
 
 		if len(roundedStats) > 0 {

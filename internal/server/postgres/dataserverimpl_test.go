@@ -1518,7 +1518,7 @@ func TestCreateForecast(t *testing.T) {
 			HorizonMins:              uint32(i * 30),
 			P50Fraction:              0.0,
 			OtherStatisticsFractions: map[string]float32{},
-			Metadata:                 nil,
+			Metadata:                 &structpb.Struct{},
 		}
 	}
 
@@ -1550,7 +1550,7 @@ func TestCreateForecast(t *testing.T) {
 			},
 		},
 		{
-			name: "Should create forecast with zeroed values",
+			name: "Should create forecast with zeroed values and metadata",
 			req: &pb.CreateForecastRequest{
 				LocationUuid: siteResp.LocationUuid,
 				Forecaster:   fcResp.Forecaster,
