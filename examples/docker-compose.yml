@@ -11,7 +11,7 @@ services:
 
   api:
     build:
-      context: api
+      context: ..
       dockerfile: Containerfile
     ports:
       - "50051:50051"
@@ -27,8 +27,8 @@ services:
 
   database:
     build:
-      context: api/src/internal/repository/postgres/infra
-      dockerfile: Containerfile
+      context: ..
+      dockerfile: internal/server/postgres/infra/Containerfile
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -75,5 +75,5 @@ configs:
       lc_numeric = 'en_US.utf8'               # locale for number formatting
       lc_time = 'en_US.utf8'                  # locale for time formatting
       default_text_search_config = 'pg_catalog.english'
-      shared_preload_libraries = 'pg_partman_bgw'
+      shared_preload_libraries = 'pg_cron'
 
