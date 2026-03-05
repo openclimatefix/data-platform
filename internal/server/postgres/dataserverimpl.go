@@ -245,23 +245,39 @@ func (s *DataPlatformDataServiceServerImpl) DeleteForecast(
 
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	dfprms := db.DeleteForecastParams{
-		ForecastUuid: uuid.MustParse(req.ForecastUuid),
+	// Check the forecaster exists
+	pctprms := db.GetForecasterElseLatestParams{
+		ForecasterName:    req.Forecaster.ForecasterName,
+		ForecasterVersion: req.Forecaster.ForecasterVersion,
 	}
 
-	err := querier.DeleteForecast(ctx, dfprms)
+	dbForecaster, err := querier.GetForecasterElseLatest(ctx, pctprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.DeleteForecast(%+v)", dfprms)
+		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", pctprms)
 
 		return nil, status.Error(
-			codes.Internal,
-			"Backend communication error.",
+			codes.NotFound, "No such forecaster. "+
+				"Create the forecaster before submitting a forecast.",
 		)
 	}
 
-	l.Debug().
-		Str("dp.forecast.uuid", req.ForecastUuid).
-		Msg("deleted forecast")
+	// Delete the forecast
+	dfcprms := db.DeleteForecastParams{
+		ForecasterID:  dbForecaster.ForecasterID,
+		GeometryUuid:  uuid.MustParse(req.LocationUuid),
+		SourceTypeID:  int16(req.EnergySource.Number()),
+		InitTimestamp: timeptrToPgTimestamp(req.InitTimeUtc),
+	}
+
+	err = querier.DeleteForecast(ctx, dfcprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.DeleteForecast(%+v)", dfcprms)
+
+		return nil, status.Error(
+			codes.Internal,
+			"Could not delete forecast. Ensure the forecast exists.",
+		)
+	}
 
 	return &pb.DeleteForecastResponse{}, nil
 }
