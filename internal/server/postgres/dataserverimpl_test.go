@@ -1630,7 +1630,7 @@ func TestCreateForecast(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := dc.CreateForecast(t.Context(), tc.req)
+			_, err := dc.CreateForecast(t.Context(), tc.req)
 			if strings.Contains(tc.name, "Shouldn't") {
 				require.Error(t, err)
 			} else {
@@ -1649,7 +1649,10 @@ func TestCreateForecast(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, len(tc.req.Values), len(fResp.Values))
 				_, err = dc.DeleteForecast(t.Context(), &pb.DeleteForecastRequest{
-					ForecastUuid: resp.ForecastUuid,
+					Forecaster:   fcResp.Forecaster,
+					LocationUuid: siteResp.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  tc.req.InitTimeUtc,
 				})
 				require.NoError(t, err)
 
@@ -1886,7 +1889,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 		})
 		b.Run(fmt.Sprintf("%d/CreateForecast", output.NumPgvs), func(b *testing.B) {
 			for b.Loop() {
-				resp, err := dc.CreateForecast(b.Context(), &pb.CreateForecastRequest{
+				_, err := dc.CreateForecast(b.Context(), &pb.CreateForecastRequest{
 					Forecaster: &pb.Forecaster{
 						ForecasterName:    tc.NamePrefix + "_forecaster_1",
 						ForecasterVersion: "v1",
@@ -1902,7 +1905,13 @@ func BenchmarkPostgresClient(b *testing.B) {
 				})
 				require.NoError(b, err)
 				_, err = dc.DeleteForecast(b.Context(), &pb.DeleteForecastRequest{
-					ForecastUuid: resp.ForecastUuid,
+					Forecaster: &pb.Forecaster{
+						ForecasterName:    tc.NamePrefix + "_forecaster_1",
+						ForecasterVersion: "v1",
+					},
+					LocationUuid: output.LocationUuids[0],
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(12+2) * time.Hour)),
 				})
 				require.NoError(b, err)
 			}

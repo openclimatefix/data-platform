@@ -95,9 +95,27 @@ INSERT INTO pred.forecasts (
     target_period,
     metadata;
 
--- name: DeleteForecast :exec
+-- name: DeleteForecastByUUID :exec
 DELETE FROM pred.forecasts
 WHERE forecast_uuid = $1;
+
+-- name: DeleteForecast :exec
+WITH forecasts_to_delete AS (
+    SELECT forecast_uuid FROM pred.forecasts AS f
+    WHERE f.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(init_timestamp)::TIMESTAMP)
+        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(init_timestamp)::TIMESTAMP + INTERVAL '1 second')
+        AND f.geometry_uuid = $1
+        AND f.source_type_id = $2
+        AND f.forecaster_id = $3
+),
+deleted_values AS (
+    DELETE FROM pred.predicted_generation_values
+    WHERE target_time_utc >= sqlc.arg(init_timestamp)::TIMESTAMP
+        AND target_time_utc < sqlc.arg(init_timestamp)::TIMESTAMP + INTERVAL '3 days'
+        AND forecast_uuid IN (SELECT forecast_uuid FROM forecasts_to_delete)
+)
+DELETE FROM pred.forecasts
+WHERE forecast_uuid IN (SELECT forecast_uuid FROM forecasts_to_delete);
 
 -- name: CreatePredictedValues :copyfrom
 /* CreatePredictedValues inserts predicted generation values using

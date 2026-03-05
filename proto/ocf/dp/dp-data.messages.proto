@@ -308,9 +308,19 @@ message CreateForecastResponse {
 
 
 message DeleteForecastRequest {
-  string forecast_uuid = 1 [
+  string location_uuid = 1 [
     (buf.validate.field).required = true,
     (buf.validate.field).string.uuid = true
+  ];
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
+  Forecaster forecaster = 3 [
+    (buf.validate.field).required = true
+  ];
+  google.protobuf.Timestamp init_time_utc = 4 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
   ];
 }
 
