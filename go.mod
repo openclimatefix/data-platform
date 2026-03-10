@@ -1,8 +1,8 @@
 module github.com/openclimatefix/data-platform
 
-go 1.24.0
+go 1.25.0
 
-toolchain go1.24.1
+toolchain go1.25.1
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.6-20250613105001-9f2d3c737feb.1
