@@ -183,6 +183,7 @@ SELECT cron.schedule('forecasts-vacuum', '30 4 * * *', $$VACUUM ANALYZE pred.for
 CREATE TABLE pred.predicted_generation_values (
     horizon_mins SMALLINT NOT NULL,
     CONSTRAINT horizon_mins_nonnegative_check CHECK (horizon_mins >= 0),
+    CONSTRAINT horizon_mins_fiveminutely_check CHECK (horizon_mins % 5 = 0),
     p50_sip SMALLINT NOT NULL,
     CONSTRAINT p50_sip_nonnegative_check CHECK (p50_sip >= 0),
     target_time_utc TIMESTAMP NOT NULL,
