@@ -92,7 +92,7 @@ jobs:
 
       - name: Compare benchmarks
         id: bench-diff
-        if: github.event_name == 'pull_request' && steps.cache-base-bench.outputs.cache-hit == 'true'
+        if: github.event_name == 'pull_request' && steps.restore-base-bench.outputs.cache-hit == 'true'
         run: |
           go run golang.org/x/perf/cmd/benchstat@latest \
             ${{ steps.benchfiles.outputs.base-filename }} \
@@ -112,7 +112,7 @@ jobs:
             echo ""
             echo "<details><summary>Benchmark results</summary>"
             echo ""
-            echo '```'
+            echo '```text'
             cat "$FILENAME"
             echo '```'
             echo "</details>"

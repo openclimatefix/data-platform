@@ -1,34 +1,24 @@
 CREATE OR REPLACE FUNCTION seed_db(
     name_prefix TEXT DEFAULT '',
-    target_total_forecasts INTEGER DEFAULT 1000, 
+    target_locations INTEGER DEFAULT 100,
+    history_window_mins INTEGER DEFAULT 2880,
     pivot_time TIMESTAMP DEFAULT DATE_TRUNC('hour', NOW())
 )
 RETURNS TABLE (num_values INTEGER, geometry_uuids UUID[]) AS $$
 DECLARE
     -- Constants
-    num_locations CONSTANT INTEGER := 1000;
     forecast_freq_mins CONSTANT INTEGER := 15;
-    forecast_len_mins CONSTANT INTEGER := 720; -- 12 hours
+    forecast_len_mins CONSTANT INTEGER := 720; 
     pgv_res_mins CONSTANT INTEGER := 30;
-    history_window_mins CONSTANT INTEGER := 10080; -- 1 week
     
-    -- Derived values
-    forecasts_per_loc INTEGER;
-    num_forecasters INTEGER;
     geo_list UUID[];
     o_uuid UUID;
 BEGIN
-    -- Should speed up inserts
     EXECUTE 'SET LOCAL work_mem = ''128MB''';
     EXECUTE 'SET LOCAL enable_seqscan = off';
 
-    forecasts_per_loc := target_total_forecasts / num_locations;
-    num_forecasters := GREATEST(1, forecasts_per_loc / (history_window_mins / forecast_freq_mins));
-
-    -- Insert Forecasters and Observers
     INSERT INTO pred.forecasters (forecaster_name, forecaster_version)
-    SELECT name_prefix || '_forecaster_' || i, 'v1'
-    FROM generate_series(1, num_forecasters) i
+    VALUES (name_prefix || '_forecaster_1', 'v1')
     ON CONFLICT DO NOTHING;
 
     INSERT INTO obs.observers (observer_name) 
@@ -41,7 +31,7 @@ BEGIN
         INSERT INTO loc.geometries (geometry_name, geometry_type_id, geom, associated_point)
         SELECT name_prefix || '_location_' || i, 1,
             ST_SetSRID(ST_MakePoint(0,0), 4326), ST_SetSRID(ST_MakePoint(0,0), 4326)
-        FROM generate_series(1, num_locations) i
+        FROM generate_series(1, target_locations) i
         RETURNING geometry_uuid
     )
     SELECT array_agg(geometry_uuid) FROM inserted_geos INTO geo_list;
@@ -50,60 +40,49 @@ BEGIN
     SELECT u, 1, 5000, pivot_time - INTERVAL '10 years'
     FROM unnest(geo_list) u;
 
-    -- Insert observations
+    -- Insert observations for the past 36 hours at 30-minute intervals (72 data points per location)
     INSERT INTO obs.observed_generation_values 
         (value_sip, source_type_id, observer_uuid, geometry_uuid, observation_timestamp_utc)
     SELECT (random() * 30000)::SMALLINT, 1, o_uuid, u, pivot_time - (s.idx * INTERVAL '30 minutes')
-    FROM unnest(geo_list) u, generate_series(0, 100) AS s(idx);
+    FROM unnest(geo_list) u, generate_series(0, 72) AS s(idx);
 
-    -- Insert all forecasts at once
+    -- Insert Forecasts 
     WITH generated_data AS (
-        SELECT
-            u.geo_id,
-            f.forecaster_id,
+        SELECT 
+            u.geo_id, 
             pivot_time - (s.idx * INTERVAL '15 minutes') AS init_time_utc
         FROM unnest(geo_list) AS u(geo_id)
-        CROSS JOIN (SELECT forecaster_id FROM pred.forecasters WHERE forecaster_name LIKE name_prefix || '%') f
         CROSS JOIN generate_series(0, (history_window_mins / forecast_freq_mins) - 1) AS s(idx)
         ORDER BY init_time_utc ASC
     ),
     inserted_forecasts AS (
-        INSERT INTO pred.forecasts
+        INSERT INTO pred.forecasts 
             (forecast_uuid, source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period)
-        SELECT
-            UUIDV7(init_time_utc),
-            1,
-            geo_id,
-            forecaster_id,
-            init_time_utc,
-            pgv_res_mins::SMALLINT,
+        SELECT 
+            UUIDV7(init_time_utc), 1, geo_id, 
+            (SELECT forecaster_id FROM pred.forecasters WHERE forecaster_name = name_prefix || '_forecaster_1'),
+            init_time_utc, pgv_res_mins::SMALLINT,
             TSRANGE(init_time_utc, init_time_utc + (forecast_len_mins * INTERVAL '1 minute'))
         FROM generated_data
         RETURNING forecast_uuid, init_time_utc
     ),
     static_json AS (
-        SELECT
-            '{"source": "benchmark"}'::jsonb AS meta,
-            '{"p10": 0.1, "p90": 0.9}'::jsonb AS stats
+        SELECT '{"source": "benchmark"}'::jsonb AS meta, '{"p10": 0.1, "p90": 0.9}'::jsonb AS stats
     )
-    INSERT INTO pred.predicted_generation_values
+    INSERT INTO pred.predicted_generation_values 
         (horizon_mins, p50_sip, forecast_uuid, target_time_utc, metadata, other_stats_fractions)
-    SELECT
-        gs.h,
-        (random() * 30000)::SMALLINT,
-        inf.forecast_uuid,
-        inf.init_time_utc + (gs.h * INTERVAL '1 minute') AS target_time_utc,
-        sj.meta,
-        sj.stats
+    SELECT gs.h, (random() * 30000)::SMALLINT, inf.forecast_uuid, 
+           inf.init_time_utc + (gs.h * INTERVAL '1 minute'), sj.meta, sj.stats
     FROM inserted_forecasts inf
     CROSS JOIN static_json sj
     CROSS JOIN LATERAL generate_series(0, forecast_len_mins - pgv_res_mins, pgv_res_mins) AS gs(h)
-    ORDER BY target_time_utc ASC;
+    ORDER BY inf.init_time_utc ASC;
 
-    -- Spoof the table size so indexes used in queries reflect production
+    -- Spoof the table size so Postgres uses indexes rather than seq scan in testing
     UPDATE pg_class SET reltuples = 346000000, relpages = 5000000 WHERE relname = 'predicted_generation_values';
+    UPDATE pg_class SET reltuples = 346000000, relpages = 5000000 WHERE relname = 'predicted_generation_values_forecast_uuid_idx';
     REFRESH MATERIALIZED VIEW loc.sources_mv;
     
-    RETURN QUERY SELECT target_total_forecasts * (forecast_len_mins / pgv_res_mins), geo_list;
+    RETURN QUERY SELECT target_locations * (history_window_mins / forecast_freq_mins) * (forecast_len_mins / pgv_res_mins), geo_list;
 END;
 $$ LANGUAGE plpgsql;
