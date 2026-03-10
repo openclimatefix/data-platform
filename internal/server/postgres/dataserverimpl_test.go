@@ -283,14 +283,20 @@ func TestUpdateLocation(t *testing.T) {
 				require.NoError(t, err)
 
 				newGetResp, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
-					LocationUuid:      resp.LocationUuid,
-					EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
-					IncludeGeometry:   false,
-					PivotTimestampUtc: timestamppb.New(tc.req.ValidFromUtc.AsTime().Add(time.Minute)),
+					LocationUuid:    resp.LocationUuid,
+					EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					IncludeGeometry: false,
+					PivotTimestampUtc: timestamppb.New(
+						tc.req.ValidFromUtc.AsTime().Add(time.Minute),
+					),
 				})
 				require.NoError(t, err)
 				require.Equal(t, tc.expectedName, newGetResp.LocationName)
-				require.Equal(t, int(tc.expectedCapacityWatts), int(newGetResp.EffectiveCapacityWatts))
+				require.Equal(
+					t,
+					int(tc.expectedCapacityWatts),
+					int(newGetResp.EffectiveCapacityWatts),
+				)
 				require.Equal(t, tc.expectedMetadata, newGetResp.Metadata.AsMap())
 			}
 		})
@@ -980,6 +986,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 			ValueWatts: uint64(rand.Float64() * float64(siteResp.EffectiveCapacityWatts)),
 		}
 	}
+
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
 		LocationUuid: siteResp.LocationUuid,
 		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
@@ -1238,6 +1245,7 @@ func TestCreateObservations(t *testing.T) {
 		if i >= 2 {
 			value = 0.5 * float64(updateResp.EffectiveCapacityWatts)
 		}
+
 		validObservations[i] = &pb.CreateObservationsRequest_Value{
 			TimestampUtc: timestamppb.New(pivotTime.Add(time.Duration(i*30) * time.Minute)),
 			ValueWatts:   uint64(value),
@@ -1250,6 +1258,7 @@ func TestCreateObservations(t *testing.T) {
 		if i >= 2 {
 			value = 1.2 * float64(updateResp.EffectiveCapacityWatts)
 		}
+
 		invalidObservations[i] = &pb.CreateObservationsRequest_Value{
 			TimestampUtc: timestamppb.New(pivotTime.Add(time.Duration(i*30) * time.Minute)),
 			ValueWatts:   uint64(value),
@@ -1345,6 +1354,7 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 			ValueWatts: uint64(0.5 * float64(siteResp.EffectiveCapacityWatts)),
 		}
 	}
+
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
 		LocationUuid: siteResp.LocationUuid,
 		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
@@ -1563,16 +1573,21 @@ func TestCreateForecast(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 
-				fResp, err := dc.GetForecastAsTimeseries(t.Context(), &pb.GetForecastAsTimeseriesRequest{
-					LocationUuid: siteResp.LocationUuid,
-					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-					HorizonMins:  0,
-					TimeWindow: &pb.TimeWindow{
-						StartTimestampUtc: tc.req.InitTimeUtc,
-						EndTimestampUtc:   timestamppb.New(tc.req.InitTimeUtc.AsTime().Add(5 * time.Hour)),
+				fResp, err := dc.GetForecastAsTimeseries(
+					t.Context(),
+					&pb.GetForecastAsTimeseriesRequest{
+						LocationUuid: siteResp.LocationUuid,
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						HorizonMins:  0,
+						TimeWindow: &pb.TimeWindow{
+							StartTimestampUtc: tc.req.InitTimeUtc,
+							EndTimestampUtc: timestamppb.New(
+								tc.req.InitTimeUtc.AsTime().Add(5 * time.Hour),
+							),
+						},
+						Forecaster: fcResp.Forecaster,
 					},
-					Forecaster: fcResp.Forecaster,
-				})
+				)
 				require.NoError(t, err)
 				require.Equal(t, len(tc.req.Values), len(fResp.Values))
 				_, err = dc.DeleteForecast(t.Context(), &pb.DeleteForecastRequest{

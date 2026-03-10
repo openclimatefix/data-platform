@@ -330,9 +330,12 @@ func TestAddRemoveLocationPoliciesFromGroup(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				// Read back the location policy group
-				dbLPG, err := ac.GetLocationPolicyGroup(t.Context(), &pb.GetLocationPolicyGroupRequest{
-					LocationPolicyGroupName: lpResp.Name,
-				})
+				dbLPG, err := ac.GetLocationPolicyGroup(
+					t.Context(),
+					&pb.GetLocationPolicyGroupRequest{
+						LocationPolicyGroupName: lpResp.Name,
+					},
+				)
 				require.NoError(t, err)
 				require.Equal(t, tc.expectedPolicyCount, len(dbLPG.LocationPolicies))
 			}
@@ -502,6 +505,7 @@ func TestListLocationsIamFilters(t *testing.T) {
 			Permission:   pb.Permission_PERMISSION_WRITE,
 		})
 	}
+
 	// Create an organisation with a user and location policies that have write access on the locations
 	orgResp, err := ac.CreateOrganisation(t.Context(), &pb.CreateOrganisationRequest{
 		OrgName: "test_list_locations_organisation",

@@ -373,6 +373,7 @@ func (d *DataPlatformDataServiceServerImpl) ListObservers(
 		if len(req.ObserverNamesFilter) != 0 {
 			name = req.ObserverNamesFilter[i]
 		}
+
 		observers[i] = &pb.ListObserversResponse_ObserverSummary{
 			ObserverUuid: uuid.New().String(),
 			ObserverName: name,

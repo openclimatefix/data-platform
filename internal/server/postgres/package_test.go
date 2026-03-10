@@ -37,6 +37,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to set up testing environment")
 	}
+
 	// Defer statements do not run past here due to os.Exit terminating the process.
 	os.Exit(code)
 }

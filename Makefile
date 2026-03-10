@@ -1,58 +1,56 @@
-# --- CONFIGURATION ----------------------------------------------------------------------- #
-# Use GOPATH/bin or GOBIN, default to ~/go/bin
-GOPATH ?= $(shell go env GOPATH)
-GOBIN  := $(shell go env GOBIN)
-ifeq ($(GOBIN),)
-	GOBIN := $(GOPATH)/bin
-endif
-VERSION := $(shell git describe --tags --always --long --dirty)
-OUT := bin/dp-server
+GO_TOOL := go tool -modfile=go.tool.mod
+SQLC    := $(GO_TOOL) sqlc
+LINT    := $(GO_TOOL) golangci-lint
+TESTSUM := $(GO_TOOL) gotestsum
+VULN    := $(GO_TOOL) govulncheck
 
-# --- Binaries and Tools ---
-PROTOC  := $(GOBIN)/protoc
-SQLC    := $(GOBIN)/sqlc
-PROTOC_GEN_GO    := $(GOBIN)/protoc-gen-go
-PROTOC_GEN_GRPC := $(GOBIN)/protoc-gen-go-grpc
-TOOLS := $(SQLC) $(PROTOC) $(PROTOC_GEN_GO) $(PROTOC_GEN_GRPC)
+# --- Local Binaries (PATH dependent) ---
+LOCAL_BIN := bin
+OUT := $(LOCAL_BIN)/dp-server
+export PATH := $(LOCAL_BIN):$(PATH)
+PROTOC           := $(LOCAL_BIN)/protoc
+PROTOC_INCLUDE   := $(LOCAL_BIN)/include
+PROTOC_GEN_GO    := $(LOCAL_BIN)/protoc-gen-go
+PROTOC_GEN_GRPC  := $(LOCAL_BIN)/protoc-gen-go-grpc
 
-# --- Sources ---
-GO_SOURCES := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
-PROTO_SOURCES := $(shell find proto/ocf/dp -name '*.proto')
+# --- Sources & Stamps ---
+GO_SOURCES          := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
+PROTO_SOURCES       := $(shell find proto/ocf/dp -name '*.proto')
 PROTO_GO_STAMP_FILE := internal/gen/.protoc.stamp
-PTOTO_PY_STAMP_FILE := gen/python/.protoc.stamp
-SQLC_SOURCES := $(shell find internal/server/postgres/sql -name '*.sql')
-SQLC_SOURCE_CONFIG := internal/server/postgres/.sqlc.yaml
-SQLC_STAMP_FILE := internal/server/postgres/.sqlc.stamp
+SQLC_SOURCES        := $(shell find internal/server/postgres/sql -name '*.sql')
+SQLC_SOURCE_CONFIG  := internal/server/postgres/.sqlc.yaml
+SQLC_STAMP_FILE     := internal/server/postgres/.sqlc.stamp
 
 # --- MAIN TARGETS ------------------------------------------------------------------- #
 
-# Build the binary
-${OUT}: ${GO_SOURCES} ${PROTO_STAMP_FILE} ${SQLC_STAMP_FILE}
-	@go build -v -o=${OUT} -ldflags="-X 'main.version=${VERSION}'" cmd/main.go
-
 .PHONY: build
 build: ${OUT}
+
+${OUT}: ${GO_SOURCES} ${PROTO_GO_STAMP_FILE} ${SQLC_STAMP_FILE}
+	@echo "Compiling to ${OUT}..."
+	@mkdir -p $(dir $@)
+	go build -v -o=${OUT} -ldflags="-X 'main.version=${VERSION}'" cmd/main.go
 
 .PHONY: run
 run: ${OUT}
 	@./${OUT}
 
 .PHONY: init
-init: path tools gen
+init: gen
+	@echo "Tidying main and tool modules..."
 	@go mod tidy
+	@go -modfile=go.tool.mod mod tidy
 	@git config --local core.hooksPath .github/hooks
 
 .PHONY: test
 test: gen
-	@go run gotest.tools/gotestsum@latest --format=testname --junitfile unit-tests.xml
+	@$(TESTSUM) --format=testname --junitfile unit-tests.xml
 
 .PHONY: lint
 lint:
-	@go mod tidy
-	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0 run \
-		--show-stats=false --fix
-	@gofmt -l . # Lists files that are likely to be changed by the next command
-	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0 fmt
+	@$(LINT) run --show-stats=false --fix
+	@gofmt -l . 
+	@$(LINT) fmt
 	@uvx -q sqlfluff fix -q \
 		--disable-progress-bar \
 		--config=internal/server/postgres/sql/.sqlfluff.toml \
@@ -60,29 +58,26 @@ lint:
 
 .PHONY: bench
 bench: gen
-	@go test ./...  -bench=. -run=^a -timeout=20m
+	@go test ./... -bench=. -run=^a -timeout=20m
 
 .PHONY: clean
 clean:
 	@echo "Cleaning up..."
-	@rm -f ${OUT}
-	@rm -f ${SQLC_STAMP_FILE}
-	@rm -f ${PROTO_STAMP_FILE}
-	@rm -rf internal/gen
-	@rm -rf internal/server/postgres/gen
-	@rm -rf gen/python
-	@rm -f unit-tests.xml
+	@rm -rf bin/
+	@rm -f ${SQLC_STAMP_FILE} ${PROTO_GO_STAMP_FILE} unit-tests.xml
+	@rm -rf internal/gen internal/server/postgres/gen gen/python
 
 .PHONY: doctor
-doctor: ${PROTOC} ${SQLC}
+doctor: $(PROTOC)
 	@go version
-	@${PROTOC} --version || echo "protoc not installed"
-	@echo "sqlc $$(${SQLC} version || echo "not installed")"
+	@$(LINT) --version
+	@$(SQLC) version
+	@$(PROTOC) --version
 
 # --- Code Generation Targets ------------------------------------------------------------- #
 
 .PHONY: gen
-gen: ${PROTO_GO_STAMP_FILE} ${SQLC_STAMP_FILE}
+gen: gen.proto.go gen.db
 
 .PHONY: gen.db
 gen.db: ${SQLC_STAMP_FILE}
@@ -90,20 +85,19 @@ gen.db: ${SQLC_STAMP_FILE}
 .PHONY: gen.proto.go
 gen.proto.go: ${PROTO_GO_STAMP_FILE}
 
-# Depends on the sqlc binary, the config, and all .sql files.
-${SQLC_STAMP_FILE}: ${SQLC} ${SQLC_SOURCES} ${SQLC_SOURCE_CONFIG}
+${SQLC_STAMP_FILE}: ${SQLC_SOURCES} ${SQLC_SOURCE_CONFIG}
 	@echo "Generating internal database code..."
-	@${SQLC} generate --file ${SQLC_SOURCE_CONFIG}
+	@$(SQLC) generate --file ${SQLC_SOURCE_CONFIG}
 	@touch ${SQLC_STAMP_FILE}
 	@echo " * Success."
 
-# Depends on the protoc binary, plugins, and all .proto source files.
 ${PROTO_GO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SOURCES}
 	@echo "Generating internal protobuf code..."
 	@rm -rf internal/gen && mkdir -p internal/gen
 	@${PROTOC} \
 		${PROTO_SOURCES} \
 		-I=proto \
+		-I=$(PROTOC_INCLUDE) \
 		--go_out=internal/gen \
 		--go_opt=paths=source_relative \
 		--go-grpc_out=require_unimplemented_servers=false:internal/gen \
@@ -111,49 +105,36 @@ ${PROTO_GO_STAMP_FILE}: ${PROTOC} ${PROTOC_GEN_GO} ${PROTOC_GEN_GRPC} ${PROTO_SO
 	@touch ${PROTO_GO_STAMP_FILE}
 	@echo " * Success."
 
-# --- SUPPLEMENTARY TARGETS ---------------------------------------------------------------------- #
+# --- LOCAL TOOL INSTALLATION ----------------------------------------------------------------- #
 
-.PHONY: path
-path:
-	@if ! echo "$$PATH" | tr ':' '\n' | grep -qx "$(GOBIN)"; then \
-		echo "Add 'export PATH=$$PATH:$(GOBIN)' to your shell profile to use installed tools."; \
-		exit 1; \
-	fi
-
-.PHONY: tools
-tools: ${TOOLS}
-
+# protoc (C++ binary) must still be downloaded manually, including standard types.
 ${PROTOC}:
-	@echo "Installing protoc..."
+	@echo "Installing protoc to $(LOCAL_BIN)..."
+	@mkdir -p $(LOCAL_BIN)
 	@PB_REL="https://github.com/protocolbuffers/protobuf/releases" ;\
-	PB_VER="32.1" ;\
+	PB_VER="27.2" ;\
 	if [ "$$(uname -s)" = "Darwin" ]; then \
-		curl -L "$${PB_REL}/download/v$${PB_VER}/protoc-$${PB_VER}-osx-aarch_64.zip" -o /tmp/protoc.zip; \
+		curl -sSL "$${PB_REL}/download/v$${PB_VER}/protoc-$${PB_VER}-osx-aarch_64.zip" -o /tmp/protoc.zip; \
 	elif [ "$$(uname -s)" = "Linux" ]; then \
-		curl -L "$${PB_REL}/download/v$${PB_VER}/protoc-$${PB_VER}-linux-x86_64.zip" -o /tmp/protoc.zip; \
+		curl -sSL "$${PB_REL}/download/v$${PB_VER}/protoc-$${PB_VER}-linux-x86_64.zip" -o /tmp/protoc.zip; \
 	else \
 		echo "Unsupported OS: $$(uname -s)"; exit 1; \
-	fi && unzip /tmp/protoc.zip -x readme.txt -d "$(GOPATH)" && rm /tmp/protoc.zip; \
+	fi && \
+	unzip -o -j /tmp/protoc.zip bin/protoc -d $(LOCAL_BIN) && \
+	unzip -o /tmp/protoc.zip "include/*" -d $(LOCAL_BIN) && \
+	rm /tmp/protoc.zip; \
+	chmod +x $(LOCAL_BIN)/protoc
 
-${SQLC}:
-	@echo "Installing sqlc..."
-	@go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
+# Build the plugins directly from the versions locked in go.tool.mod
+${PROTOC_GEN_GO}: go.tool.mod
+	@echo "Building protoc-gen-go from go.tool.mod..."
+	@mkdir -p $(LOCAL_BIN)
+	@go build -modfile=go.tool.mod -o $@ google.golang.org/protobuf/cmd/protoc-gen-go
 
-${LINTER}:
-	@echo "Installing golangci-lint..."
-	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
-
-${TESTSUM}:
-	@echo "Installing gotestsum..."
-	@go install gotest.tools/gotestsum@latest
-
-${PROTOC_GEN_GO}:
-	@echo "Installing protoc-gen-go..."
-	@go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.9
-
-${PROTOC_GEN_GRPC}:
-	@echo "Installing protoc-gen-go-grpc..."
-	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+${PROTOC_GEN_GRPC}: go.tool.mod
+	@echo "Building protoc-gen-go-grpc from go.tool.mod..."
+	@mkdir -p $(LOCAL_BIN)
+	@go build -modfile=go.tool.mod -o $@ google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
 # --- EXTERNAL GENERATION TARGETS --------------------------------------------------------------- #
 
@@ -173,33 +154,31 @@ where = ["src"]
 
 [tool.setuptools-git-versioning]
 enabled = true
-
 endef
-
 export GEN_PYPROJ
+
 .PHONY: gen.proto.python
 gen.proto.python: ${PROTOC}
 	@echo "Generating Python client bindings..."
 	@rm -rf gen/python && mkdir -p gen/python/src/dp_sdk
 	@uvx --from 'betterproto[compiler]==2.0.0b7' ${PROTOC} \
-        proto/ocf/dp/*.proto \
-        -I=proto \
-        --python_betterproto_opt=typing.310 \
-        --python_betterproto_out=gen/python/src/dp_sdk
-	@printf "%s" "$$pyproj" > gen/python/pyproject.toml
+		proto/ocf/dp/*.proto \
+		-I=proto \
+		-I=$(PROTOC_INCLUDE) \
+		--python_betterproto_opt=typing.310 \
+		--python_betterproto_out=gen/python/src/dp_sdk
 	@touch gen/python/src/dp_sdk/py.typed
 	@echo "$$GEN_PYPROJ" > gen/python/pyproject.toml
 	@echo "Building wheel..."
-	@cd gen/python && echo $$(uv run python -m setuptools_git_versioning) && uv build && cd ../..
+	@cd gen/python && echo $$(uv run python -m setuptools_git_versioning) && uv build
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
 
-.PHONY: run.db # Run an instance of Postgres with the required extensions
+.PHONY: run.db
 run.db:
 	docker build -f internal/server/postgres/infra/Containerfile internal/server/postgres/infra -t data-platform-pgdb:local
 	docker run --rm -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p "5400:5432" data-platform-pgdb:local postgres -c 'shared_preload_libraries=pg_cron' -c 'cron.database_name=postgres'
 
-.PHONY: run.notebook # Run a python notebook to inspect the API
+.PHONY: run.notebook
 run.notebook: gen.proto.python
 	uvx marimo edit --headless --sandbox examples/python-notebook/example.py
-

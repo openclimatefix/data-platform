@@ -124,6 +124,7 @@ var yields = func() []*pb.CreateForecastRequest_ForecastValue {
 			}(),
 		})
 	}
+
 	return values
 }
 

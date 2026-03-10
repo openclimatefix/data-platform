@@ -41,7 +41,9 @@ func timeWindowToPgWindow(
 		start = pgtype.Timestamp{Time: window.StartTimestampUtc.AsTime(), Valid: true}
 		end = pgtype.Timestamp{Time: window.EndTimestampUtc.AsTime(), Valid: true}
 	} else {
-		err = errors.New("invalid time window: both start and end timestamps must be provided or neither")
+		err = errors.New(
+			"invalid time window: both start and end timestamps must be provided or neither",
+		)
 	}
 
 	return start, end, err
@@ -179,6 +181,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 			} else {
 				roundedVal = math.Round(val64*1000) / 1000
 			}
+
 			roundedStats[k] = roundedVal
 		}
 
@@ -477,6 +480,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
 		return status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 	}
+
 	// Get the source as it was at the initial time of the time window
 	srcprms := db.GetSourceAtTimestampParams{
 		GeometryUuid: locationUuid,
@@ -986,6 +990,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	for i, locStr := range req.LocationUuids {
 		locUuids[i] = uuid.MustParse(locStr)
 	}
+
 	lpprms := db.ListPredictionsAtTimeForLocationsParams{
 		GeometryUuids:      locUuids,
 		SourceTypeID:       int16(req.EnergySource),
@@ -1428,6 +1433,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 				l.Warn().Str("key", k).Interface("value", v).Msg("skipping non-float statistic")
 				continue
 			}
+
 			otherStats[k] = float32(floatVal)
 		}
 
