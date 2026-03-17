@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
@@ -1242,6 +1243,8 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 		}
 	}
 
+	refreshIsRequired := req.NewLocationName != nil
+
 	// Update the source history with a new entry
 	csprms := db.CreateSourceEntryParams{
 		GeometryUuid:     dbSource.GeometryUuid,
@@ -1253,7 +1256,18 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	}
 
 	dbNewSource, err := querier.CreateSourceEntry(ctx, csprms)
-	if err != nil {
+	switch {
+	case err == nil:
+		refreshIsRequired = true
+
+	case errors.Is(err, pgx.ErrNoRows):
+		l.Debug().Msg("capacity and metadata unchanged; skipping insert")
+		dbNewSource = db.CreateSourceEntryRow{
+			CapacityWatts: dbSource.CapacityWatts,
+			ValidFromUtc:  csprms.ValidFromUtc,
+		}
+
+	default:
 		l.Err(err).Msgf("querier.CreateSourceEntry(%+v)", csprms)
 
 		return nil, status.Error(
@@ -1269,13 +1283,15 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 		Str("dp.source.valid_from_utc", dbNewSource.ValidFromUtc.Time.String()).
 		Msg("updated source")
 
-	err = querier.RefreshSourcesMaterializedView(ctx)
-	if err != nil {
-		l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
-		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
-	}
+	if refreshIsRequired {
+		err = querier.RefreshSourcesMaterializedView(ctx)
+		if err != nil {
+			l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
+			return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
+		}
 
-	l.Debug().Msg("refreshed sources materialised view")
+		l.Debug().Msg("refreshed sources materialised view")
+	}
 
 	return &pb.UpdateLocationResponse{
 		LocationUuid:           req.LocationUuid,

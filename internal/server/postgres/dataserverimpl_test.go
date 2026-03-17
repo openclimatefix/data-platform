@@ -239,6 +239,18 @@ func TestUpdateLocation(t *testing.T) {
 		expectedMetadata      map[string]any
 	}{
 		{
+			name: "Should return the same when the update doesn't change anything",
+			req: &pb.UpdateLocationRequest{
+				LocationUuid:              createResp.LocationUuid,
+				NewEffectiveCapacityWatts: func() *uint64 { v := uint64(1234e6); return &v }(),
+				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ValidFromUtc:              timestamppb.New(pivotTime.Add(-4 * time.Hour)),
+			},
+			expectedName:          "test_update_location_site",
+			expectedCapacityWatts: 1234e6,
+			expectedMetadata:      map[string]any{"source": "test"},
+		},
+		{
 			name: "Should update capacity to higher value",
 			req: &pb.UpdateLocationRequest{
 				LocationUuid:              createResp.LocationUuid,

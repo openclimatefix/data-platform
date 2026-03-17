@@ -69,7 +69,30 @@ WHERE
 
 -- name: CreateSourceEntry :one
 /* CreateSourceEntry creates a new source entry for a given geometry and source type.
+ * It fetches the state prior to the input valid time, and only inserts the new row if it differs
+ * from the previous one.
  */
+WITH prev_state AS (
+    SELECT
+        sh.capacity_watts,
+        sh.capacity_limit_sip,
+        sh.metadata
+    FROM loc.sources_history AS sh
+    WHERE sh.geometry_uuid = $1
+        AND sh.source_type_id = $2
+        AND sh.valid_from_utc <= $3
+    ORDER BY sh.valid_from_utc DESC
+    LIMIT 1
+),
+new_state AS (
+    SELECT
+        $1::UUID AS geometry_uuid,
+        $2::SMALLINT AS source_type_id,
+        sqlc.arg(capacity_watts)::BIGINT AS capacity_watts,
+        sqlc.narg(capacity_limit_sip)::SMALLINT AS capacity_limit_sip,
+        $3::TIMESTAMP AS valid_from_utc,
+        CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END AS metadata
+)
 INSERT INTO loc.sources_history (
     geometry_uuid,
     source_type_id,
@@ -77,14 +100,20 @@ INSERT INTO loc.sources_history (
     capacity_limit_sip,
     valid_from_utc,
     metadata
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
-) RETURNING geometry_uuid, source_type_id, capacity_watts, valid_from_utc, metadata;
+)
+SELECT
+    n.geometry_uuid,
+    n.source_type_id,
+    n.capacity_watts,
+    n.capacity_limit_sip,
+    n.valid_from_utc,
+    n.metadata
+FROM new_state AS n
+    LEFT OUTER JOIN prev_state AS p ON TRUE
+WHERE p.capacity_watts IS DISTINCT FROM n.capacity_watts
+    OR p.capacity_limit_sip IS DISTINCT FROM n.capacity_limit_sip
+    OR p.metadata IS DISTINCT FROM n.metadata
+RETURNING geometry_uuid, source_type_id, capacity_watts, valid_from_utc, metadata;
 
 -- name: RefreshSourcesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;
