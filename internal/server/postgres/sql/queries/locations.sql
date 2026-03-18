@@ -25,7 +25,7 @@ RETURNING
 /* GetGeometryWKB returns the geometries in WKB format for the given geometry UUIDs. */
 SELECT
     geometry_uuid,
-    ST_AsBinary(geom)::BYTEA AS geom_wkb
+    ST_ASBINARY(geom)::BYTEA AS geom_wkb
 FROM loc.geometries
 WHERE geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID []);
 
