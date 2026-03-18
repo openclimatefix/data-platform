@@ -1067,6 +1067,25 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 		Str("dp.source.valid_from_utc", dbSource.SysPeriod.Lower.Time.String()).
 		Msg("found source")
 
+	var geometry []byte
+	if req.IncludeGeometry {
+		gwkbprms := db.GetGeometryWKBParams{
+			GeometryUuids: []uuid.UUID{dbSource.GeometryUuid},
+		}
+
+		dbGeometry, err := querier.GetGeometryWKB(ctx, gwkbprms)
+		if err != nil {
+			l.Err(err).Msgf("querier.GetGeometryWKB(%+v)", gwkbprms)
+
+			return nil, status.Errorf(
+				codes.Internal,
+				"Failed to retrieve geometry for location. See logs for details.",
+			)
+		}
+
+		geometry = dbGeometry.GeomWkb
+	}
+
 	return &pb.GetLocationResponse{
 		LocationUuid: dbSource.GeometryUuid.String(),
 		LocationName: dbSource.GeometryName,
@@ -1076,6 +1095,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 		},
 		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
 		Metadata:               dbSource.MetadataJsonb,
+		GeometryWkb:            geometry,
 	}, nil
 }
 

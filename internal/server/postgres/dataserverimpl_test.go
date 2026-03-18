@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -568,6 +569,62 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 				for i, forecast := range resp.Values {
 					require.Equal(t, tc.expectedp50s[i], forecast.ValueFraction)
 				}
+			}
+		})
+	}
+}
+
+func TestGetLocation(t *testing.T) {
+	// Create a location to fetch
+	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+	require.NoError(t, err)
+	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_get_location_site",
+		GeometryWkt:            "POLYGON((0 0,0 1,1 1,1 0,0 0))",
+		EffectiveCapacityWatts: 12e6,
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
+		ValidFromUtc:           timestamppb.New(time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)),
+	})
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name string
+		req  *pb.GetLocationRequest
+	}{
+		{
+			name: "Should get location without geometry",
+			req: &pb.GetLocationRequest{
+				LocationUuid:    createResp.LocationUuid,
+				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				IncludeGeometry: false,
+			},
+		},
+		{
+			name: "Should get location with geometry",
+			req: &pb.GetLocationRequest{
+				LocationUuid:    createResp.LocationUuid,
+				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				IncludeGeometry: true,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := dc.GetLocation(t.Context(), tc.req)
+			require.NoError(t, err)
+			require.Equal(t, createResp.LocationUuid, resp.LocationUuid)
+			require.Equal(t, "test_get_location_site", resp.LocationName)
+			require.Equal(t, uint64(12e6), resp.EffectiveCapacityWatts)
+
+			if tc.req.IncludeGeometry {
+				expected, err := hex.DecodeString(
+					"01030000000100000005000000000000000000000000000000000000000000000000000000000000000000f03f000000000000f03f000000000000f03f000000000000f03f000000000000000000000000000000000000000000000000",
+				)
+				require.NoError(t, err)
+				require.Equal(t, expected, resp.GeometryWkb)
 			}
 		})
 	}
