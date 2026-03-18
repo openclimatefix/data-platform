@@ -589,9 +589,9 @@ func TestGetLocation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	testCases := []struct{
+	testCases := []struct {
 		name string
-		req *pb.GetLocationRequest
+		req  *pb.GetLocationRequest
 	}{
 		{
 			name: "Should get location without geometry",
@@ -618,8 +618,11 @@ func TestGetLocation(t *testing.T) {
 			require.Equal(t, createResp.LocationUuid, resp.LocationUuid)
 			require.Equal(t, "test_get_location_site", resp.LocationName)
 			require.Equal(t, uint64(12e6), resp.EffectiveCapacityWatts)
-			if tc.req.IncludeGeometry{
-				expected, err := hex.DecodeString("01030000000100000005000000000000000000000000000000000000000000000000000000000000000000f03f000000000000f03f000000000000f03f000000000000f03f000000000000000000000000000000000000000000000000")
+
+			if tc.req.IncludeGeometry {
+				expected, err := hex.DecodeString(
+					"01030000000100000005000000000000000000000000000000000000000000000000000000000000000000f03f000000000000f03f000000000000f03f000000000000f03f000000000000000000000000000000000000000000000000",
+				)
 				require.NoError(t, err)
 				require.Equal(t, expected, resp.GeometryWkb)
 			}
