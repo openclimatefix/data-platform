@@ -21,6 +21,14 @@ WHERE l.geometry_uuid = $1
 RETURNING
     l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
 
+-- name: GetGeometryWKB :one
+/* GetGeometryWKB returns the geometries in WKB format for the given geometry UUIDs. */
+SELECT
+    geometry_uuid,
+    ST_AsBinary(geom)::BYTEA AS geom_wkb
+FROM loc.geometries
+WHERE geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID []);
+
 -- name: GetGeometryGeoJSON :one
 /* GetLocationGeoJSON returns a GeoJSON FeatureCollection for the given geometries.
  * The simplification level can be adjusted via the `simplification_level` argument.
