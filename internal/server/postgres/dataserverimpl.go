@@ -1049,10 +1049,24 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
 		locUuids[i] = uuid.MustParse(locStr)
 	}
 
+	// Check that the observer exists
+	obprms := db.GetObserverByNameParams{ObserverName: req.ObserverName}
+	
+	dbObserver, err := querier.GetObserverByName(ctx, obprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obprms)
+		
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No observer of name '%s' found. Choose an existing observer or create a new one.",
+			req.ObserverName,
+		)
+	}
+
 	loprms := db.ListObservationsAtTimeForLocationsParams{
 		GeometryUuids:      locUuids,
 		SourceTypeID:       int16(req.EnergySource),
-		ObserverName:       req.ObserverName,
+		ObserverUuid:       dbObserver.ObserverUuid,
 		TargetTimestampUtc: pgtype.Timestamp{Time: req.TimestampUtc.AsTime(), Valid: true},
 	}
 

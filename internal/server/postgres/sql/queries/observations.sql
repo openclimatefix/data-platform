@@ -134,10 +134,6 @@ FROM obs.observed_generation_values AS og
 WHERE
     og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
     AND og.source_type_id = $1
-    AND og.observer_uuid
-    = (
-        SELECT observer_uuid FROM obs.observers
-        WHERE observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
-    )
+    AND og.observer_uuid = $2
     AND og.observation_timestamp_utc = sqlc.arg(target_timestamp_utc)::TIMESTAMP
     AND sh.sys_period @> og.observation_timestamp_utc;

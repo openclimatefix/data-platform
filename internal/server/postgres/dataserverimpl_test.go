@@ -663,7 +663,7 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 			},
 		},
 		{
-			name: "Should return no observations for non-existent observer",
+			name: "Shouldn't return observations for non-existent observer",
 			req: &pb.GetObservationsAtTimestampRequest{
 				LocationUuids: siteUuids,
 				ObserverName:  "non_existent_observer",
@@ -678,14 +678,15 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 			resp, err := dc.GetObservationsAtTimestamp(t.Context(), tc.req)
 			if strings.Contains(tc.name, "Shouldn't") {
 				require.Error(t, err)
-			}
+			} else {
 
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, resp.Values, len(tc.expectedFractions))
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				require.Len(t, resp.Values, len(tc.expectedFractions))
 
-			for i, obs := range resp.Values {
-				require.Equal(t, tc.expectedFractions[i], obs.ValueFraction)
+				for i, obs := range resp.Values {
+					require.Equal(t, tc.expectedFractions[i], obs.ValueFraction)
+				}
 			}
 		})
 	}
