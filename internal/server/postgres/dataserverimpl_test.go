@@ -574,6 +574,123 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 	}
 }
 
+func TestGetObservationsAtTimestamp(t *testing.T) {
+	pivotTime := time.Date(2025, 2, 26, 12, 0, 0, 0, time.UTC)
+	// Create an observer
+	observerResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
+		Name: "test_get_observations_at_timestamp_observer",
+	})
+	require.NoError(t, err)
+	// Create a few sites to attach the observations to
+	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+	require.NoError(t, err)
+
+	siteUuids := make([]string, 3)
+	for i := range siteUuids {
+		capacity := uint64(1000000 + i*100000)
+		siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+			LocationName: fmt.Sprintf("test_get_observations_at_timestamp_site_%d", i),
+			GeometryWkt: fmt.Sprintf(
+				"POINT(%f %f)",
+				-0.1+float32(i)*0.01,
+				51.5+float32(i)*0.01,
+			),
+			EffectiveCapacityWatts: capacity,
+			Metadata:               metadata,
+			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+			ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
+		})
+		require.NoError(t, err)
+		siteUuids[i] = siteResp.LocationUuid
+
+		req := &pb.CreateObservationsRequest{
+			LocationUuid: siteResp.LocationUuid,
+			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			ObserverName: observerResp.ObserverName,
+			Values: []*pb.CreateObservationsRequest_Value{
+				{
+					ValueWatts:   uint64(capacity / 10),
+					TimestampUtc: timestamppb.New(pivotTime),
+				},
+			},
+		}
+		_, err = dc.CreateObservations(t.Context(), req)
+		require.NoError(t, err)
+	}
+
+	testcases := []struct {
+		name              string
+		req               *pb.GetObservationsAtTimestampRequest
+		expectedFractions []float32
+	}{
+		{
+			name: "Should get observation at exact timestamp for single location",
+			req: &pb.GetObservationsAtTimestampRequest{
+				LocationUuids: []string{siteUuids[0]},
+				ObserverName:  observerResp.ObserverName,
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimestampUtc:  timestamppb.New(pivotTime),
+			},
+			expectedFractions: []float32{0.1},
+		},
+		{
+			name: "Should get observation at exact timestamp for multiple locations",
+			req: &pb.GetObservationsAtTimestampRequest{
+				LocationUuids: siteUuids,
+				ObserverName:  observerResp.ObserverName,
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimestampUtc:  timestamppb.New(pivotTime),
+			},
+			expectedFractions: []float32{0.1, 0.1, 0.1},
+		},
+		{
+			name: "Should return no observations where no values exist at timestamp",
+			req: &pb.GetObservationsAtTimestampRequest{
+				LocationUuids: siteUuids,
+				ObserverName:  observerResp.ObserverName,
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimestampUtc:  timestamppb.New(pivotTime.Add(5 * time.Minute)),
+			},
+		},
+		{
+			name: "Should return no observations for non-existent location",
+			req: &pb.GetObservationsAtTimestampRequest{
+				LocationUuids: []string{uuid.New().String()},
+				ObserverName:  observerResp.ObserverName,
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimestampUtc:  timestamppb.New(pivotTime),
+			},
+		},
+		{
+			name: "Should return no observations for non-existent observer",
+			req: &pb.GetObservationsAtTimestampRequest{
+				LocationUuids: siteUuids,
+				ObserverName:  "non_existent_observer",
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimestampUtc:  timestamppb.New(pivotTime),
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := dc.GetObservationsAtTimestamp(t.Context(), tc.req)
+			if strings.Contains(tc.name, "Shouldn't") {
+				require.Error(t, err)
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Len(t, resp.Values, len(tc.expectedFractions))
+
+			for i, obs := range resp.Values {
+				require.Equal(t, tc.expectedFractions[i], obs.ValueFraction)
+			}
+		})
+	}
+}
+
 func TestGetLocation(t *testing.T) {
 	// Create a location to fetch
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
