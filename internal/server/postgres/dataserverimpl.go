@@ -1031,6 +1031,75 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	}, nil
 }
 
+func (s *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
+	ctx context.Context,
+	req *pb.GetObservationsAtTimestampRequest,
+) (*pb.GetObservationsAtTimestampResponse, error) {
+	l := zerolog.Ctx(ctx)
+
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	// Set default timestamp to now if not provided
+	if req.TimestampUtc == nil {
+		req.TimestampUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
+	}
+
+	locUuids := make([]uuid.UUID, len(req.LocationUuids))
+	for i, locStr := range req.LocationUuids {
+		locUuids[i] = uuid.MustParse(locStr)
+	}
+
+	// Check that the observer exists
+	obprms := db.GetObserverByNameParams{ObserverName: req.ObserverName}
+	
+	dbObserver, err := querier.GetObserverByName(ctx, obprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obprms)
+		
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No observer of name '%s' found. Choose an existing observer or create a new one.",
+			req.ObserverName,
+		)
+	}
+
+	loprms := db.ListObservationsAtTimeForLocationsParams{
+		GeometryUuids:      locUuids,
+		SourceTypeID:       int16(req.EnergySource),
+		ObserverUuid:       dbObserver.ObserverUuid,
+		TargetTimestampUtc: pgtype.Timestamp{Time: req.TimestampUtc.AsTime(), Valid: true},
+	}
+
+	dbObs, err := querier.ListObservationsAtTimeForLocations(ctx, loprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.ListObservationsAtTimeForLocations(%+v)", loprms)
+
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No observations found for the specified locations at the given time. "+
+				"Ensure the observer exists, and that the location is operational.",
+		)
+	}
+
+	observations := make([]*pb.GetObservationsAtTimestampResponse_Value, len(dbObs))
+	for i, obs := range dbObs {
+		observations[i] = &pb.GetObservationsAtTimestampResponse_Value{
+			ValueFraction:          float32(obs.ValueSip) / 30000.0,
+			EffectiveCapacityWatts: uint64(obs.CapacityWatts),
+			LocationUuid:           obs.GeometryUuid.String(),
+			Latlng: &pb.LatLng{
+				Latitude:  obs.Latitude,
+				Longitude: obs.Longitude,
+			},
+		}
+	}
+
+	return &pb.GetObservationsAtTimestampResponse{
+		TimestampUtc: req.TimestampUtc,
+		Values:       observations,
+	}, nil
+}
+
 func (s *DataPlatformDataServiceServerImpl) GetLocation(
 	ctx context.Context,
 	req *pb.GetLocationRequest,

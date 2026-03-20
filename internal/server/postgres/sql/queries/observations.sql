@@ -113,3 +113,27 @@ SELECT
     capacity_watts
 FROM ranked_observations
 WHERE rn = 1;
+
+-- name: ListObservationsAtTimeForLocations :many
+/* ListObservationsAtTimeForLocations retrieves observed generation values as percentages
+ * of capacity for a specific time.
+ * This is useful for comparing observations across multiple locations.
+ * Observed values are 16-bit integers, with 0 representing 0% and 30000 representing 100% of capacity.
+ */
+SELECT
+    og.geometry_uuid,
+    og.source_type_id,
+    og.observation_timestamp_utc,
+    og.value_sip,
+    sh.capacity_watts,
+    sh.latitude,
+    sh.longitude,
+    sh.geometry_name
+FROM obs.observed_generation_values AS og
+    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
+WHERE
+    og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+    AND og.source_type_id = $1
+    AND og.observer_uuid = $2
+    AND og.observation_timestamp_utc = sqlc.arg(target_timestamp_utc)::TIMESTAMP
+    AND sh.sys_period @> og.observation_timestamp_utc;

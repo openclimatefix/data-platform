@@ -161,6 +161,44 @@ message GetForecastAtTimestampResponse {
 }
 
 
+message GetObservationsAtTimestampRequest {
+  repeated string location_uuids = 1 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 1000,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items = {
+      string: {uuid: true}
+    }
+  ];
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
+  string observer_name = 3 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_observer_name) = true
+  ];
+  /* The time to fetch observations for.
+   * If not specified, the current time will be used.
+   */
+  optional google.protobuf.Timestamp timestamp_utc = 4 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000} }
+  ];
+}
+
+message GetObservationsAtTimestampResponse {
+  message Value {
+    string location_uuid = 1;
+    float value_fraction = 2;
+    uint64 effective_capacity_watts = 3;
+    LatLng latlng = 4;
+    google.protobuf.Struct metadata = 5;
+  }
+
+  google.protobuf.Timestamp timestamp_utc = 1;
+  repeated Value values = 2;
+}
+
+
 message GetLatestForecastsRequest {
   string location_uuid = 1 [
     (buf.validate.field).required = true,

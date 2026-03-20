@@ -568,6 +568,32 @@ func (d *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	}, nil
 }
 
+func (d *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
+	ctx context.Context,
+	req *pb.GetObservationsAtTimestampRequest,
+) (*pb.GetObservationsAtTimestampResponse, error) {
+	values := make([]*pb.GetObservationsAtTimestampResponse_Value, len(req.LocationUuids))
+	for i := range values {
+		ll := randomUkLngLat()
+		sd := determineIrradiance(req.TimestampUtc.AsTime(), ll)
+
+		values[i] = &pb.GetObservationsAtTimestampResponse_Value{
+			LocationUuid: req.LocationUuids[i],
+			Latlng: &pb.LatLng{
+				Latitude:  float32(ll.latDegs),
+				Longitude: float32(ll.lonDegs),
+			},
+			ValueFraction:          float32(sd.normalizedIrradiance()),
+			EffectiveCapacityWatts: 150e6,
+		}
+	}
+
+	return &pb.GetObservationsAtTimestampResponse{
+		TimestampUtc: req.TimestampUtc,
+		Values:       values,
+	}, nil
+}
+
 // GetWeekAverageDeltas implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	ctx context.Context,

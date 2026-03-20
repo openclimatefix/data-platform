@@ -22,6 +22,10 @@ service DataPlatformDataService {
    * (i.e. many points in time, one single location).
    */
   rpc GetObservationsAsTimeseries(GetObservationsAsTimeseriesRequest) returns (GetObservationsAsTimeseriesResponse) {}
+  /* GetObservationAtTimestamp fetches a vertical slice of observed data.
+   * (i.e. many locations, at a single point in time). This is handy for e.g. display on a map.
+   */
+  rpc GetObservationsAtTimestamp(GetObservationsAtTimestampRequest) returns (GetObservationsAtTimestampResponse) {}
 
   /* GetLocation fetches detailed information about a specific location. */
   rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
