@@ -1022,6 +1022,8 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 				Longitude: value.Longitude,
 			},
 			Metadata: value.Metadata,
+			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
+			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
 		}
 	}
 
