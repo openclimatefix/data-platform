@@ -224,7 +224,7 @@ WHERE f.forecast_uuid = $1
  * Predicted values are smallint percentages (sip) of capcity;
  * with 0 representing 0% and 30000 representing 100% of capacity.
  *
- * Note that the 2 day intervals are due to our forecasts only going out to 2 days.
+ * Note that the 3 day intervals are due to our forecasts only going out to 2 days.
  * If we increase that horizon, these will need to be increased.
  */
 WITH relevant_forecasts AS (
@@ -244,7 +244,7 @@ WITH relevant_forecasts AS (
             COALESCE(
                 sqlc.narg(pivot_timestamp)::TIMESTAMP,
                 sqlc.arg(start_timestamp_utc)::TIMESTAMP
-            ) - INTERVAL '2 days'
+            ) - INTERVAL '3 days'
         )
         AND f.forecast_uuid < UUIDV7_BOUNDARY(
             COALESCE(
@@ -307,7 +307,7 @@ ORDER BY
  * This is useful for comparing predictions across multiple locations.
  * Predicted values are 16-bit integers, with 0 representing 0% and 30000 representing 100% of capacity.
  *
- * Note that the 2 day intervals are due to our forecasts only going out to 2 days.
+ * Note that the 3 day intervals are due to our forecasts only going out to 2 days.
  * If we increase that horizon, these will need to be increased.
  */
 WITH relevant_forecasts AS (
@@ -327,7 +327,7 @@ WITH relevant_forecasts AS (
             COALESCE(
                 sqlc.narg(pivot_timestamp)::TIMESTAMP,
                 sqlc.arg(target_timestamp_utc)::TIMESTAMP
-            ) - INTERVAL '2 days'
+            ) - INTERVAL '3 days'
         )
         AND f.forecast_uuid < UUIDV7_BOUNDARY(
             COALESCE(
