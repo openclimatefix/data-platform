@@ -154,6 +154,8 @@ message GetForecastAtTimestampResponse {
     uint64 effective_capacity_watts = 4;
     LatLng latlng = 5;
     google.protobuf.Struct metadata = 6;
+    google.protobuf.Timestamp initialization_timestamp_utc = 7;
+    google.protobuf.Timestamp created_timestamp_utc = 8;
   }
 
   google.protobuf.Timestamp timestamp_utc = 1;

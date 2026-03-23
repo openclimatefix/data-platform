@@ -568,6 +568,8 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 
 				for i, forecast := range resp.Values {
 					require.Equal(t, tc.expectedp50s[i], forecast.ValueFraction)
+					require.NotNil(t, forecast.InitializationTimestampUtc)
+					require.NotNil(t, forecast.CreatedTimestampUtc)
 				}
 			}
 		})
