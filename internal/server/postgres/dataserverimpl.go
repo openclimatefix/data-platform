@@ -1051,11 +1051,11 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
 
 	// Check that the observer exists
 	obprms := db.GetObserverByNameParams{ObserverName: req.ObserverName}
-	
+
 	dbObserver, err := querier.GetObserverByName(ctx, obprms)
 	if err != nil {
 		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obprms)
-		
+
 		return nil, status.Errorf(
 			codes.NotFound,
 			"No observer of name '%s' found. Choose an existing observer or create a new one.",

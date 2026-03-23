@@ -679,7 +679,6 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 			if strings.Contains(tc.name, "Shouldn't") {
 				require.Error(t, err)
 			} else {
-
 				require.NoError(t, err)
 				require.NotNil(t, resp)
 				require.Len(t, resp.Values, len(tc.expectedFractions))
