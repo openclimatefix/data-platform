@@ -201,9 +201,9 @@ CREATE TABLE pred.predicted_generation_values (
     ),
     CONSTRAINT other_stats_valid_fractions_check
         CHECK (pred.check_all_jsonb_values_are_valid_stat_fractions(other_stats_fractions)),
-    PRIMARY KEY (forecast_uuid, target_time_utc, horizon_mins)
+    PRIMARY KEY (forecast_uuid, target_time_utc)
 )
-PARTITION BY RANGE (target_time_utc);
+PARTITION BY RANGE (forecast_uuid);
 
 /*
  * Manage partitions with pg_partman.
@@ -213,18 +213,20 @@ PARTITION BY RANGE (target_time_utc);
  */
 SELECT partman.create_parent(
     p_parent_table => 'pred.predicted_generation_values',
-    p_control => 'target_time_utc',
+    p_control => 'forecast_uuid',
     p_type => 'range',
     p_interval => '1 week',
     p_automatic_maintenance => 'on',
     p_jobmon => FALSE,
+    p_time_encoder => 'partman.uuid7_time_encoder',
+    p_time_decoder => 'partman.uuid7_time_decoder',
     p_premake => 7
 );
 UPDATE partman.part_config
 SET
     retention = '1 month',
     retention_keep_table = TRUE,
-    retention_keep_index = FALSE,
+    retention_keep_index = TRUE,
     infinite_time_partitions = TRUE
 WHERE parent_table = 'pred.predicted_generation_values';
 SELECT partman.run_maintenance('pred.predicted_generation_values');
