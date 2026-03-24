@@ -103,7 +103,7 @@ WHERE forecast_uuid = $1;
 WITH forecasts_to_delete AS (
     SELECT forecast_uuid FROM pred.forecasts AS f
     WHERE f.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(init_timestamp)::TIMESTAMP)
-        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(init_timestamp)::TIMESTAMP + INTERVAL '1 second')
+        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(init_timestamp)::TIMESTAMP + INTERVAL '1 millisecond')
         AND f.geometry_uuid = $1
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
@@ -403,12 +403,12 @@ relevant_forecasts AS (
     FROM desired_init_times AS dit
         INNER JOIN pred.forecasts AS f
         ON f.forecast_uuid >= UUIDV7_BOUNDARY(dit.init_time_utc)
-            AND f.forecast_uuid < UUIDV7_BOUNDARY(dit.init_time_utc + INTERVAL '1 second')
+            AND f.forecast_uuid < UUIDV7_BOUNDARY(dit.init_time_utc + INTERVAL '1 millisecond')
     WHERE f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days')
-        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 second')
+        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 millisecond')
 ),
 relevant_predicted_values AS (
     SELECT
