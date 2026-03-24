@@ -107,12 +107,6 @@ WITH forecasts_to_delete AS (
         AND f.geometry_uuid = $1
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
-),
-deleted_values AS (
-    DELETE FROM pred.predicted_generation_values
-    WHERE target_time_utc >= sqlc.arg(init_timestamp)::TIMESTAMP
-        AND target_time_utc < sqlc.arg(init_timestamp)::TIMESTAMP + INTERVAL '3 days'
-        AND forecast_uuid IN (SELECT forecast_uuid FROM forecasts_to_delete)
 )
 DELETE FROM pred.forecasts
 WHERE forecast_uuid IN (SELECT forecast_uuid FROM forecasts_to_delete);
