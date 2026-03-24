@@ -221,29 +221,26 @@ WHERE f.forecast_uuid = $1
  * Note that the 3 day intervals are due to our forecasts only going out to 2 days.
  * If we increase that horizon, these will need to be increased.
  */
-WITH relevant_forecasts AS (
+WITH allowed_forecasts_overlapping_window AS (
     SELECT
         f.forecast_uuid,
-        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
-        f.created_at_utc,
         f.geometry_uuid,
         f.source_type_id,
-        f.metadata
+        f.created_at_utc,
+        f.metadata,
+        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc
     FROM pred.forecasts AS f
-    WHERE
-        f.geometry_uuid = $1
+    WHERE f.geometry_uuid = $1
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(
-            COALESCE(
-                sqlc.narg(pivot_timestamp)::TIMESTAMP,
-                sqlc.arg(start_timestamp_utc)::TIMESTAMP
-            ) - INTERVAL '3 days'
+            COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(start_timestamp_utc)::TIMESTAMP)
+            - INTERVAL '3 days'
         )
         AND f.forecast_uuid < UUIDV7_BOUNDARY(
-            COALESCE(
-                sqlc.narg(pivot_timestamp)::TIMESTAMP,
-                sqlc.arg(end_timestamp_utc)::TIMESTAMP
+            LEAST(
+                COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(end_timestamp_utc)::TIMESTAMP),
+                sqlc.arg(end_timestamp_utc)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
             ) + INTERVAL '1 millisecond'
         )
         AND f.target_period && TSRANGE(
@@ -252,48 +249,41 @@ WITH relevant_forecasts AS (
             '[]'
         )
 ),
-collapsed_values AS (
+winning_predictions AS (
     SELECT DISTINCT ON (pg.target_time_utc)
-        pg.forecast_uuid,
         pg.target_time_utc,
+        fow.forecast_uuid,
+        fow.init_time_utc,
+        fow.created_at_utc,
+        fow.geometry_uuid,
+        fow.source_type_id,
         pg.horizon_mins,
-        rf.init_time_utc,
-        rf.created_at_utc,
-        rf.geometry_uuid,
-        rf.source_type_id,
-        COALESCE(pg.metadata || rf.metadata, pg.metadata, rf.metadata) AS metadata
-    FROM pred.predicted_generation_values AS pg
-        INNER JOIN relevant_forecasts AS rf USING (forecast_uuid)
-    WHERE
-        pg.target_time_utc BETWEEN
-        sqlc.arg(start_timestamp_utc)::TIMESTAMP
-        AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
+        pg.p50_sip,
+        pg.other_stats_fractions,
+        COALESCE(pg.metadata || fow.metadata, pg.metadata, fow.metadata) AS metadata
+    FROM allowed_forecasts_overlapping_window AS fow
+        INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
+    WHERE pg.target_time_utc BETWEEN sqlc.arg(start_timestamp_utc)::TIMESTAMP AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
         AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
-    ORDER BY
-        pg.target_time_utc ASC,
-        pg.horizon_mins ASC
+    -- Sorting by decreasing init time ensures the DISTINCT captures the lowest allowed horizon
+    ORDER BY pg.target_time_utc ASC, fow.init_time_utc DESC
 )
 SELECT
-    cv.horizon_mins,
-    pgv.p50_sip,
-    cv.target_time_utc,
-    pgv.other_stats_fractions,
-    cv.metadata,
-    cv.init_time_utc,
-    cv.created_at_utc,
+    wp.horizon_mins,
+    wp.p50_sip,
+    wp.target_time_utc,
+    wp.other_stats_fractions,
+    wp.metadata,
+    wp.init_time_utc,
+    wp.created_at_utc,
     sv.capacity_watts,
     sv.latitude,
     sv.longitude,
     sv.geometry_name
-FROM collapsed_values AS cv
-    INNER JOIN pred.predicted_generation_values AS pgv
-    USING (forecast_uuid, target_time_utc, horizon_mins)
-    INNER JOIN loc.sources_mv AS sv
-    USING (geometry_uuid, source_type_id)
-WHERE
-    sv.sys_period @> cv.target_time_utc
-ORDER BY
-    cv.target_time_utc ASC;
+FROM winning_predictions AS wp
+    INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
+WHERE sv.sys_period @> wp.target_time_utc
+ORDER BY wp.target_time_utc ASC;
 
 -- name: ListPredictionsAtTimeForLocations :many
 /* ListPredictionsAtTimeForLocations retrieves predicted generation values as percentages
@@ -303,12 +293,11 @@ ORDER BY
  *
  * Note that the 3 day intervals are due to our forecasts only going out to 2 days.
  * If we increase that horizon, these will need to be increased.
- * Unnesting the locations to begin with helps partitionwise querying.
  */
 WITH target_locations AS (
     SELECT UNNEST(sqlc.arg(geometry_uuids)::UUID []) AS geometry_uuid
 ),
-relevant_forecasts AS (
+latest_allowed_forecast_per_location AS (
     SELECT DISTINCT ON (f.geometry_uuid)
         f.forecast_uuid,
         f.geometry_uuid,
@@ -320,62 +309,42 @@ relevant_forecasts AS (
         INNER JOIN pred.forecasts AS f ON tl.geometry_uuid = f.geometry_uuid
     WHERE f.source_type_id = $1
         AND f.forecaster_id = $2
+        AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(
-            COALESCE(
-                sqlc.narg(pivot_timestamp)::TIMESTAMP,
-                sqlc.arg(target_timestamp_utc)::TIMESTAMP
-            ) - INTERVAL '3 days'
+            COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(target_timestamp_utc)::TIMESTAMP)
+            - INTERVAL '3 days'
         )
+        -- Filter on horizon by checking against the init time to avoid a join to the PGVs table
         AND f.forecast_uuid < UUIDV7_BOUNDARY(
-            COALESCE(
-                sqlc.narg(pivot_timestamp)::TIMESTAMP,
-                sqlc.arg(target_timestamp_utc)::TIMESTAMP
+            LEAST(
+                COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(target_timestamp_utc)::TIMESTAMP),
+                sqlc.arg(target_timestamp_utc)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
             ) + INTERVAL '1 millisecond'
         )
-        AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
+    -- Sort by decreasing init time so DISTINCT captures the lowest allowable horizon
     ORDER BY f.geometry_uuid ASC, f.forecast_uuid DESC
-),
-ranked_predictions AS (
-    SELECT
-        rf.forecast_uuid,
-        rf.geometry_uuid,
-        rf.source_type_id,
-        rf.created_at_utc,
-        rf.init_time_utc,
-        pg.horizon_mins,
-        pg.p50_sip,
-        pg.target_time_utc,
-        pg.other_stats_fractions,
-        COALESCE(pg.metadata || rf.metadata, pg.metadata, rf.metadata) AS metadata,
-        ROW_NUMBER() OVER (
-            PARTITION BY rf.geometry_uuid
-            ORDER BY pg.horizon_mins ASC
-        ) AS rn
-    FROM relevant_forecasts AS rf
-        INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
-    WHERE
-        pg.target_time_utc = sqlc.arg(target_timestamp_utc)::TIMESTAMP
-        AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
 )
 SELECT
-    rp.forecast_uuid,
-    rp.geometry_uuid,
-    rp.source_type_id,
-    rp.horizon_mins,
-    rp.p50_sip,
-    rp.target_time_utc,
-    rp.created_at_utc,
-    rp.init_time_utc,
-    rp.metadata,
-    rp.other_stats_fractions,
+    lf.forecast_uuid,
+    lf.geometry_uuid,
+    lf.source_type_id,
+    pg.horizon_mins,
+    pg.p50_sip,
+    pg.target_time_utc,
+    lf.created_at_utc,
+    lf.init_time_utc,
+    pg.other_stats_fractions,
     sv.capacity_watts,
     sv.latitude,
     sv.longitude,
-    sv.geometry_name
-FROM ranked_predictions AS rp
+    sv.geometry_name,
+    COALESCE(pg.metadata || lf.metadata, pg.metadata, lf.metadata) AS metadata
+FROM latest_allowed_forecast_per_location AS lf
+    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
-WHERE rp.rn = 1
-    AND sv.sys_period @> rp.target_time_utc;
+WHERE
+    pg.target_time_utc = sqlc.arg(target_timestamp_utc)::TIMESTAMP
+    AND sv.sys_period @> pg.target_time_utc;
 
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed generation values
