@@ -83,36 +83,27 @@ WHERE
  * observer. The value is returned as a 16-bit integer, with 0 representing 0%
  * and 30000 representing 100% of capacity.
  */
-WITH ranked_observations AS (
-    SELECT
-        og.geometry_uuid,
-        og.source_type_id,
-        og.observation_timestamp_utc,
-        og.value_sip,
-        sh.capacity_limit_sip,
-        sh.capacity_watts,
-        ROW_NUMBER() OVER (
-            PARTITION BY og.geometry_uuid, og.source_type_id, o.observer_uuid
-            ORDER BY og.observation_timestamp_utc DESC
-        ) AS rn
-    FROM obs.observed_generation_values AS og
-        INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
-        INNER JOIN obs.observers AS o USING (observer_uuid)
-    WHERE
-        og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
-        AND og.source_type_id = $1
-        AND o.observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
-        AND sh.sys_period @> og.observation_timestamp_utc
-        AND og.observation_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
-)
-SELECT
-    geometry_uuid,
-    source_type_id,
-    observation_timestamp_utc,
-    value_sip,
-    capacity_watts
-FROM ranked_observations
-WHERE rn = 1;
+SELECT DISTINCT ON (og.geometry_uuid, og.source_type_id, o.observer_uuid)
+    og.geometry_uuid,
+    og.source_type_id,
+    og.observation_timestamp_utc,
+    og.value_sip,
+    sh.capacity_limit_sip,
+    sh.capacity_watts
+FROM obs.observed_generation_values AS og
+    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
+    INNER JOIN obs.observers AS o USING (observer_uuid)
+WHERE
+    og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+    AND og.source_type_id = $1
+    AND o.observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
+    AND sh.sys_period @> og.observation_timestamp_utc
+    AND og.observation_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
+ORDER BY
+    og.geometry_uuid ASC,
+    og.source_type_id ASC,
+    o.observer_uuid ASC,
+    og.observation_timestamp_utc DESC;
 
 -- name: ListObservationsAtTimeForLocations :many
 /* ListObservationsAtTimeForLocations retrieves observed generation values as percentages

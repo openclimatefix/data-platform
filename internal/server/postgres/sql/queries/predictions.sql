@@ -303,8 +303,12 @@ ORDER BY
  *
  * Note that the 3 day intervals are due to our forecasts only going out to 2 days.
  * If we increase that horizon, these will need to be increased.
+ * Unnesting the locations to begin with helps partitionwise querying.
  */
-WITH relevant_forecasts AS (
+WITH target_locations AS (
+    SELECT UNNEST(sqlc.arg(geometry_uuids)::UUID []) AS geometry_uuid
+),
+relevant_forecasts AS (
     SELECT DISTINCT ON (f.geometry_uuid)
         f.forecast_uuid,
         f.geometry_uuid,
@@ -312,10 +316,9 @@ WITH relevant_forecasts AS (
         f.created_at_utc,
         UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
         f.metadata
-    FROM pred.forecasts AS f
-    WHERE
-        f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
-        AND f.source_type_id = $1
+    FROM target_locations AS tl
+        INNER JOIN pred.forecasts AS f ON tl.geometry_uuid = f.geometry_uuid
+    WHERE f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(
             COALESCE(
@@ -393,18 +396,19 @@ WITH desired_init_times AS (
 relevant_forecasts AS (
     SELECT
         f.forecast_uuid,
-        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
         f.source_type_id,
         f.geometry_uuid,
-        f.forecaster_id
-    FROM pred.forecasts AS f
-        INNER JOIN desired_init_times AS dit
-        ON UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP = dit.init_time_utc
+        f.forecaster_id,
+        dit.init_time_utc
+    FROM desired_init_times AS dit
+        INNER JOIN pred.forecasts AS f
+        ON f.forecast_uuid >= UUIDV7_BOUNDARY(dit.init_time_utc)
+            AND f.forecast_uuid < UUIDV7_BOUNDARY(dit.init_time_utc + INTERVAL '1 second')
     WHERE f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days')
-        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 millisecond')
+        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 second')
 ),
 relevant_predicted_values AS (
     SELECT
