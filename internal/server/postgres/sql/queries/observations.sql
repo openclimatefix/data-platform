@@ -82,28 +82,43 @@ WHERE
 /* GetLatestObservations gets the latest observations for a given location set, source type, and
  * observer. The value is returned as a 16-bit integer, with 0 representing 0%
  * and 30000 representing 100% of capacity.
+ *
+ * It uses lateral joins to perform a reverse index scan for efficiency.
  */
-SELECT DISTINCT ON (og.geometry_uuid, og.source_type_id, o.observer_uuid)
-    og.geometry_uuid,
-    og.source_type_id,
-    og.observation_timestamp_utc,
-    og.value_sip,
+WITH target_locations AS (
+    SELECT UNNEST(sqlc.arg(geometry_uuids)::UUID []) AS geometry_uuid
+),
+target_observer AS (
+    SELECT observer_uuid
+    FROM obs.observers
+    WHERE observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
+)
+SELECT
+    tl.geometry_uuid::UUID AS geometry_uuid, -- SQLC complains without this
+    sqlc.arg(source_type_id)::SMALLINT AS source_type_id,
+    latest_obs.observation_timestamp_utc,
+    latest_obs.value_sip,
     sh.capacity_limit_sip,
     sh.capacity_watts
-FROM obs.observed_generation_values AS og
-    INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
-    INNER JOIN obs.observers AS o USING (observer_uuid)
-WHERE
-    og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
-    AND og.source_type_id = $1
-    AND o.observer_name = LOWER(sqlc.arg(observer_name)::TEXT)
-    AND sh.sys_period @> og.observation_timestamp_utc
-    AND og.observation_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
-ORDER BY
-    og.geometry_uuid ASC,
-    og.source_type_id ASC,
-    o.observer_uuid ASC,
-    og.observation_timestamp_utc DESC;
+FROM target_locations AS tl
+    CROSS JOIN target_observer AS tobs
+    CROSS JOIN
+        LATERAL (
+            SELECT
+                og.observation_timestamp_utc,
+                og.value_sip
+            FROM obs.observed_generation_values AS og
+            WHERE og.geometry_uuid = tl.geometry_uuid
+                AND og.source_type_id = sqlc.arg(source_type_id)::SMALLINT
+                AND og.observer_uuid = tobs.observer_uuid
+                AND og.observation_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
+            ORDER BY og.observation_timestamp_utc DESC
+            LIMIT 1
+        ) AS latest_obs
+    INNER JOIN loc.sources_mv AS sh
+    ON tl.geometry_uuid = sh.geometry_uuid
+        AND sh.source_type_id = sqlc.arg(source_type_id)::SMALLINT
+        AND sh.sys_period @> latest_obs.observation_timestamp_utc;
 
 -- name: ListObservationsAtTimeForLocations :many
 /* ListObservationsAtTimeForLocations retrieves observed generation values as percentages
