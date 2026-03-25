@@ -294,52 +294,67 @@ ORDER BY wp.target_time_utc ASC;
  * Note that the 3 day intervals are due to our forecasts only going out to 2 days.
  * If we increase that horizon, these will need to be increased.
  */
+-- name: ListPredictionsAtTimeForLocations :many
 WITH target_locations AS (
     SELECT UNNEST(sqlc.arg(geometry_uuids)::UUID []) AS geometry_uuid
 ),
 latest_allowed_forecast_per_location AS (
-    SELECT DISTINCT ON (f.geometry_uuid)
-        f.forecast_uuid,
-        f.geometry_uuid,
-        f.source_type_id,
-        f.created_at_utc,
-        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
-        f.metadata
+    SELECT
+        lf.forecast_uuid,
+        tl.geometry_uuid::UUID AS geometry_uuid, -- again, SQLC complains without this
+        lf.source_type_id,
+        lf.created_at_utc,
+        UUIDV7_EXTRACT_TIMESTAMP(lf.forecast_uuid)::TIMESTAMP AS init_time_utc,
+        lf.metadata
     FROM target_locations AS tl
-        INNER JOIN pred.forecasts AS f ON tl.geometry_uuid = f.geometry_uuid
-    WHERE f.source_type_id = $1
-        AND f.forecaster_id = $2
-        AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
-        AND f.forecast_uuid >= UUIDV7_BOUNDARY(
-            COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(target_timestamp_utc)::TIMESTAMP)
-            - INTERVAL '3 days'
-        )
-        -- Filter on horizon by checking against the init time to avoid a join to the PGVs table
-        AND f.forecast_uuid < UUIDV7_BOUNDARY(
-            LEAST(
-                COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(target_timestamp_utc)::TIMESTAMP),
-                sqlc.arg(target_timestamp_utc)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-            ) + INTERVAL '1 millisecond'
-        )
-    -- Sort by decreasing init time so DISTINCT captures the lowest allowable horizon
-    ORDER BY f.geometry_uuid ASC, f.forecast_uuid DESC
+        CROSS JOIN LATERAL (
+            SELECT
+                f.forecast_uuid,
+                f.source_type_id,
+                f.created_at_utc,
+                f.metadata
+            FROM pred.forecasts AS f
+            WHERE f.geometry_uuid = tl.geometry_uuid
+                AND f.source_type_id = $1
+                AND f.forecaster_id = $2
+                AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
+                AND f.forecast_uuid >= UUIDV7_BOUNDARY(
+                    COALESCE(
+                        sqlc.narg(pivot_timestamp)::TIMESTAMP,
+                        sqlc.arg(target_timestamp_utc)::TIMESTAMP
+                    ) - INTERVAL '3 days'
+                )
+                AND f.forecast_uuid < UUIDV7_BOUNDARY(
+                    LEAST(
+                        COALESCE(
+                            sqlc.narg(pivot_timestamp)::TIMESTAMP,
+                            sqlc.arg(target_timestamp_utc)::TIMESTAMP
+                        ),
+                        sqlc.arg(target_timestamp_utc)::TIMESTAMP - MAKE_INTERVAL(
+                            mins => sqlc.arg(horizon_mins)::INTEGER
+                        )
+                    ) + INTERVAL '1 millisecond'
+                )
+            ORDER BY f.forecast_uuid DESC
+            LIMIT 1
+        ) AS lf
 )
 SELECT
-    lf.forecast_uuid,
-    lf.geometry_uuid,
-    lf.source_type_id,
+    laf.forecast_uuid,
+    laf.geometry_uuid,
+    laf.source_type_id,
     pg.horizon_mins,
     pg.p50_sip,
     pg.target_time_utc,
-    lf.created_at_utc,
-    lf.init_time_utc,
+    laf.created_at_utc,
+    laf.init_time_utc,
     pg.other_stats_fractions,
     sv.capacity_watts,
     sv.latitude,
     sv.longitude,
     sv.geometry_name,
-    COALESCE(pg.metadata || lf.metadata, pg.metadata, lf.metadata) AS metadata
-FROM latest_allowed_forecast_per_location AS lf
+    COALESCE(pg.metadata || laf.metadata, pg.metadata, laf.metadata) AS metadata
+FROM latest_allowed_forecast_per_location AS laf
     INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
 WHERE
