@@ -25,11 +25,16 @@ message Forecaster {
 
 message TimeWindow {
   /* The start of the time window, inclusive.
-   * Cannot be more than 7 days before end_timestamp_utc.
+   * Cannot be more than 7 days before end_timestamp_utc, nor more than 1 month in the future.
    */
   google.protobuf.Timestamp start_timestamp_utc = 1 [
     (buf.validate.field).required = true,
-    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000} },
+    (buf.validate.field).cel = {
+      id: "timestamp_not_too_far_in_future"
+      message: "start_timestamp_utc cannot be more than 30 days in the future"
+      expression: "this <= now + duration('720h')"
+    }
   ];
   /* The end of the time window, inclusive.
    * Cannot be more than 7 days after start_timestamp_utc.
@@ -139,7 +144,12 @@ message GetForecastAtTimestampRequest {
    * If not specified, the current time will be used.
    */
   optional google.protobuf.Timestamp timestamp_utc = 3 [
-    (buf.validate.field).timestamp = { gt: { seconds: 112000000} }
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000} },
+    (buf.validate.field).cel = {
+      id: "timestamp_not_too_far_in_future"
+      message: "timestamp_utc cannot be more than 30 days in the future"
+      expression: "this <= now + duration('720h')"
+    }
   ];
   Forecaster forecaster = 4 [
     (buf.validate.field).required = true
