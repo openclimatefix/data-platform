@@ -54,11 +54,6 @@ message TimeWindow {
     message: "start_timestamp_utc must be before end_timestamp_utc"
     expression: "this.start_timestamp_utc <= this.end_timestamp_utc"
   };
-  option (buf.validate.message).cel = {
-    id: "start_not_too_far_in_future"
-    message: "start_timestamp_utc cannot be more than 30 days in the future"
-    expression: "this.start_timestamp_utc <= timestamp('now') + duration('2592000s')"
-  };
 }
 
 // --- Requests and Responses --------------------------------------------------------
@@ -159,12 +154,6 @@ message GetForecastAtTimestampRequest {
   Forecaster forecaster = 4 [
     (buf.validate.field).required = true
   ];
-
-  option (buf.validate.message).cel = {
-    id: "timestamp_not_too_far_in_future"
-    message: "timestamp_utc cannot be more than 30 days in the future"
-    expression: "has(this.timestamp_utc) ? this.timestamp_utc <= timestamp('now') + duration('2592000s') : true"
-  };
 }
 
 message GetForecastAtTimestampResponse {
