@@ -265,7 +265,7 @@ winning_predictions AS (
     WHERE pg.target_time_utc BETWEEN sqlc.arg(start_timestamp_utc)::TIMESTAMP AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
         AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
     -- Sorting by decreasing init time ensures the DISTINCT captures the lowest allowed horizon
-    ORDER BY pg.target_time_utc ASC, fow.created_at_utc DESC, fow.init_time_utc DESC
+    ORDER BY pg.target_time_utc ASC, fow.init_time_utc DESC
 )
 SELECT
     wp.horizon_mins,
