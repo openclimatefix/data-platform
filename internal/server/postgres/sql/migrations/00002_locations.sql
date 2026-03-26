@@ -98,6 +98,11 @@ CREATE INDEX ON loc.geometries USING gist (geom);
 CREATE INDEX ON loc.geometries (ST_GEOMETRYTYPE(geom));
 -- Index for finding all geometries of a certain type
 CREATE INDEX ON loc.geometries (geometry_type_id);
+-- Legacy index for finding gsp geometries by gsp_id
+CREATE INDEX idx_geometries_gsp_id_partial
+ON loc.geometries (((metadata ->> 'gsp_id')::INTEGER)) 
+WHERE geometry_type_id = 2
+  AND (((metadata ->> 'gsp_id') IS NOT NULL));
 
 /*
  * Table to store the temporal generation capability of geometries.
