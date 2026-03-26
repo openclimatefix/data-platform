@@ -234,15 +234,14 @@ WITH allowed_forecasts_overlapping_window AS (
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(
-            COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(start_timestamp_utc)::TIMESTAMP)
-            - INTERVAL '3 days'
+            sqlc.arg(start_timestamp_utc)::TIMESTAMP - INTERVAL '3 days'
         )
         AND f.forecast_uuid < UUIDV7_BOUNDARY(
-            LEAST(
-                COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(end_timestamp_utc)::TIMESTAMP),
-                sqlc.arg(end_timestamp_utc)::TIMESTAMP - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-            ) + INTERVAL '1 millisecond'
+            sqlc.arg(end_timestamp_utc)::TIMESTAMP
+            - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
+            + INTERVAL '1 millisecond'
         )
+        AND f.created_at_utc <= COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, CURRENT_TIMESTAMP)
         AND f.target_period && TSRANGE(
             sqlc.arg(start_timestamp_utc)::TIMESTAMP,
             sqlc.arg(end_timestamp_utc)::TIMESTAMP,
@@ -319,22 +318,15 @@ latest_allowed_forecast_per_location AS (
                 AND f.forecaster_id = $2
                 AND f.target_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
                 AND f.forecast_uuid >= UUIDV7_BOUNDARY(
-                    COALESCE(
-                        sqlc.narg(pivot_timestamp)::TIMESTAMP,
-                        sqlc.arg(target_timestamp_utc)::TIMESTAMP
-                    ) - INTERVAL '3 days'
+                    sqlc.arg(target_timestamp_utc)::TIMESTAMP - INTERVAL '3 days'
                 )
                 AND f.forecast_uuid < UUIDV7_BOUNDARY(
-                    LEAST(
-                        COALESCE(
-                            sqlc.narg(pivot_timestamp)::TIMESTAMP,
-                            sqlc.arg(target_timestamp_utc)::TIMESTAMP
-                        ),
-                        sqlc.arg(target_timestamp_utc)::TIMESTAMP - MAKE_INTERVAL(
-                            mins => sqlc.arg(horizon_mins)::INTEGER
-                        )
-                    ) + INTERVAL '1 millisecond'
+                    sqlc.arg(target_timestamp_utc)::TIMESTAMP
+                    - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
+                    + INTERVAL '1 millisecond'
                 )
+                AND f.created_at_utc
+                <= COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, CURRENT_TIMESTAMP)
             ORDER BY f.forecast_uuid DESC
             LIMIT 1
         ) AS lf
