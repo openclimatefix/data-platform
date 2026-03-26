@@ -241,7 +241,7 @@ WITH allowed_forecasts_overlapping_window AS (
             - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
             + INTERVAL '1 millisecond'
         )
-        AND f.created_at_utc <= COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(end_timestamp_utc)::TIMESTAMP)
+        AND f.created_at_utc <= COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, CURRENT_TIMESTAMP)
         AND f.target_period && TSRANGE(
             sqlc.arg(start_timestamp_utc)::TIMESTAMP,
             sqlc.arg(end_timestamp_utc)::TIMESTAMP,
@@ -326,7 +326,7 @@ latest_allowed_forecast_per_location AS (
                     + INTERVAL '1 millisecond'
                 )
                 AND f.created_at_utc
-                <= COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, sqlc.arg(target_timestamp_utc)::TIMESTAMP)
+                <= COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, CURRENT_TIMESTAMP)
             ORDER BY f.forecast_uuid DESC
             LIMIT 1
         ) AS lf

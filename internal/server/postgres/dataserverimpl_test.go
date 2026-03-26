@@ -924,7 +924,6 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				HorizonMins:       uint32(tc.horizonMins),
 				Forecaster:        forecasterResp.Forecaster,
 				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				PivotTimestampUtc: timestamppb.New(tc.pivotTime),
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
