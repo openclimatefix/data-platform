@@ -214,7 +214,6 @@ func TestAddRemoveLocationPoliciesFromGroup(t *testing.T) {
 		GeometryWkt:            "POINT(8.3 33.44)",
 		EffectiveCapacityWatts: 5000,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		Metadata:               &structpb.Struct{},
 		ValidFromUtc:           timestamppb.New(time.Now().UTC().Add(-1 * time.Hour)),
 	})
 	require.NoError(t, err)
@@ -494,7 +493,6 @@ func TestListLocationsIamFilters(t *testing.T) {
 			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 			LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
 			ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
-			Metadata:               &structpb.Struct{},
 		})
 		require.NoError(t, err)
 

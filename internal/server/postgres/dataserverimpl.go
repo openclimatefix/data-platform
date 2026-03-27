@@ -63,6 +63,31 @@ func timeptrToPgTimestamp(t *timestamppb.Timestamp) pgtype.Timestamp {
 	return pgtype.Timestamp{Time: t.AsTime().UTC(), Valid: true}
 }
 
+func mapToJsonb(m map[string]string) *structpb.Struct {
+	if len(m) == 0 {
+		return nil
+	} else {
+		s := &structpb.Struct{Fields: make(map[string]*structpb.Value, len(m))}
+		for k, v := range m {
+			s.Fields[k] = structpb.NewStringValue(v)
+		}
+
+		return s
+	}
+}
+
+func jsonbToMap(s *structpb.Struct) map[string]string {
+	out := make(map[string]string, 0)
+	if s != nil {
+		out = make(map[string]string, len(s.Fields))
+		for k, v := range s.AsMap() {
+			out[k] = v.(string)
+		}
+	}
+
+	return out
+}
+
 // --- Server Implementation ----------------------------------------------------------------------
 
 func NewDataPlatformDataServiceServerImpl() *DataPlatformDataServiceServerImpl {
@@ -154,7 +179,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		FirstHorizonMins:    int32(req.Values[0].HorizonMins),
 		// Okay to take the last value as we checked it was monotonically increasing above
 		LastHorizonMins: int32(req.Values[len(req.Values)-1].HorizonMins),
-		Metadata:        req.Metadata,
+		Metadata:        mapToJsonb(req.Metadata),
 	}
 
 	dbForecast, err := querier.CreateForecast(ctx, cfprms)
@@ -186,11 +211,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 			roundedStats[k] = roundedVal
 		}
 
-		// Since CreatePredictedValues uses COPYFROM, manually coerce empty metadata to nil
-		if value.Metadata != nil && len(value.Metadata.Fields) == 0 {
-			value.Metadata = nil
-		}
-
 		var otherStats *structpb.Struct
 
 		if len(roundedStats) > 0 {
@@ -211,7 +231,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 				Valid: true,
 			},
 			OtherStatsFractions: otherStats,
-			Metadata:            value.Metadata,
+			Metadata:            mapToJsonb(req.Metadata),
 		}
 	}
 
@@ -327,7 +347,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 				ForecasterVersion: fc.ForecasterVersion,
 			},
 			LocationUuid:        fc.GeometryUuid.String(),
-			Metadata:            fc.Metadata,
+			Metadata:            jsonbToMap(fc.Metadata),
 			CreatedTimestampUtc: timestamppb.New(fc.CreatedAtUtc.Time),
 		}
 	}
@@ -1021,7 +1041,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 				Latitude:  value.Latitude,
 				Longitude: value.Longitude,
 			},
-			Metadata:                   value.Metadata,
+			Metadata:                   jsonbToMap(value.Metadata),
 			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
 		}
@@ -1165,7 +1185,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 			Longitude: dbSource.Longitude,
 		},
 		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
-		Metadata:               dbSource.MetadataJsonb,
+		Metadata:               jsonbToMap(dbSource.MetadataJsonb),
 		GeometryWkb:            geometry,
 	}, nil
 }
@@ -1223,7 +1243,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		GeometryUuid:  dbLocation.GeometryUuid,
 		SourceTypeID:  int16(req.EnergySource),
 		CapacityWatts: int64(req.EffectiveCapacityWatts),
-		Metadata:      req.Metadata,
+		Metadata:      mapToJsonb(req.Metadata),
 		ValidFromUtc:  pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
 	}
 
@@ -1313,7 +1333,9 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	// Use existing metadata, unless new metadata is provided
 	metadata := dbSource.MetadataJsonb
 	if req.NewMetadata != nil {
-		metadata = req.NewMetadata
+		for k, v := range req.NewMetadata {
+			metadata.Fields[k] = structpb.NewStringValue(v)
+		}
 	}
 
 	// Update the location name, if provided
@@ -1551,7 +1573,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			EffectiveCapacityWatts:     uint64(value.CapacityWatts),
 			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
-			Metadata:                   value.Metadata,
+			Metadata:                   jsonbToMap(value.Metadata),
 		}
 	}
 
@@ -1621,7 +1643,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
 					EnergySource:           pb.EnergySource(loc.SourceTypeID),
 					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               loc.MetadataJsonb,
+					Metadata:               jsonbToMap(loc.MetadataJsonb),
 				})
 			}
 		}
@@ -1651,7 +1673,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
 					EnergySource:           pb.EnergySource(loc.SourceTypeID),
 					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               loc.MetadataJsonb,
+					Metadata:               jsonbToMap(loc.MetadataJsonb),
 				})
 			}
 		}
@@ -1680,7 +1702,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
 					EnergySource:           pb.EnergySource(loc.SourceTypeID),
 					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               loc.MetadataJsonb,
+					Metadata:               jsonbToMap(loc.MetadataJsonb),
 				})
 			}
 		}

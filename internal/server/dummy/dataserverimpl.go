@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
@@ -503,7 +502,6 @@ func (d *DataPlatformDataServiceServerImpl) GetLocation(
 			Longitude: float32(ll.lonDegs),
 		},
 		EffectiveCapacityWatts: 1280e3,
-		Metadata:               &structpb.Struct{},
 		GeometryWkb:            geometryWkb,
 	}, nil
 }

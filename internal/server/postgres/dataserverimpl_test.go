@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math/rand/v2"
 	"strings"
 	"testing"
@@ -12,16 +11,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
 func TestCreateLocation(t *testing.T) {
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-
 	testcases := []struct {
 		name           string
 		req            *pb.CreateLocationRequest
@@ -35,7 +30,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				Metadata:               metadata,
+				Metadata:               map[string]string{"source": "test"},
 			},
 			expectedLatLng: &pb.LatLng{
 				Latitude:  51.5,
@@ -50,7 +45,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				Metadata:               metadata,
 			},
 		},
 		{
@@ -61,7 +55,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 4560,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				Metadata:               metadata,
 			},
 			expectedLatLng: &pb.LatLng{
 				Latitude:  51.5,
@@ -76,7 +69,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_UNSPECIFIED,
-				Metadata:               metadata,
 			},
 		},
 		{
@@ -87,7 +79,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				Metadata:               metadata,
 			},
 		},
 		{
@@ -98,7 +89,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5))",
 				EffectiveCapacityWatts: 1000e9,
 				LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
-				Metadata:               metadata,
 			},
 			expectedLatLng: &pb.LatLng{
 				Latitude:  51.75,
@@ -113,7 +103,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0))",
 				EffectiveCapacityWatts: 14e6,
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
-				Metadata:               metadata,
 			},
 		},
 		{
@@ -124,7 +113,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0, 2.0 51.5)))",
 				EffectiveCapacityWatts: 1100e6,
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
-				Metadata:               metadata,
 			},
 			expectedLatLng: &pb.LatLng{
 				Latitude:  51.75,
@@ -139,7 +127,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0)))",
 				EffectiveCapacityWatts: 14e6,
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
-				Metadata:               metadata,
 			},
 		},
 		{
@@ -150,7 +137,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(1000000 1000000)",
 				EffectiveCapacityWatts: 10289e3,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				Metadata:               metadata,
 			},
 		},
 		{
@@ -161,7 +147,6 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0, 2.0 51.5)))",
 				EffectiveCapacityWatts: 14e6,
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
-				Metadata:               metadata,
 				AssociatedLatlng: &pb.LatLng{
 					Latitude:  51.5074,
 					Longitude: -0.1278,
@@ -196,7 +181,7 @@ func TestCreateLocation(t *testing.T) {
 				require.Equal(t, tc.req.LocationName, resp2.LocationName)
 				// require.Equal(t, tc.req.GeometryWkt, string(resp2.GeometryWkb))
 				require.Equal(t, tc.req.EffectiveCapacityWatts, resp2.EffectiveCapacityWatts)
-				require.Equal(t, tc.req.Metadata.AsMap(), resp2.Metadata.AsMap())
+				require.Equal(t, tc.req.Metadata, resp2.Metadata)
 				require.Equal(t, tc.expectedLatLng, resp2.Latlng)
 			}
 		})
@@ -212,16 +197,13 @@ func TestCreateLocation(t *testing.T) {
 }
 
 func TestUpdateLocation(t *testing.T) {
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-
 	pivotTime := time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)
 
 	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 		LocationName:           "test_update_location_site",
 		GeometryWkt:            "POINT(-0.1 51.5)",
 		EffectiveCapacityWatts: 1234e6,
-		Metadata:               metadata,
+		Metadata:               map[string]string{"source": "test"},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-10 * time.Hour)),
@@ -229,15 +211,12 @@ func TestUpdateLocation(t *testing.T) {
 
 	require.NoError(t, err)
 
-	newMetadata, err := structpb.NewStruct(map[string]any{"source": "test", "updated": true})
-	require.NoError(t, err)
-
 	testcases := []struct {
 		name                  string
 		req                   *pb.UpdateLocationRequest
 		expectedName          string
 		expectedCapacityWatts uint64
-		expectedMetadata      map[string]any
+		expectedMetadata      map[string]string
 	}{
 		{
 			name: "Should return the same when the update doesn't change anything",
@@ -249,7 +228,7 @@ func TestUpdateLocation(t *testing.T) {
 			},
 			expectedName:          "test_update_location_site",
 			expectedCapacityWatts: 1234e6,
-			expectedMetadata:      map[string]any{"source": "test"},
+			expectedMetadata:      map[string]string{"source": "test"},
 		},
 		{
 			name: "Should update capacity to higher value",
@@ -261,7 +240,7 @@ func TestUpdateLocation(t *testing.T) {
 			},
 			expectedName:          "test_update_location_site",
 			expectedCapacityWatts: 1235e6,
-			expectedMetadata:      map[string]any{"source": "test"},
+			expectedMetadata:      map[string]string{"source": "test"},
 		},
 		{
 			name: "Shouldn't update anything when nothing is set",
@@ -277,12 +256,12 @@ func TestUpdateLocation(t *testing.T) {
 				LocationUuid:    createResp.LocationUuid,
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				NewLocationName: func() *string { s := "test_updated_location_site"; return &s }(),
-				NewMetadata:     newMetadata,
+				NewMetadata:     map[string]string{"source": "test", "updated": "true"},
 				ValidFromUtc:    timestamppb.New(pivotTime.Add(-3 * time.Hour)),
 			},
 			expectedName:          "test_updated_location_site",
 			expectedCapacityWatts: 1235e6,
-			expectedMetadata:      map[string]any{"source": "test", "updated": true},
+			expectedMetadata:      map[string]string{"source": "test", "updated": "true"},
 		},
 	}
 
@@ -310,7 +289,7 @@ func TestUpdateLocation(t *testing.T) {
 					int(tc.expectedCapacityWatts),
 					int(newGetResp.EffectiveCapacityWatts),
 				)
-				require.Equal(t, tc.expectedMetadata, newGetResp.Metadata.AsMap())
+				require.Equal(t, tc.expectedMetadata, newGetResp.Metadata)
 			}
 		})
 	}
@@ -456,13 +435,11 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 	pivotTime := time.Date(2025, 4, 5, 12, 0, 0, 0, time.UTC)
 	// --- Create a forecast --- //
 	// Create two sites to attach the forecasts to
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 		LocationName:           "test_get_forecast_at_timestamp_site",
 		GeometryWkt:            "POINT(-0.6 51.8)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
+		Metadata:               map[string]string{"source": "test"},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
@@ -472,7 +449,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 		LocationName:           "test_get_forecast_at_timestamp_site_2",
 		GeometryWkt:            "POINT(-0.5 58.6)",
 		EffectiveCapacityWatts: 2000000,
-		Metadata:               metadata,
+		Metadata:               map[string]string{"source": "test"},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
@@ -495,7 +472,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 				"p90": float32(0.6 + float32(i)*0.05),
 				"p10": float32(0.4 + float32(i)*0.05),
 			},
-			Metadata: metadata,
+			Metadata: map[string]string{"source": "test"},
 		}
 	}
 
@@ -583,10 +560,8 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 		Name: "test_get_observations_at_timestamp_observer",
 	})
 	require.NoError(t, err)
-	// Create a few sites to attach the observations to
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
 
+	// Create a few sites to attach the observations to
 	siteUuids := make([]string, 3)
 	for i := range siteUuids {
 		capacity := uint64(1000000 + i*100000)
@@ -598,7 +573,7 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 				51.5+float32(i)*0.01,
 			),
 			EffectiveCapacityWatts: capacity,
-			Metadata:               metadata,
+			Metadata:               map[string]string{"source": "test"},
 			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 			LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 			ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
@@ -695,13 +670,11 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 
 func TestGetLocation(t *testing.T) {
 	// Create a location to fetch
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
 	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 		LocationName:           "test_get_location_site",
 		GeometryWkt:            "POLYGON((0 0,0 1,1 1,1 0,0 0))",
 		EffectiveCapacityWatts: 12e6,
-		Metadata:               metadata,
+		Metadata:               map[string]string{"source": "test"},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
 		ValidFromUtc:           timestamppb.New(time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)),
@@ -762,7 +735,6 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 			),
 			EffectiveCapacityWatts: uint64(1000000 + i*100),
 			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			Metadata:               &structpb.Struct{},
 			LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		})
 		require.NoError(t, err)
@@ -787,13 +759,11 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 func TestGetForecastAsTimeseries(t *testing.T) {
 	pivotTime := time.Date(2025, 2, 5, 12, 0, 0, 0, time.UTC)
 	// Create a site to attach the forecasts to
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 		LocationName:           "test_get_forecast_as_timeseries_site",
 		GeometryWkt:            "POINT(-60.25 57.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
+		Metadata:               map[string]string{"source": "test"},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 49)),
@@ -827,7 +797,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				"p10": float32(max(float32(i-1)*float32(100/len(yields))/100.0, 0)),
 				"p90": float32(min(float32(i+1)*float32(100/len(yields))/100.0, 1.1)),
 			},
-			Metadata: metadata,
+			Metadata: map[string]string{"source": "test"},
 		}
 	}
 
@@ -921,10 +891,10 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			}
 
 			resp, err := dc.GetForecastAsTimeseries(t.Context(), &pb.GetForecastAsTimeseriesRequest{
-				LocationUuid:      siteResp.LocationUuid,
-				HorizonMins:       uint32(tc.horizonMins),
-				Forecaster:        forecasterResp.Forecaster,
-				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				LocationUuid: siteResp.LocationUuid,
+				HorizonMins:  uint32(tc.horizonMins),
+				Forecaster:   forecasterResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
@@ -961,8 +931,6 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 
 func TestListLocationsLocationFilters(t *testing.T) {
 	pivotTime := time.Now().Truncate(time.Minute)
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
 
 	// Create a bunch of locations
 	var locationUuids []string
@@ -981,7 +949,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 					EnergySource:           energySource,
 					LocationType:           locType,
 					ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
-					Metadata:               metadata,
+					Metadata:               map[string]string{"source": "test"},
 				})
 				require.NoError(t, err)
 
@@ -1134,7 +1102,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 				require.Equal(t, tc.expectedCount, len(resp.Locations))
 
 				for _, loc := range resp.Locations {
-					require.Equal(t, metadata.AsMap(), loc.Metadata.AsMap())
+					require.Equal(t, map[string]string{"source": "test"}, loc.Metadata)
 				}
 			}
 		})
@@ -1149,7 +1117,6 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 		LocationName:           "test_get_observations_as_timeseries_site",
 		GeometryWkt:            "POINT(-20.25 57.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:               &structpb.Struct{},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 64)),
@@ -1223,7 +1190,6 @@ func TestGetLatestObservations(t *testing.T) {
 		LocationName:           "test_get_latest_observations_site_1",
 		GeometryWkt:            "POINT(-20.25 57.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:               &structpb.Struct{},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
@@ -1405,7 +1371,6 @@ func TestCreateObservations(t *testing.T) {
 		LocationName:           "test_create_observations_site",
 		GeometryWkt:            "POINT(-0.1 51.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:               &structpb.Struct{},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
@@ -1509,15 +1474,12 @@ func TestCreateObservations(t *testing.T) {
 
 func TestGetWeekAverageDeltas(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
 
 	// Create a site to attach the observations to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 		LocationName:           "test_get_week_average_deltas_site",
 		GeometryWkt:            "POINT(-20.25 59.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:               &structpb.Struct{},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 12 * 24)),
@@ -1570,7 +1532,7 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 				"p10": float32(max(float32(i-1)*float32(100/len(yields))/100.0, 0)),
 				"p90": float32(min(float32(i+1)*float32(100/len(yields))/100.0, 1.1)),
 			},
-			Metadata: metadata,
+			Metadata: map[string]string{"source": "test"},
 		}
 	}
 
@@ -1600,17 +1562,12 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 
 func TestCreateForecast(t *testing.T) {
 	pivotTime := time.Date(2024, 5, 5, 0, 30, 0, 0, time.UTC)
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-	metadata2, err := structpb.NewStruct(map[string]any{"source": "test", "extra": "value"})
-	require.NoError(t, err)
 
 	// Create a site to attach the forecast to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 		LocationName:           "test_create_forecast_site",
 		GeometryWkt:            "POINT(-0.1 51.5)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 24)),
@@ -1633,7 +1590,7 @@ func TestCreateForecast(t *testing.T) {
 				"p10": 0.4 + float32(i)*0.05,
 				"p90": 0.6 + float32(i)*0.05,
 			},
-			Metadata: metadata,
+			Metadata: map[string]string{"source": "test"},
 		}
 	}
 
@@ -1643,7 +1600,6 @@ func TestCreateForecast(t *testing.T) {
 			HorizonMins:              uint32(i * 30),
 			P50Fraction:              0.0,
 			OtherStatisticsFractions: map[string]float32{},
-			Metadata:                 &structpb.Struct{},
 		}
 	}
 
@@ -1656,7 +1612,7 @@ func TestCreateForecast(t *testing.T) {
 				"p10": 1.3,
 				"p90": -0.2,
 			},
-			Metadata: metadata,
+			Metadata: map[string]string{"source": "test"},
 		}
 	}
 
@@ -1672,6 +1628,7 @@ func TestCreateForecast(t *testing.T) {
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsPopulated,
+				Metadata:     map[string]string{"source": "test"},
 			},
 		},
 		{
@@ -1748,7 +1705,7 @@ func TestCreateForecast(t *testing.T) {
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsPopulated,
-				Metadata:     metadata2,
+				Metadata:     map[string]string{"source": "test", "updated": "true"},
 			},
 		},
 	}
@@ -1786,11 +1743,13 @@ func TestCreateForecast(t *testing.T) {
 				})
 				require.NoError(t, err)
 
-				expectedMetadata := tc.req.Values[0].Metadata.AsMap()
-				maps.Copy(expectedMetadata, tc.req.Metadata.AsMap())
+				expectedMetadata := tc.req.Values[0].Metadata
+				for k, v := range tc.req.Metadata {
+					expectedMetadata[k] = v
+				}
 
 				for _, val := range fResp.Values {
-					require.Equal(t, expectedMetadata, val.Metadata.AsMap())
+					require.Equal(t, expectedMetadata, val.Metadata)
 				}
 			}
 		})
@@ -1799,15 +1758,13 @@ func TestCreateForecast(t *testing.T) {
 
 func TestGetLatestForecasts(t *testing.T) {
 	pivotTime := time.Date(2022, 1, 5, 12, 0, 0, 0, time.UTC)
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
 
 	// Create a site to attach the forecasts to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 		LocationName:           "test_get_latest_forecasts_site",
 		GeometryWkt:            "POINT(-0.6 51.8)",
 		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
+		Metadata:               map[string]string{"source": "test"},
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 24)),
@@ -1838,7 +1795,7 @@ func TestGetLatestForecasts(t *testing.T) {
 				"p10": 0.4 + float32(i)*0.05,
 				"p90": 0.6 + float32(i)*0.05,
 			},
-			Metadata: metadata,
+			Metadata: map[string]string{"source": "test"},
 		}
 	}
 
