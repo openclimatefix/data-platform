@@ -404,9 +404,9 @@ deltas AS (
         rv.p50_sip - og.value_sip AS delta_sip
     FROM relevant_predicted_values AS rv
         INNER JOIN obs.observed_generation_values AS og
-            ON og.geometry_uuid = rv.geometry_uuid
-            AND og.source_type_id = rv.source_type_id
-            AND og.observation_timestamp_utc = rv.target_time_utc
+        ON rv.geometry_uuid = og.geometry_uuid
+            AND rv.source_type_id = og.source_type_id
+            AND rv.target_time_utc = og.observation_timestamp_utc
     WHERE
         og.observer_uuid = $3
         AND og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
