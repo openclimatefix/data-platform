@@ -921,10 +921,10 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			}
 
 			resp, err := dc.GetForecastAsTimeseries(t.Context(), &pb.GetForecastAsTimeseriesRequest{
-				LocationUuid:      siteResp.LocationUuid,
-				HorizonMins:       uint32(tc.horizonMins),
-				Forecaster:        forecasterResp.Forecaster,
-				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				LocationUuid: siteResp.LocationUuid,
+				HorizonMins:  uint32(tc.horizonMins),
+				Forecaster:   forecasterResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
