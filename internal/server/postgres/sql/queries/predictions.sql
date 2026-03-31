@@ -400,16 +400,18 @@ relevant_predicted_values AS (
 deltas AS (
     SELECT
         rv.geometry_uuid,
-        rv.source_type_id,
-        rv.forecast_uuid,
-        rv.target_time_utc,
         rv.horizon_mins,
         rv.p50_sip - og.value_sip AS delta_sip
     FROM relevant_predicted_values AS rv
-        LEFT OUTER JOIN obs.observed_generation_values AS og USING (geometry_uuid, source_type_id)
+        INNER JOIN obs.observed_generation_values AS og
+            ON og.geometry_uuid = rv.geometry_uuid
+            AND og.source_type_id = rv.source_type_id
+            AND og.observation_timestamp_utc = rv.target_time_utc
     WHERE
         og.observer_uuid = $3
-        AND og.observation_timestamp_utc = rv.target_time_utc
+        AND og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+        AND og.observation_timestamp_utc >= sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days'
+        AND og.observation_timestamp_utc < sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 millisecond'
 )
 SELECT
     d.geometry_uuid,
