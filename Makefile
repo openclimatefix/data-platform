@@ -158,19 +158,20 @@ endef
 export GEN_PYPROJ
 
 .PHONY: gen.proto.python
+.PHONY: gen.proto.python
 gen.proto.python: ${PROTOC}
 	@echo "Generating Python client bindings..."
-	@rm -rf gen/python && mkdir -p gen/python/src/dp_sdk
+	@rm -rf gen/python && mkdir -p gen/python/src
 	@uvx --from 'grpcio-tools==1.80.0' --with 'betterproto[compiler]==2.0.0b7' python-grpc-tools-protoc \
 		$$(find proto -iname "*.proto") \
 		-I=proto \
 		-I=$(PROTOC_INCLUDE) \
-		--python_out=gen/python/src/dp_sdk \
-		--pyi_out=gen/python/src/dp_sdk \
-		--grpc_python_out=gen/python/src/dp_sdk
+		--python_out=gen/python/src \
+		--pyi_out=gen/python/src \
+		--grpc_python_out=gen/python/src \
 		--python_betterproto_opt=typing.310 \
-		--python_betterproto_out=gen/python/src/dp_sdk
-	@touch gen/python/src/dp_sdk/py.typed
+		--python_betterproto_out=gen/python/src
+	@find gen/python/src -type d -exec touch {}/__init__.py \;
 	@echo "$$GEN_PYPROJ" > gen/python/pyproject.toml
 	@echo "Building wheel..."
 	@cd gen/python && echo $$(uv run python -m setuptools_git_versioning) && uv build
