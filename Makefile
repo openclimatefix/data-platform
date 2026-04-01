@@ -161,19 +161,15 @@ export GEN_PYPROJ
 gen.proto.python: ${PROTOC}
 	@echo "Generating Python client bindings..."
 	@rm -rf gen/python && mkdir -p gen/python/src/dp_sdk
-	@uvx --from 'betterproto[compiler]==2.0.0b7' ${PROTOC} \
-		proto/ocf/dp/*.proto \
-		-I=proto \
-		-I=$(PROTOC_INCLUDE) \
-		--python_betterproto_opt=typing.310 \
-		--python_betterproto_out=gen/python/src/dp_sdk
-	@uvx --from 'grpcio-tools==1.80.0' python-grpc-tools-protoc \
-		proto/ocf/dp/*.proto \
+	@uvx --from 'grpcio-tools==1.80.0' --with 'betterproto[compiler]==2.0.0b7' python-grpc-tools-protoc \
+		$$(find proto -iname "*.proto") \
 		-I=proto \
 		-I=$(PROTOC_INCLUDE) \
 		--python_out=gen/python/src/dp_sdk \
 		--pyi_out=gen/python/src/dp_sdk \
 		--grpc_python_out=gen/python/src/dp_sdk
+		--python_betterproto_opt=typing.310 \
+		--python_betterproto_out=gen/python/src/dp_sdk
 	@touch gen/python/src/dp_sdk/py.typed
 	@echo "$$GEN_PYPROJ" > gen/python/pyproject.toml
 	@echo "Building wheel..."
