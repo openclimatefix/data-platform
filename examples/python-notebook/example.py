@@ -1,10 +1,13 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "dp_sdk @ ${PROJECT_ROOT}/gen/python",
+#     "dp_sdk",
+# #    "dp_sdk @ ${PROJECT_ROOT}/gen/python", # for local testing
 #     "grpclib==0.4.8",
 #     "xarray==2025.7.1",
 # ]
+# [tool.uv.sources]
+# dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" }
 # ///
 """Example script for pulling data from the data platform.
 
@@ -24,6 +27,7 @@ async def main() -> None:
     # Wrap in a try/finally block so the channel is cleaned up even if something goes wrong
     try:
         print(":: Creating a client")
+        # Ensure you have a connection to a data platform instance on port 50051 before starting the script
         channel = Channel(host="localhost", port=50051)
         dpc = dp.DataPlatformDataServiceStub(channel)
         
