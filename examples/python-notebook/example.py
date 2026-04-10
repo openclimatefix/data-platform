@@ -1,443 +1,140 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "altair==5.5.0",
-#     "betterproto==2.0.0b7",
-#     "dp_sdk @ ${PROJECT_ROOT}/gen/python",
-#     "marimo",
+#     "dp_sdk",
+# #    "dp_sdk @ ${PROJECT_ROOT}/gen/python", # for local testing
 #     "grpclib==0.4.8",
-#     "pandas==2.3.1",
-#     "matplotlib==3.10.3",
-#     "vega-datasets==0.9.0",
 #     "xarray==2025.7.1",
 # ]
+# [tool.uv.sources]
+# dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" }
 # ///
+"""Example script for pulling data from the data platform.
 
-import marimo
+Run with `$ uv run example.py`
+"""
 
-__generated_with = "0.17.7"
-app = marimo.App(width="medium")
-
-
-@app.cell
-def _():
-    import betterproto.grpc
-    from grpclib.client import Channel
-    import datetime as dt
-    from dp_sdk.ocf import dp
-    import xarray as xr
-    import json
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    import marimo as mo
-    import altair as alt
-    from vega_datasets import data
-    import uuid
-    from betterproto.lib.google.protobuf import Struct
-    return Channel, Struct, alt, betterproto, data, dp, dt, mo, pd, uuid
+from grpclib.client import Channel
+import betterproto
+import asyncio
+from ocf import dp
+import pandas as pd
+import xarray as xr
+import datetime as dt
 
 
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Connecting to the data platform
+async def main() -> None:
+    # Wrap in a try/finally block so the channel is cleaned up even if something goes wrong
+    try:
+        print(":: Creating a client")
+        # Ensure you have a connection to a data platform instance on port 50051 before starting the script
+        channel = Channel(host="localhost", port=50051)
+        dpc = dp.DataPlatformDataServiceStub(channel)
+        
+        print(":: Getting a UI-style forecast for the UK")
+        print("   This is a composite timeseries that can be made up of values from many different forecasts.")
 
-    The data platform's generated code includes a stub that is used to initialize a client.
-    """)
-    return
-
-
-@app.cell
-def _(Channel, dp):
-    channel = Channel(host="localhost", port=50051)
-    dp_data_client = dp.DataPlatformDataServiceStub(channel)
-    # If you want to handle creating users and organisations, you will need an admin client as well
-    # dp_admin_client = dp.DataPlatformAdministrationServiceStub(channel)
-    return channel, dp_data_client
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Create a location
-
-    Locations are created with an energy source type, a geometry, a capacity, and metadata.
-    """)
-    return
-
-
-@app.cell
-async def _(Struct, dp, dp_data_client):
-    cl_request = dp.CreateLocationRequest(
-        effective_capacity_watts=10,
-        energy_source=dp.EnergySource.SOLAR,
-        geometry_wkt="POINT(0.54 52.49)",
-        location_type=dp.LocationType.SITE,
-        location_name="example_location",
-        metadata=Struct().from_pydict({"test": "test"}),
-    )
-    cl_response = await dp_data_client.create_location(cl_request)
-    cl_response
-    return (cl_response,)
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Create and update a forecaster
-
-    Forecasters are defined by their name and version.
-    """)
-    return
-
-
-@app.cell
-async def _(dp, dp_data_client):
-    cf_request = dp.CreateForecasterRequest(
-        name="example_forecaster",
-        version="v0.1.0",
-    )
-    cf_response = await dp_data_client.create_forecaster(cf_request)
-
-    uf_request = dp.UpdateForecasterRequest(
-        name="example_forecaster",
-        new_version="v0.1.1",
-    )
-    uf_response = await dp_data_client.update_forecaster(uf_request)
-    uf_response
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Save a forecast
-
-    Forecasts need knowledge of the models that produced them and the locations they are being produced for.
-    """)
-    return
-
-
-@app.cell
-async def _(Struct, cl_response, dp, dp_data_client, dt):
-    cv_request = dp.CreateForecastRequest(
-        forecaster=dp.Forecaster(forecaster_name="example_forecaster"),  # Unspecified version -> latest
-        location_uuid=cl_response.location_uuid,
-        energy_source=dp.EnergySource.SOLAR,
-        init_time_utc=dt.datetime.now(tz=dt.UTC).replace(hour=0, minute=0, second=0, microsecond=0),
-        values=[
-            dp.CreateForecastRequestForecastValue(
-                horizon_mins=i * 60,
-                other_statistics_fractions={
-                    "p10": 0.5 + i / 100,
-                    "p90": 0.7 + i / 100,
-                },
-                p50_fraction=0.6 + i / 100,
-                metadata=Struct().from_pydict({"member": 39}),
-            )
-            for i in range(37)
-        ],
-    )
-    cv_response = await dp_data_client.create_forecast(cv_request)
-    cv_response
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Get predicted generation data for a given time window and horizon
-
-    This corresponds to the main graph that is shown on the frontend when a location is selected.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    horizon_slider = mo.ui.slider(start=0, stop=300, step=30, label="Horizon (mins)")
-    horizon_slider
-    return (horizon_slider,)
-
-
-@app.cell
-def _(mo):
-    month_slider = mo.ui.slider(start=0, stop=9, step=1, label="Lookback (months)")
-    month_slider
-    return (month_slider,)
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    Note that timestamps should be converted to UTC before calling any RPCs!
-    """)
-    return
-
-
-@app.cell
-def _(dt, month_slider):
-    pivot_timestamp = (
-        dt.datetime.now().replace(minute=0, second=0, microsecond=0)
-        - dt.timedelta(weeks=month_slider.value * 4)
-    ).astimezone(dt.UTC)
-    pivot_timestamp
-    return (pivot_timestamp,)
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    First, create the request object with the dataclasses improted from the library code.
-    """)
-    return
-
-
-@app.cell
-async def _(dp, dp_data_client, dt, horizon_slider, pivot_timestamp, uuid):
-    gf_request = dp.GetForecastAsTimeseriesRequest(
-        energy_source=dp.EnergySource.SOLAR,
-        forecaster=dp.Forecaster(forecaster_name="test_forecaster_1", forecaster_version="v1"),
-        horizon_mins=horizon_slider.value,
-        location_uuid=str(uuid.uuid4()),
-        time_window=dp.TimeWindow(
-            start_timestamp_utc=pivot_timestamp,
-            end_timestamp_utc=pivot_timestamp + dt.timedelta(hours=36),
-        ),
-    )
-    gf_response = await dp_data_client.get_forecast_as_timeseries(gf_request)
-    gf_response
-    return (gf_response,)
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    The response can be easily transformed into a dataframe:
-    """)
-    return
-
-
-@app.cell
-def _(betterproto, gf_response, pd):
-    gfdf = (
-        pd.DataFrame.from_dict(
-            gf_response.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["values"]
+        time_window = dp.TimeWindow(
+            start_timestamp_utc=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=7),
+            end_timestamp_utc=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=5),
         )
-        .pipe(lambda df: df.join(pd.json_normalize(df['other_statistics_fractions'])))
-        .drop("other_statistics_fractions", axis=1)
-    )
-    gfdf
-    return (gfdf,)
 
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    And the dataframe is trivial to plot.
-
-    Try changing the horizon and lookback and see the effect on the graph.
-    """)
-    return
-
-
-@app.cell
-def _(alt, gfdf):
-    gf_p50_line = (
-        alt.Chart(gfdf)
-        .mark_line()
-        .encode(
-            y="p50_value_fraction",
-            x="target_timestamp_utc:T",
+        print(":: -> Getting the UK national location")
+        glreq = dp.ListLocationsRequest(
+            energy_source_filter=dp.EnergySource.SOLAR,
+            location_type_filter=dp.LocationType.NATION,
         )
-    )
-    gf_band = (
-        alt.Chart(gfdf)
-        .mark_errorband(extent="ci")
-        .encode(
-            y="p10",
-            y2="p90",
-            x="target_timestamp_utc:T",
+        glresp = await dpc.list_locations(glreq)
+        uk_location = next(l for l in glresp.locations if l.location_name == "uk")
+        print(f"\t{uk_location.effective_capacity_watts=}")
+
+        print(":: -> Listing available forecasters called 'blend'")
+        lfresp = await dpc.list_forecasters(dp.ListForecastersRequest(latest_versions_only=True))
+        blend_forecaster = next(f for f in lfresp.forecasters if "blend" in f.forecaster_name)
+        print(f"\t{blend_forecaster}")
+
+        print(":: -> Getting a forecast for the UK national location")
+        gfreq = dp.GetForecastAsTimeseriesRequest(
+            location_uuid=uk_location.location_uuid,
+            energy_source=dp.EnergySource.SOLAR,
+            forecaster=blend_forecaster,
+            time_window=time_window,
+            horizon_mins=0,
         )
-    )
-    gf_chart = gf_band + gf_p50_line
-    gf_chart
-    return
+        gfreq_response = await dpc.get_forecast_as_timeseries(gfreq)
+        start_time = gfreq_response.values[0].target_timestamp_utc
+        end_time = gfreq_response.values[-1].target_timestamp_utc
+        print(f"\tReceived {len(gfreq_response.values)} forecast points from {start_time} to {end_time}")
 
+        print(f":: -> Converting response to a dataframe")
+        df = pd.DataFrame.from_dict([
+            v.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)
+            for v in gfreq_response.values
+        ]).pipe(
+            lambda df: df.join(pd.json_normalize(df['other_statistics_fractions']))
+        ).drop("other_statistics_fractions", axis=1).set_index(
+            "target_timestamp_utc"
+        ).assign(
+            p50_watts=lambda df: (df['p50_value_fraction'] * uk_location.effective_capacity_watts).astype(int),
+            p10_watts=lambda df: (df['p10'] * uk_location.effective_capacity_watts).astype(int),
+            p90_watts=lambda df: (df['p90'] * uk_location.effective_capacity_watts).astype(int),
+        ).drop(["p50_value_fraction", "p10", "p90"], axis=1)
+        print(df.head())
 
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Get values for adjuster
+        print(f":: Getting 'ground truths' for the same location and time period")
 
-    The adjuster requires the average delta for each time horizon over the last week, at a given time of day. There is a dedicated RPC function for this.
-    """)
-    return
+        print(f":: -> Getting an observer")
+        loresp = await dpc.list_observers(dp.ListObserversRequest())
+        observer = next(o for o in loresp.observers if "pvlive" in o.observer_name)
+        print(f"\t{observer.observer_name=}")
 
-
-@app.cell
-async def _(dp, dp_data_client, pivot_timestamp, uuid):
-    gd_request = dp.GetWeekAverageDeltasRequest(
-        location_uuid=str(uuid.uuid4()),
-        energy_source=dp.EnergySource.SOLAR,
-        pivot_timestamp_utc=pivot_timestamp,
-        forecaster=dp.Forecaster(
-            forecaster_name="test_forecaster_1",
-            forecaster_version="v1",
-        ),
-        observer_name="test_observer",
-    )
-    gd_response = await dp_data_client.get_week_average_deltas(gd_request)
-    gd_response
-    return (gd_response,)
-
-
-@app.cell
-def _(alt, betterproto, gd_response, pd):
-    gddf = pd.DataFrame.from_dict(
-        gd_response.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)["deltas"],
-    )
-    gd_chart = (
-        alt.Chart(gddf)
-        .mark_point()
-        .encode(
-            y="delta_fraction",
-            x="horizon_mins",
+        print(f":: -> Getting the ground truth for the UK national location")
+        gtreq = dp.GetObservationsAsTimeseriesRequest(
+            location_uuid=uk_location.location_uuid,
+            energy_source=dp.EnergySource.SOLAR,
+            observer_name=observer.observer_name,
+            time_window=time_window,
         )
-    )
-    gd_chart
-    return
+        gtresp = await dpc.get_observations_as_timeseries(gtreq)
+        start_time = gtresp.values[0].timestamp_utc
+        end_time = gtresp.values[-1].timestamp_utc
+        print(f"\tReceived {len(gtresp.values)} ground truth points from {start_time} to {end_time}")
 
+        print(":: Getting ALL forecasts for a given location for multiple forecasters and time periods")
+        print("   These forecasts are not composite, so will overlap in time.")
 
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Plot locations on a map
-
-    A useful workflow for visualising the predictions of several locations at a given time.
-    """)
-    return
-
-
-@app.cell
-async def _(dp, dp_data_client, pivot_timestamp, uuid):
-    gm_request = dp.GetForecastAtTimestampRequest(
-        location_uuids=[str(uuid.uuid4()) for i in range(10)],
-        energy_source=dp.EnergySource.SOLAR,
-        forecaster=dp.Forecaster(
-            forecaster_name="test_forecaster_1",
-            forecaster_version="v1",
-        ),
-        timestamp_utc=pivot_timestamp,
-    )
-    gm_response = await dp_data_client.get_forecast_at_timestamp(gm_request)
-    gm_response
-    return (gm_response,)
-
-
-@app.cell
-def _(betterproto, gm_response, pd):
-    gmdf = (
-        pd.DataFrame.from_dict(
-            gm_response.to_pydict(include_default_values=True, casing=betterproto.Casing.SNAKE)[
-                "values"
-            ],
+        print(":: -> Streaming forecast values")
+        sdreq = dp.StreamForecastDataRequest(
+            location_uuid=uk_location.location_uuid,
+            energy_source=dp.EnergySource.SOLAR,
+            forecasters=[f for f in lfresp.forecasters if "blend" in f.forecaster_name][:2],
+            time_window=time_window,
+            include_metadata=True,
         )
-        .assign(
-            latitude=lambda d: pd.json_normalize(d["latlng"])["latitude"],
-            longitude=lambda d: pd.json_normalize(d["latlng"])["longitude"],
+        forecast_values = []
+        async for chunk in dpc.stream_forecast_data(sdreq):
+            forecast_values.append(chunk)
+        print(f"\tReceived {len(forecast_values)} forecast points for {len(sdreq.forecasters)} forecasters")
+
+        print(":: -> Converting values to a dataframe")
+        df = pd.DataFrame.from_dict([
+            f.to_dict(include_default_values=True, casing=betterproto.Casing.SNAKE)
+            for f in forecast_values
+        ]).pipe(
+            lambda df: df.join(pd.json_normalize(df['other_statistics_fractions']))
+        ).drop("other_statistics_fractions", axis=1).set_index(
+            ["location_uuid", "forecaster_fullname", "init_timestamp", "horizon_mins"]
         )
-        .drop(columns="latlng")
-    )
-    gmdf
-    return (gmdf,)
+        print(df.head())
+
+        print(":: That's it!")
+        print("   Remeber: When using betterproto's `to_dict()` function,") 
+        print("    ALWAYS set `include_default_values=True`")
 
 
-@app.cell
-def _(alt, data, gmdf):
-    countries = alt.topo_feature(data.world_110m.url, "countries")
-
-    projection = (
-        alt.Chart(countries)
-        .mark_geoshape(fill="lightgray", stroke="white")
-        .project("equirectangular")
-        .properties(width=500, height=300)
-    )
-    points = (
-        alt.Chart(gmdf)
-        .mark_point()
-        .encode(
-            size="value_fraction",
-            longitude="longitude:Q",
-            latitude="latitude:Q",
-            tooltip=["location_uuid", "location_name", "effective_capacity_watts"],
-        )
-    )
-    gm_chart = projection + points
-    gm_chart
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Get data dump for analysis
-
-    This pulls all the forecast data for the given location and time window via a server stream. It is easy to turn this into an xarray dataset for further investigation.
-    """)
-    return
-
-
-@app.cell
-async def _(betterproto, dp, dp_data_client, dt, pivot_timestamp, uuid):
-    sd_request = dp.StreamForecastDataRequest(
-        location_uuid=str(uuid.uuid4()),
-        energy_source=dp.EnergySource.SOLAR,
-        time_window=dp.TimeWindow(
-            start_timestamp_utc=pivot_timestamp - dt.timedelta(days=7),
-            end_timestamp_utc=pivot_timestamp,
-        ),
-        forecasters=[
-            dp.Forecaster(
-                forecaster_name="test_forecaster_1",
-                forecaster_version="v1",
-            ),
-            dp.Forecaster(
-                forecaster_name="test_forecaster_2",
-                forecaster_version="v1",
-            ),
-        ],
-    )
-
-    forecasts = []
-    async for chunk in dp_data_client.stream_forecast_data(sd_request):
-        forecasts.append(chunk.to_dict(casing=betterproto.Casing.SNAKE))
-    return (forecasts,)
-
-
-@app.cell
-def _(forecasts, pd):
-    pd.DataFrame.from_dict(forecasts).pipe(
-        lambda df: df.join(pd.json_normalize(df['other_statistics_fractions']))
-    ).drop("other_statistics_fractions", axis=1).set_index(
-        ["init_timestamp", "location_uuid", "forecaster_fullname", "horizon_mins"]
-    ).to_xarray()
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Close the channel
-    """)
-    return
-
-
-@app.cell
-def _(channel):
-    channel.close()
-    return
+    finally:
+        channel.close()
 
 
 if __name__ == "__main__":
-    app.run()
+    asyncio.run(main())
