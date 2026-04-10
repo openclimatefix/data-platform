@@ -558,6 +558,12 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					otherStatistics[k] = float32(v.(float64))
 				}
 			}
+			metadata := make(map[string]string)
+			if req.IncludeMetadata == true && pred.Metadata != nil {
+				for k, v := range pred.Metadata.AsMap() {
+					metadata[k] = v.(string)
+				}
+			}
 
 			err = stream.Send(&pb.StreamForecastDataResponse{
 				InitTimestamp: timestamppb.New(forecast.InitTimeUtc.Time),
@@ -572,6 +578,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 				OtherStatisticsFractions: otherStatistics,
 				CreatedTimestampUtc:      timestamppb.New(forecast.CreatedAtUtc.Time),
 				EffectiveCapacityWatts:   uint64(pred.CapacityWatts),
+				Metadata:                 metadata,
 			})
 			if err != nil {
 				return err

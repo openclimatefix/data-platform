@@ -203,7 +203,7 @@ SELECT
     pg.p50_sip,
     pg.target_time_utc,
     pg.other_stats_fractions,
-    pg.metadata,
+    COALESCE(pg.metadata || f.metadata, pg.metadata, f.metadata) AS metadata,
     sv.capacity_watts
 FROM pred.forecasts AS f
     INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
