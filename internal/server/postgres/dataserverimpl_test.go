@@ -1853,7 +1853,9 @@ func TestGetLatestForecasts(t *testing.T) {
 			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 			InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(-i) * time.Hour)),
 			Values:       yields,
-			CreatedTimestampUtc: timestamppb.New(pivotTime.Add(time.Duration(-i)*time.Hour + time.Minute)),
+			CreatedTimestampUtc: timestamppb.New(
+				pivotTime.Add(time.Duration(-i)*time.Hour + time.Minute),
+			),
 		}
 		_, err = dc.CreateForecast(t.Context(), req)
 		require.NoError(t, err)

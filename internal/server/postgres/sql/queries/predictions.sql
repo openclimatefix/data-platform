@@ -87,7 +87,10 @@ INSERT INTO pred.forecasts (
         '[]'
     ),
     CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END,
-    CASE WHEN sqlc.narg(created_at_utc)::TIMESTAMP IS NULL THEN CURRENT_TIMESTAMP ELSE sqlc.narg(created_at_utc)::TIMESTAMP END
+    CASE
+        WHEN sqlc.narg(created_at_utc)::TIMESTAMP IS NULL THEN CURRENT_TIMESTAMP ELSE
+            sqlc.narg(created_at_utc)::TIMESTAMP
+    END
 ) RETURNING
     forecast_uuid,
     init_time_utc,
