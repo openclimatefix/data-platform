@@ -155,6 +155,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		// Okay to take the last value as we checked it was monotonically increasing above
 		LastHorizonMins: int32(req.Values[len(req.Values)-1].HorizonMins),
 		Metadata:        req.Metadata,
+		CreatedAtUtc:    timeptrToPgTimestamp(req.CreatedTimestampUtc),
 	}
 
 	dbForecast, err := querier.CreateForecast(ctx, cfprms)

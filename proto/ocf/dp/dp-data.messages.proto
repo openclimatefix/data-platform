@@ -339,6 +339,14 @@ message CreateForecastRequest {
 
   optional google.protobuf.Struct metadata = 6;
 
+  // The UTC time to set as the created_timestamp for the forecast. Leave empty to use current time.
+  // This is useful for backfilling historical forecasts with accurate created timestamps,
+  // but should generally be left empty for new forecasts.
+  optional google.protobuf.Timestamp created_timestamp_utc = 7 [
+    (buf.validate.field).required = false,
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+  ];
+
   //option (buf.validate.message).cel = {
   //  id: "forecast.values.monotonic_horizons"
   //  message: "Forecast horizon values must be monotonically increasing"

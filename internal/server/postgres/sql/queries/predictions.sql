@@ -72,7 +72,8 @@ INSERT INTO pred.forecasts (
     init_time_utc,
     value_resolution_mins,
     target_period,
-    metadata
+    metadata,
+    created_at_utc
 ) VALUES (
     UUIDV7($4::TIMESTAMP),
     $1,
@@ -85,7 +86,11 @@ INSERT INTO pred.forecasts (
         $4::TIMESTAMP + MAKE_INTERVAL(mins => sqlc.arg(last_horizon_mins)::INTEGER),
         '[]'
     ),
-    CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END
+    CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END,
+    CASE
+        WHEN sqlc.narg(created_at_utc)::TIMESTAMP IS NULL THEN CURRENT_TIMESTAMP ELSE
+            sqlc.narg(created_at_utc)::TIMESTAMP
+    END
 ) RETURNING
     forecast_uuid,
     init_time_utc,
@@ -144,11 +149,11 @@ FROM pred.forecasters AS fr
     CROSS JOIN LATERAL (
         SELECT
             forecast_uuid,
-            init_time_utc,
+            created_at_utc,
             source_type_id,
             geometry_uuid,
             metadata,
-            UUIDV7_EXTRACT_TIMESTAMP(forecast_uuid) AS created_at_utc
+            UUIDV7_EXTRACT_TIMESTAMP(forecast_uuid) AS init_time_utc
         FROM pred.forecasts
         WHERE geometry_uuid = $1
             AND source_type_id = $2
@@ -158,6 +163,7 @@ FROM pred.forecasters AS fr
                     mins => sqlc.arg(horizon_mins)::INTEGER
                 ) + INTERVAL '1 millisecond'
             )
+            AND created_at_utc <= COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, CURRENT_TIMESTAMP)
         ORDER BY forecast_uuid DESC
         LIMIT 1
     ) AS f
