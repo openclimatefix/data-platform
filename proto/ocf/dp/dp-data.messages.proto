@@ -691,6 +691,14 @@ message ListLocationsRequest {
   optional string enclosed_location_uuid_filter = 7 [
     (buf.validate.field).string.uuid = true
   ];
+  // Optional filter to only return locations with a specific name.
+  repeated string location_names_filter = 8 [
+    (buf.validate.field).repeated.max_items = 100,
+    (buf.validate.field).repeated.items = {
+      string: {min_len: 2, max_len: 100},
+    },
+    (buf.validate.field).repeated.unique = true
+  ];
 
 
   option (buf.validate.message).cel = {
@@ -698,6 +706,12 @@ message ListLocationsRequest {
     message: "enclosing_location_uuid_filter and enclosed_location_uuid_filter cannot both be set"
     expression:
       "!(has(this.enclosing_location_uuid_filter) && has(this.enclosed_location_uuid_filter))"
+  };
+  option (buf.validate.message).cel = {
+  id: "name_uuid_filters_mutually_exclusive"
+  message: "location_names_filter and location_uuids_filter cannot both be set"
+  expression:
+    "!(this.location_names_filter.size() > 0 && this.location_uuids_filter.size() > 0)"
   };
 }
 
