@@ -189,8 +189,8 @@ WHERE
         OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
     )
     AND (
-	ARRAY_LENGTH(sqlc.arg(geometry_names)::TEXT [], 1) IS NULL
-	OR us.geometry_name = ANY(sqlc.arg(geometry_names)::TEXT [])
+        ARRAY_LENGTH(sqlc.arg(geometry_names)::TEXT [], 1) IS NULL
+        OR us.geometry_name = ANY(sqlc.arg(geometry_names)::TEXT [])
     )
     AND (sqlc.narg(geometry_type_id)::SMALLINT IS NULL OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT)
     AND (sqlc.narg(oauth_id)::TEXT IS NULL OR us.oauth_id = sqlc.arg(oauth_id)::TEXT)
