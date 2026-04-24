@@ -37,3 +37,4 @@ extend buf.validate.StringRules {
    expression: "this.size() >= 10" // TODO: Determine proper regex for this
  }];
 }
+

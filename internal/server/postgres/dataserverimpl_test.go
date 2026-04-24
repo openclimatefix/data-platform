@@ -1038,6 +1038,26 @@ func TestListLocationsLocationFilters(t *testing.T) {
 			expectedCount: 3,
 		},
 		{
+			name: "Should filter by location names",
+			req: &pb.ListLocationsRequest{
+				LocationNamesFilter: []string{
+					fmt.Sprintf(
+						"test_list_locations_site_%02d_%d_%d",
+						0,
+						*sourceFilter,
+						*typeFilter,
+					),
+					fmt.Sprintf(
+						"test_list_locations_site_%02d_%d_%d",
+						1,
+						*sourceFilter,
+						*typeFilter,
+					),
+				},
+			},
+			expectedCount: 2,
+		},
+		{
 			name: "Should filter by energy source and location type",
 			req: &pb.ListLocationsRequest{
 				EnergySourceFilter:  sourceFilter,

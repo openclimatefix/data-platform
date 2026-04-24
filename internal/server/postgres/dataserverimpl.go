@@ -1672,6 +1672,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			PermissionID:   permissionId,
 			SourceTypeID:   sourceTypeId,
 			GeometryTypeID: locationTypeId,
+			GeometryNames:  req.LocationNamesFilter,
 		}
 
 		glResp, err := querier.ListSourcesAtTimestamp(ctx, lsprms)
