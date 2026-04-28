@@ -1560,24 +1560,19 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			Int32("dp.forecaster.id", dbExistingForecaster.ForecasterID).
 			Str("dp.time_window", fmt.Sprintf("%s - %s", start.Time.String(), end.Time.String())).
 			Msg("no predictions found")
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No predicted values found for the given location at the given horizon.",
-		)
+	} else {
+		l.Debug().
+			Str("dp.geometry.uuid", dbSource.GeometryUuid.String()).
+			Int16("dp.source.type_id", dbSource.SourceTypeID).
+			Int32("dp.forecaster.id", dbExistingForecaster.ForecasterID).
+			Int32("dp.predictions.count", int32(len(dbValues))).
+			Str("dp.predictions.target_period", fmt.Sprintf(
+				"%s - %s",
+				dbValues[0].TargetTimeUtc.Time.String(),
+				dbValues[len(dbValues)-1].TargetTimeUtc.Time.String(),
+			)).
+			Msg(fmt.Sprintf("found %d predictions", len(dbValues)))
 	}
-
-	l.Debug().
-		Str("dp.geometry.uuid", dbSource.GeometryUuid.String()).
-		Int16("dp.source.type_id", dbSource.SourceTypeID).
-		Int32("dp.forecaster.id", dbExistingForecaster.ForecasterID).
-		Int32("dp.predictions.count", int32(len(dbValues))).
-		Str("dp.predictions.target_period", fmt.Sprintf(
-			"%s - %s",
-			dbValues[0].TargetTimeUtc.Time.String(),
-			dbValues[len(dbValues)-1].TargetTimeUtc.Time.String(),
-		)).
-		Msg("found predictions")
 
 	values := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbValues))
 	for i, value := range dbValues {

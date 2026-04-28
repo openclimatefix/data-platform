@@ -923,7 +923,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name: "Shouldn't return successfully for horizon 60 mins",
+			name: "Should return no values for horizon 60 mins",
 			req: &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: siteResp.LocationUuid,
 				Forecaster:   forecasterResp.Forecaster,
@@ -931,7 +931,23 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				HorizonMins:  60,
 				TimeWindow:   defaultTimeWindow,
 			},
-			expectErr: true,
+			expectedValues: []float32{},
+			expectErr:      false,
+		},
+		{
+			name: "Should return no values for a time window outside of the forecasted values",
+			req: &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   forecasterResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				HorizonMins:  0,
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
+					EndTimestampUtc:   timestamppb.New(pivotTime.Add(-time.Hour * 42)),
+				},
+			},
+			expectedValues: []float32{},
+			expectErr:      false,
 		},
 		{
 			name: "Should return all predictions for a specific initialization time",
