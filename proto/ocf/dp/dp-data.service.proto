@@ -11,7 +11,7 @@ service DataPlatformDataService {
   /* GetForecastTimeseries fetches a horizontal slice of predicted data.
    * (i.e. many points in time for a single location). Since individually created forecasts can
    * have overlapping time ranges, identically-timestamped values are discarded, excepting the one
-   * with the lowest allowable lead time (horizon).
+   * with the lowest allowable lead time (horizon), where required.
    */
   rpc GetForecastAsTimeseries(GetForecastAsTimeseriesRequest) returns (GetForecastAsTimeseriesResponse) {}
   /* GetForecastAtTimestamp fetches a vertical slice of predicted data.

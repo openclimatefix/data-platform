@@ -128,6 +128,59 @@ INSERT INTO pred.predicted_generation_values (
     $1, $2, $3, $4, $5, $6
 );
 
+-- name: ListPredictionsForForecasts :many
+/* ListPredictionsForForecasts retrieves all predicted generation values for a given location,
+ * source type, and dynamic list of forecasters within a time window.
+ */
+WITH requested_forecasters AS (
+    SELECT
+        UNNEST(sqlc.arg(forecaster_names)::TEXT []) AS fname,
+        UNNEST(sqlc.arg(forecaster_versions)::TEXT []) AS fversion
+),
+matched_forecasters AS (
+    SELECT
+        f.forecaster_id,
+        f.forecaster_name,
+        f.forecaster_version
+    FROM pred.forecasters AS f
+        INNER JOIN requested_forecasters AS rf
+        ON f.forecaster_name = LOWER(rf.fname)
+            AND f.forecaster_version = LOWER(rf.fversion)
+),
+target_forecasts AS (
+    SELECT
+        f.forecast_uuid,
+        f.created_at_utc,
+        f.geometry_uuid,
+        f.metadata AS forecast_metadata,
+        mf.forecaster_name,
+        mf.forecaster_version,
+        UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc
+    FROM pred.forecasts AS f
+        INNER JOIN matched_forecasters AS mf USING (forecaster_id)
+    WHERE f.geometry_uuid = sqlc.arg(geometry_uuid)::UUID
+        AND f.source_type_id = sqlc.arg(source_type_id)::SMALLINT
+        AND f.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(start_timestamp)::TIMESTAMP)
+        AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(end_timestamp)::TIMESTAMP + INTERVAL '1 millisecond')
+)
+SELECT
+    tf.init_time_utc,
+    tf.forecaster_name,
+    tf.forecaster_version,
+    tf.created_at_utc,
+    pg.horizon_mins,
+    pg.p50_sip,
+    pg.other_stats_fractions,
+    sv.capacity_watts,
+    COALESCE(pg.metadata || tf.forecast_metadata, pg.metadata, tf.forecast_metadata) AS metadata
+FROM target_forecasts AS tf
+    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
+    INNER JOIN loc.sources_mv AS sv
+    ON tf.geometry_uuid = sv.geometry_uuid
+        AND sv.source_type_id = sqlc.arg(source_type_id)::SMALLINT
+WHERE sv.sys_period @> pg.target_time_utc
+ORDER BY tf.init_time_utc ASC, pg.horizon_mins ASC;
+
 -- name: GetLatestForecastsAtHorizonSincePivot :many
 /* GetLatestForecastAtHorizonSincePivot retrieves the latest forecasts for a given location
  * and source type made by each individual forecaster name.
@@ -168,54 +221,6 @@ FROM pred.forecasters AS fr
         LIMIT 1
     ) AS f
 ORDER BY fr.forecaster_name ASC, f.init_time_utc DESC;
-
--- name: ListForecasts :many
-/* ListForecasts retrieves all the forecasts for a given location, source type, and forecaster
- * between the input times. It does not return forecast values.
- */
-WITH desired_forecaster AS (
-    SELECT
-        forecaster_id,
-        forecaster_name,
-        forecaster_version
-    FROM pred.forecasters
-    WHERE forecaster_name = LOWER(sqlc.arg(forecaster_name)::TEXT)
-        AND forecaster_version = LOWER(sqlc.arg(forecaster_version)::TEXT)
-)
-SELECT
-    forecasts.forecast_uuid,
-    forecasts.init_time_utc,
-    forecasts.geometry_uuid,
-    forecasts.metadata,
-    desired_forecaster.forecaster_name,
-    desired_forecaster.forecaster_version,
-    UUIDV7_EXTRACT_TIMESTAMP(forecasts.forecast_uuid) AS created_at_utc
-FROM pred.forecasts AS forecasts
-    INNER JOIN desired_forecaster USING (forecaster_id)
-WHERE forecasts.geometry_uuid = $1
-    AND forecasts.source_type_id = $2
-    AND forecasts.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(start_timestamp)::TIMESTAMP)
-    AND forecasts.forecast_uuid < UUIDV7_BOUNDARY(
-        sqlc.arg(end_timestamp)::TIMESTAMP + INTERVAL '1 millisecond'
-    );
-
--- name: ListPredictionsForForecast :many
-/* ListPredictionsForForecast retrieves predicted generation values
- * for a given forecast as smallint percentages (sip) of capacity;
- * with 0 representing 0% and 30000 representing 100% of capacity.
- */
-SELECT
-    pg.horizon_mins,
-    pg.p50_sip,
-    pg.target_time_utc,
-    pg.other_stats_fractions,
-    sv.capacity_watts,
-    COALESCE(pg.metadata || f.metadata, pg.metadata, f.metadata) AS metadata
-FROM pred.forecasts AS f
-    INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
-    INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
-WHERE f.forecast_uuid = $1
-    AND sv.sys_period @> pg.target_time_utc;
 
 -- name: ListPredictionsForLocation :many
 /* ListPredictionsForLocation retrieves predicted generation values as a timeseries.
