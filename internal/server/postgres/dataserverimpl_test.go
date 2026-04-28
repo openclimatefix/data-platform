@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"math/rand/v2"
 	"strings"
@@ -786,6 +787,7 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 
 func TestGetForecastAsTimeseries(t *testing.T) {
 	pivotTime := time.Date(2025, 2, 5, 12, 0, 0, 0, time.UTC)
+
 	// Create a site to attach the forecasts to
 	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
@@ -799,6 +801,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 49)),
 	})
 	require.NoError(t, err)
+
 	// Update the capacity of the site to check it is reflected in the values
 	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
 		LocationUuid:              siteResp.LocationUuid,
@@ -843,16 +846,27 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// For each horizon, get the predicted timeseries
+	// Standardise the time window reused across most requests
+	defaultTimeWindow := &pb.TimeWindow{
+		StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
+		EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
+	}
+
 	testcases := []struct {
 		name           string
-		horizonMins    int32
-		pivotTime      time.Time
+		req            *pb.GetForecastAsTimeseriesRequest
 		expectedValues []float32
+		expectErr      bool
 	}{
 		{
-			name:        "Should return expected values for horizon 0 mins",
-			horizonMins: 0,
+			name: "Should return expected values for horizon 0 mins",
+			req: &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   forecasterResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				HorizonMins:  0,
+				TimeWindow:   defaultTimeWindow,
+			},
 			// For horizon 0, we should get all the values from the latest forecast,
 			// plus the values from the previous forecasts that have the lowest horizon
 			// for each target time.
@@ -870,10 +884,17 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				0.00, 0.08, 0.16, 0.24, 0.32, 0.40,
 				0.00, 0.08, 0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
 			},
+			expectErr: false,
 		},
 		{
-			name:        "Should return expected values for horizon 14 mins",
-			horizonMins: 14,
+			name: "Should return expected values for horizon 14 mins",
+			req: &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   forecasterResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				HorizonMins:  14,
+				TimeWindow:   defaultTimeWindow,
+			},
 			// For horizon of 14 minutes, anything with a lesser horizon should not be included.
 			// So the value for 0, 5, and 10 minutes should not be included.
 			expectedValues: []float32{
@@ -882,79 +903,83 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
 				0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
 			},
+			expectErr: false,
 		},
 		{
-			name:        "Should return expected values for horizon 30 mins",
-			horizonMins: 30,
+			name: "Should return expected values for horizon 30 mins",
+			req: &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   forecasterResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				HorizonMins:  30,
+				TimeWindow:   defaultTimeWindow,
+			},
 			expectedValues: []float32{
 				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
 				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
 				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
 				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
 			},
+			expectErr: false,
 		},
 		{
-			name:        "Shouldn't return successfully for horizon 60 mins",
-			horizonMins: 60,
+			name: "Shouldn't return successfully for horizon 60 mins",
+			req: &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   forecasterResp.Forecaster,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				HorizonMins:  60,
+				TimeWindow:   defaultTimeWindow,
+			},
+			expectErr: true,
 		},
-		// NOTE: Need to think about how to spoof CreatedTime to make this work.
-		// {
-		// 	name:        "Should return expected values for horizon 14 minutes with pivot time",
-		// 	horizonMins: 14,
-		// 	pivotTime:   pivotTime.Add(-15 * time.Minute),
-		// 	// For horizon of 14 minutes and a pivot time of 15 minutes before the latest,
-		// 	// we should expect the same as for the 14 minute horizon no pivot time case,
-		// 	// only this time the latest forecast should not be included at all.
-		// 	// Hence we only see data for three forecasts.
-		// 	expectedValues: []float32{
-		// 		0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
-		// 		0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
-		// 		0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
-		// 	},
-		// },
+		{
+			name: "Should return all predictions for a specific initialization time",
+			req: &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid:               siteResp.LocationUuid,
+				Forecaster:                 forecasterResp.Forecaster,
+				EnergySource:               pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				HorizonMins:                0,
+				TimeWindow:                 defaultTimeWindow,
+				InitializationTimestampUtc: timestamppb.New(pivotTime.Add(-30 * time.Minute)),
+			},
+			expectedValues: []float32{
+				0.00, 0.08, 0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.pivotTime.Equal((time.Time{})) {
-				tc.pivotTime = pivotTime
-			}
+			resp, err := dc.GetForecastAsTimeseries(t.Context(), tc.req)
 
-			resp, err := dc.GetForecastAsTimeseries(t.Context(), &pb.GetForecastAsTimeseriesRequest{
-				LocationUuid: siteResp.LocationUuid,
-				HorizonMins:  uint32(tc.horizonMins),
-				Forecaster:   forecasterResp.Forecaster,
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				TimeWindow: &pb.TimeWindow{
-					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
-					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
-				},
-			})
-			if strings.Contains(tc.name, "Shouldn't") {
+			if tc.expectErr {
 				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.NotNil(t, resp)
-
-				targetTimes := make([]int64, len(resp.Values))
-
-				actualValues := make([]float32, len(resp.Values))
-				for i, v := range resp.Values {
-					targetTimes[i] = v.TargetTimestampUtc.AsTime().Unix()
-					actualValues[i] = v.P50ValueFraction
-
-					// Assert that the capacity change has been picked up
-					if v.TargetTimestampUtc.AsTime().
-						After(pivotTime.Add(-1 * time.Hour).Add(-1 * time.Second)) {
-						require.Equal(t, 1500000, int(v.EffectiveCapacityWatts))
-					} else {
-						require.Equal(t, 1000000, int(v.EffectiveCapacityWatts))
-					}
-				}
-
-				require.IsIncreasing(t, targetTimes)
-				require.Equal(t, tc.expectedValues, actualValues)
+				return
 			}
+
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+
+			targetTimes := make([]int64, len(resp.Values))
+			actualValues := make([]float32, len(resp.Values))
+
+			for i, v := range resp.Values {
+				targetTimes[i] = v.TargetTimestampUtc.AsTime().Unix()
+				actualValues[i] = v.P50ValueFraction
+
+				// Assert that the capacity change has been picked up
+				if v.TargetTimestampUtc.AsTime().
+					After(pivotTime.Add(-1 * time.Hour).Add(-1 * time.Second)) {
+					require.Equal(t, 1500000, int(v.EffectiveCapacityWatts))
+				} else {
+					require.Equal(t, 1000000, int(v.EffectiveCapacityWatts))
+				}
+			}
+
+			require.IsIncreasing(t, targetTimes)
+			require.Equal(t, tc.expectedValues, actualValues)
 		})
 	}
 }
@@ -1931,6 +1956,198 @@ func TestGetLatestForecasts(t *testing.T) {
 				for _, forecast := range resp.Forecasts {
 					require.NotNil(t, forecast.CreatedTimestampUtc)
 				}
+			}
+		})
+	}
+}
+
+func TestStreamForecastData(t *testing.T) {
+	pivotTime := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
+
+	// Create a site to attach the forecasts to
+	metadata, err := structpb.NewStruct(map[string]any{"stream_test": "true"})
+	require.NoError(t, err)
+	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_stream_forecast_data_site",
+		GeometryWkt:            "POINT(-60.25 57.5)",
+		EffectiveCapacityWatts: 1000000,
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 48)),
+	})
+	require.NoError(t, err)
+
+	// Create two forecasters
+	fc1Resp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
+		Name:    "stream_forecaster_alpha",
+		Version: "v1",
+	})
+	require.NoError(t, err)
+
+	fc2Resp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
+		Name:    "stream_forecaster_beta",
+		Version: "v2",
+	})
+	require.NoError(t, err)
+
+	// Generate 3 forecasts for each forecaster, each with 4 horizon values (0, 5, 10, 15)
+	yields := make([]*pb.CreateForecastRequest_ForecastValue, 4)
+	for i := range yields {
+		yields[i] = &pb.CreateForecastRequest_ForecastValue{
+			HorizonMins: uint32(i * 5),
+			P50Fraction: float32(i) * 0.25,
+			OtherStatisticsFractions: map[string]float32{
+				"p90": float32(i)*0.25 + 0.1,
+			},
+			Metadata: metadata,
+		}
+	}
+
+	// Seed forecasts for both forecasters spanning backwards from pivot time
+	for i := 2; i >= 0; i-- {
+		initTime := timestamppb.New(pivotTime.Add(time.Duration(-i*60) * time.Minute))
+
+		_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
+			LocationUuid: siteResp.LocationUuid,
+			Forecaster:   fc1Resp.Forecaster,
+			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			InitTimeUtc:  initTime,
+			Values:       yields,
+		})
+		require.NoError(t, err)
+
+		_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
+			LocationUuid: siteResp.LocationUuid,
+			Forecaster:   fc2Resp.Forecaster,
+			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			InitTimeUtc:  initTime,
+			Values:       yields,
+		})
+		require.NoError(t, err)
+	}
+
+	defaultTimeWindow := &pb.StreamForecastDataRequest_TimeWindow{
+		StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 10)),
+		EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 10)),
+	}
+
+	testcases := []struct {
+		name              string
+		req               *pb.StreamForecastDataRequest
+		expectedRowsCount int
+		expectErr         bool
+		checkMetadata     bool
+	}{
+		{
+			name: "Should successfully stream forecasts for a single forecaster",
+			req: &pb.StreamForecastDataRequest{
+				LocationUuid:    siteResp.LocationUuid,
+				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster},
+				TimeWindow:      defaultTimeWindow,
+				IncludeMetadata: false,
+			},
+			// 3 forecasts * 4 values = 12 rows
+			expectedRowsCount: 12,
+			expectErr:         false,
+		},
+		{
+			name: "Should successfully stream forecasts for multiple forecasters",
+			req: &pb.StreamForecastDataRequest{
+				LocationUuid:    siteResp.LocationUuid,
+				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster, fc2Resp.Forecaster},
+				TimeWindow:      defaultTimeWindow,
+				IncludeMetadata: false,
+			},
+			// (3 forecasts * 4 values) * 2 forecasters = 24 rows
+			expectedRowsCount: 24,
+			expectErr:         false,
+		},
+		{
+			name: "Should only return forecasts whos init times respect the time window boundaries",
+			req: &pb.StreamForecastDataRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecasters:  []*pb.Forecaster{fc1Resp.Forecaster},
+				TimeWindow: &pb.StreamForecastDataRequest_TimeWindow{
+					// Constrain the window to only capture the most recent forecast
+					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Minute * 10)),
+					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Minute * 10)),
+				},
+				IncludeMetadata: false,
+			},
+			expectedRowsCount: 4,
+			expectErr:         false,
+		},
+		{
+			name: "Should include metadata when asked",
+			req: &pb.StreamForecastDataRequest{
+				LocationUuid:    siteResp.LocationUuid,
+				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster},
+				TimeWindow:      defaultTimeWindow,
+				IncludeMetadata: true,
+			},
+			expectedRowsCount: 12,
+			expectErr:         false,
+			checkMetadata:     true,
+		},
+		{
+			name: "Should fail gracefully with an invalid UUID",
+			req: &pb.StreamForecastDataRequest{
+				LocationUuid: "not-a-valid-uuid",
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecasters:  []*pb.Forecaster{fc1Resp.Forecaster},
+				TimeWindow:   defaultTimeWindow,
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			stream, err := dc.StreamForecastData(t.Context(), tc.req)
+			if err != nil {
+				if tc.expectErr {
+					return
+				}
+
+				require.NoError(t, err)
+			}
+
+			var actualRowsCount int
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+
+				if tc.expectErr {
+					require.Error(t, err)
+					return
+				}
+
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+
+				actualRowsCount++
+
+				if tc.checkMetadata {
+					require.NotNil(t, resp.Metadata)
+					require.Equal(t, "true", resp.Metadata["stream_test"])
+				} else {
+					require.Empty(t, resp.Metadata)
+				}
+
+				require.NotZero(t, resp.EffectiveCapacityWatts)
+				require.NotNil(t, resp.OtherStatisticsFractions)
+				require.Contains(t, resp.OtherStatisticsFractions, "p90")
+			}
+
+			if !tc.expectErr {
+				require.Equal(t, tc.expectedRowsCount, actualRowsCount)
 			}
 		})
 	}

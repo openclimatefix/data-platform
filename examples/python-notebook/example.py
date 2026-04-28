@@ -7,7 +7,7 @@
 #     "xarray==2025.7.1",
 # ]
 # [tool.uv.sources]
-# dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.25.0/dp_sdk-0.25.0-py3-none-any.whl" }
+# dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.27.0/dp_sdk-0.27.0-py3-none-any.whl" }
 # ///
 """Example script for pulling data from the data platform.
 
@@ -45,6 +45,7 @@ async def main() -> None:
             location_type_filter=dp.LocationType.NATION,
         )
         glresp = await dpc.list_locations(glreq)
+        print(f":: -> {len(glresp)} available locations")
         uk_location = next(l for l in glresp.locations if l.location_name == "uk")
         print(f"\t{uk_location.effective_capacity_watts=}")
 
