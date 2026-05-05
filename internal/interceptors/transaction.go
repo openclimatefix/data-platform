@@ -18,7 +18,10 @@ import (
 )
 
 // Establish a private type for the context key to avoid collisions.
-type txKey struct{}
+type (
+	txKey   struct{}
+	poolKey struct{}
+)
 
 // GetTxFromContext retrieves the transaction from the context.
 // It panics if the transaction is not found, as presumably anything calling this function
@@ -33,6 +36,21 @@ func GetTxFromContext(ctx context.Context) pgx.Tx {
 	}
 
 	return tx
+}
+
+// GetPoolFromContext retrieves the connection pool from the context.
+// It panics if the pool is not found, since, as above, anything calling this function
+// expects it to be there, and we shouldn't fail silently in that case.
+func GetPoolFromContext(ctx context.Context) *pgxpool.Pool {
+	pool, ok := ctx.Value(poolKey{}).(*pgxpool.Pool)
+	if !ok {
+		log.Fatal().Msg(
+			"Connection pool not injected to context. Ensure the TransactionInjector interceptor " +
+				"is included in the server's interceptor chain.",
+		)
+	}
+
+	return pool
 }
 
 // transactionInterceptorBuilder defines an interface to inject transactions into the request
@@ -112,6 +130,11 @@ func (ti *transactionInterceptorBuilder) UnaryServerInterceptor(
 }
 
 // StreamServerInterceptor is the gRPC interceptor for handling transactions in streams.
+// For each streaming call, it sets up a transaction from the pool and cleanly rolls back on error.
+// However, it also adds the pool to the context for larger queries. This creates options in its
+// usage, so follow this rule of thumb:
+// - Use the transaction for smaller writes and reads
+// - Use the pool to control the number of connections large queries requiring fan-out.
 func (ti *transactionInterceptorBuilder) StreamServerInterceptor(
 	srv any,
 	ss grpc.ServerStream,
@@ -119,8 +142,12 @@ func (ti *transactionInterceptorBuilder) StreamServerInterceptor(
 	handler grpc.StreamHandler,
 ) error {
 	l := zerolog.Ctx(ss.Context())
+	// Since streaming queries are expected to ask for a lot of data, also add the pool as a whole
+	// to the context, to allow for internal fanning out.
+	poolCtx := context.WithValue(ss.Context(), poolKey{}, ti.pool)
+
 	// Establish a transaction with the database.
-	tx, err := ti.pool.Begin(ss.Context())
+	tx, err := ti.pool.Begin(poolCtx)
 	if err != nil {
 		return status.Error(codes.Internal, "Error communicating with backend")
 	}
@@ -129,14 +156,14 @@ func (ti *transactionInterceptorBuilder) StreamServerInterceptor(
 	defer func() {
 		if err != nil {
 			l.Debug().Msg("rolling back transaction")
-			_ = tx.Rollback(ss.Context())
+			_ = tx.Rollback(poolCtx)
 		} else {
-			_ = tx.Commit(ss.Context())
+			_ = tx.Commit(poolCtx)
 		}
 	}()
 
 	// Create a new context with the transaction injected. Returned errors will trigger the defer.
-	txCtx := context.WithValue(ss.Context(), txKey{}, tx)
+	txCtx := context.WithValue(poolCtx, txKey{}, tx)
 
 	// Wrap the ServerStream to inject our new context.
 	err = handler(srv, &wrappedStream{ServerStream: ss, newCtx: txCtx})

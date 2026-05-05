@@ -2,12 +2,12 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "dp_sdk",
-# #    "dp_sdk @ ${PROJECT_ROOT}/gen/python", # for local testing
+# #   "dp_sdk @ ${PROJECT_ROOT}/gen/python", # for local testing
 #     "grpclib==0.4.8",
 #     "xarray==2025.7.1",
 # ]
 # [tool.uv.sources]
-# dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.27.0/dp_sdk-0.27.0-py3-none-any.whl" }
+# dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.29.0/dp_sdk-0.29.0-py3-none-any.whl" }
 # ///
 """Example script for pulling data from the data platform.
 
@@ -32,7 +32,7 @@ async def main() -> None:
         dpc = dp.DataPlatformDataServiceStub(channel)
         
         print(":: Getting a UI-style forecast for the UK")
-        print("   This is a composite timeseries that can be made up of values from many different forecasts.")
+        print("\tThis is a composite timeseries that can be made up of values from many different forecasts.")
 
         time_window = dp.TimeWindow(
             start_timestamp_utc=dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=7),
@@ -41,13 +41,22 @@ async def main() -> None:
 
         print(":: -> Getting the UK national location")
         glreq = dp.ListLocationsRequest(
+            location_names_filter=["uk"],
             energy_source_filter=dp.EnergySource.SOLAR,
-            location_type_filter=dp.LocationType.NATION,
         )
         glresp = await dpc.list_locations(glreq)
         print(f":: -> {len(glresp)} available locations")
-        uk_location = next(l for l in glresp.locations if l.location_name == "uk")
+        uk_location = glresp.locations[0]
         print(f"\t{uk_location.effective_capacity_watts=}")
+
+        print(":: -> Getting GSP locations")
+        glreq = dp.ListLocationsRequest(
+            location_type_filter=dp.LocationType.GSP,
+            energy_source_filter=dp.EnergySource.SOLAR,
+        )
+        glresp = await dpc.list_locations(glreq)
+        gsp_locations = glresp.locations
+        print(f"\t{len(gsp_locations)} available GSP locations")
 
         print(":: -> Listing available forecasters called 'blend'")
         lfresp = await dpc.list_forecasters(dp.ListForecastersRequest(latest_versions_only=True))
@@ -106,10 +115,13 @@ async def main() -> None:
 
         print(":: -> Streaming forecast values")
         sdreq = dp.StreamForecastDataRequest(
-            location_uuid=uk_location.location_uuid,
+            location_uuids=[uk_location.location_uuid],
             energy_source=dp.EnergySource.SOLAR,
             forecasters=[f for f in lfresp.forecasters if "blend" in f.forecaster_name][:2],
-            time_window=time_window,
+            time_window=dp.StreamForecastDataRequestTimeWindow(
+                start_timestamp_utc=time_window.start_timestamp_utc,
+                end_timestamp_utc=time_window.end_timestamp_utc,
+            ),
             include_metadata=True,
         )
         forecast_values = []

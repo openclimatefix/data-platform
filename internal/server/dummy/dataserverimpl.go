@@ -634,29 +634,31 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 
 	for _, it := range initializationTimestamps {
 		for _, fc := range req.Forecasters {
-			for _, h := range horizons {
-				tt := it.Add(time.Duration(h) * time.Minute)
-				sd := determineIrradiance(tt, randomUkLngLat())
+			for _, lu := range req.LocationUuids {
+				for _, h := range horizons {
+					tt := it.Add(time.Duration(h) * time.Minute)
+					sd := determineIrradiance(tt, randomUkLngLat())
 
-				err := stream.Send(&pb.StreamForecastDataResponse{
-					InitTimestamp: timestamppb.New(it),
-					LocationUuid:  req.LocationUuid,
-					ForecasterFullname: fmt.Sprintf(
-						"%s:%s",
-						fc.ForecasterName,
-						fc.ForecasterVersion,
-					),
-					HorizonMins: uint32(h),
-					P50Fraction: float32(sd.normalizedIrradiance()),
-					OtherStatisticsFractions: map[string]float32{
-						"p10": float32(sd.normalizedIrradiance()) * 0.95,
-						"p90": float32(sd.normalizedIrradiance()) * 1.05,
-					},
-					CreatedTimestampUtc:    timestamppb.New(time.Now().UTC()),
-					EffectiveCapacityWatts: 150e6,
-				})
-				if err != nil {
-					return err
+					err := stream.Send(&pb.StreamForecastDataResponse{
+						InitTimestamp: timestamppb.New(it),
+						LocationUuid:  lu,
+						ForecasterFullname: fmt.Sprintf(
+							"%s:%s",
+							fc.ForecasterName,
+							fc.ForecasterVersion,
+						),
+						HorizonMins: uint32(h),
+						P50Fraction: float32(sd.normalizedIrradiance()),
+						OtherStatisticsFractions: map[string]float32{
+							"p10": float32(sd.normalizedIrradiance()) * 0.95,
+							"p90": float32(sd.normalizedIrradiance()) * 1.05,
+						},
+						CreatedTimestampUtc:    timestamppb.New(time.Now().UTC()),
+						EffectiveCapacityWatts: 150e6,
+					})
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
