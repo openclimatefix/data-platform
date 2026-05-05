@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -474,14 +475,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 	stream grpc.ServerStreamingServer[pb.StreamForecastDataResponse],
 ) error {
 	l := zerolog.Ctx(stream.Context())
-
-	tx := ix.GetTxFromContext(stream.Context())
-
-	locationUuid, err := uuid.Parse(req.LocationUuid)
-	if err != nil {
-		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
-		return status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
-	}
+	pool := ix.GetPoolFromContext(stream.Context())
 
 	var (
 		fNames    []string
@@ -493,93 +487,126 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 		fVersions = append(fVersions, fc.ForecasterVersion)
 	}
 
-	// Query with the transaction directly so the returned data can be streamed.
-	// This is to avoid very large data requests choking the memory of the API.
-	// Normally I woudn't want to bypass SQLC's type safety - but this RPC is specifically for
-	// ML debugging and isn't on any hot path, so I don't mind here.
-	rows, err := tx.Query(
-		stream.Context(),
-		db.ListPredictionsForForecasts,
-		int16(req.EnergySource.Number()),
-		fNames,
-		fVersions,
-		locationUuid,
-		pgtype.Timestamp{
-			Time:  req.TimeWindow.StartTimestampUtc.AsTime(),
-			Valid: true,
-		},
-		pgtype.Timestamp{
-			Time:  req.TimeWindow.EndTimestampUtc.AsTime(),
-			Valid: true,
-		},
-	)
-	if err != nil {
-		l.Err(err).Msg("tx.Query(ListPredictionsForForecasts) failed")
-		return status.Errorf(codes.Internal, "Failed to stream predictions")
-	}
-	defer rows.Close()
+	// Instantiate a worker pool of a limited size to handle the query.
+	eg, ctx := errgroup.WithContext(stream.Context())
+	eg.SetLimit(2)
+	resChan := make(chan *pb.StreamForecastDataResponse, 1000)
 
-	for rows.Next() {
-		var row db.ListPredictionsForForecastsRow
-
-		err := rows.Scan(
-			&row.InitTimeUtc,
-			&row.ForecasterName,
-			&row.ForecasterVersion,
-			&row.CreatedAtUtc,
-			&row.HorizonMins,
-			&row.P50Sip,
-			&row.OtherStatsFractions,
-			&row.CapacityWatts,
-			&row.Metadata,
-		)
-		if err != nil {
-			l.Err(err).Msg("rows.Scan failed")
-			return status.Errorf(codes.Internal, "Error reading prediction stream")
-		}
-
-		otherStatistics := make(map[string]float32)
-		if row.OtherStatsFractions != nil {
-			for k, v := range row.OtherStatsFractions.AsMap() {
-				otherStatistics[k] = float32(v.(float64))
+	// Fan out queries for each location to the database.
+	for _, locStr := range req.LocationUuids {
+		eg.Go(func() error {
+			locationUuid, err := uuid.Parse(locStr)
+			if err != nil {
+				l.Err(err).Msgf("uuid.Parse(%s)", locStr)
+				return status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 			}
-		}
 
-		metadata := make(map[string]string)
-		if req.IncludeMetadata && row.Metadata != nil {
-			for k, v := range row.Metadata.AsMap() {
-				metadata[k] = v.(string)
+			// Query with the pool directly so each concurrent request gets a fresh connection.
+			// This is to avoid very large data requests choking the memory of the API.
+			// Normally I woudn't want to bypass SQLC's type safety - but this RPC is specifically for
+			// ML debugging and isn't on any hot path, so I don't mind here.
+			rows, err := pool.Query(
+				stream.Context(),
+				db.ListPredictionsForForecasts,
+				pgtype.Timestamp{
+					Time:  req.TimeWindow.StartTimestampUtc.AsTime(),
+					Valid: true,
+				},
+				pgtype.Timestamp{
+					Time:  req.TimeWindow.EndTimestampUtc.AsTime(),
+					Valid: true,
+				},
+				locationUuid,
+				int16(req.EnergySource.Number()),
+				fNames,
+				fVersions,
+			)
+			if err != nil {
+				l.Err(err).Msg("tx.Query(ListPredictionsForForecasts) failed")
+				return status.Errorf(codes.Internal, "Failed to stream predictions")
 			}
-		}
+			defer rows.Close()
 
-		err = stream.Send(&pb.StreamForecastDataResponse{
-			InitTimestamp: timestamppb.New(row.InitTimeUtc.Time),
-			LocationUuid:  req.LocationUuid,
-			ForecasterFullname: fmt.Sprintf(
-				"%s:%s",
-				row.ForecasterName,
-				row.ForecasterVersion,
-			),
-			HorizonMins:              uint32(row.HorizonMins),
-			P50Fraction:              float32(row.P50Sip) / 30000.0,
-			OtherStatisticsFractions: otherStatistics,
-			CreatedTimestampUtc:      timestamppb.New(row.CreatedAtUtc.Time),
-			EffectiveCapacityWatts:   uint64(row.CapacityWatts),
-			Metadata:                 metadata,
+			for rows.Next() {
+				var row db.ListPredictionsForForecastsRow
+
+				err := rows.Scan(
+					&row.InitTimeUtc,
+					&row.ForecasterName,
+					&row.ForecasterVersion,
+					&row.CreatedAtUtc,
+					&row.HorizonMins,
+					&row.P50Sip,
+					&row.OtherStatsFractions,
+					&row.CapacityWatts,
+					&row.Metadata,
+				)
+				if err != nil {
+					l.Err(err).Msg("rows.Scan failed")
+					return status.Errorf(codes.Internal, "Error reading prediction stream")
+				}
+
+				otherStatistics := make(map[string]float32)
+				if row.OtherStatsFractions != nil {
+					for k, v := range row.OtherStatsFractions.AsMap() {
+						otherStatistics[k] = float32(v.(float64))
+					}
+				}
+
+				metadata := make(map[string]string)
+				if req.IncludeMetadata && row.Metadata != nil {
+					for k, v := range row.Metadata.AsMap() {
+						metadata[k] = v.(string)
+					}
+				}
+
+				res := &pb.StreamForecastDataResponse{
+					InitTimestamp: timestamppb.New(row.InitTimeUtc.Time),
+					LocationUuid:  locationUuid.String(),
+					ForecasterFullname: fmt.Sprintf(
+						"%s:%s",
+						row.ForecasterName,
+						row.ForecasterVersion,
+					),
+					HorizonMins:              uint32(row.HorizonMins),
+					P50Fraction:              float32(row.P50Sip) / 30000.0,
+					OtherStatisticsFractions: otherStatistics,
+					CreatedTimestampUtc:      timestamppb.New(row.CreatedAtUtc.Time),
+					EffectiveCapacityWatts:   uint64(row.CapacityWatts),
+					Metadata:                 metadata,
+				}
+				select {
+				case resChan <- res:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+
+			l.Debug().
+				Str("dp.geometry.uuid", locationUuid.String()).
+				Msg("streamed forecasts for location")
+
+			return rows.Err()
 		})
-		// If the client disconnects or network fails, break the loop
+	}
+
+	// Wait for all DB workers to finish before closing the channel to signal the streamer to finish.
+	go func() {
+		_ = eg.Wait()
+
+		close(resChan)
+	}()
+
+	// Consume the channel and stream to the client as results come in.
+	// If the client disconnects, the context is cancelled, which terminates the workers.
+	for res := range resChan {
+		err := stream.Send(res)
 		if err != nil {
-			l.Warn().Err(err).Msg("Client stream closed prematurely")
 			return err
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		l.Err(err).Msg("rows.Err() reported a streaming failure")
-		return status.Errorf(codes.Internal, "Stream interrupted")
-	}
-
-	return nil
+	return eg.Wait()
 }
 
 func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(

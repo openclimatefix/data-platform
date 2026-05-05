@@ -711,7 +711,7 @@ message ListLocationsRequest {
   repeated string location_names_filter = 8 [
     (buf.validate.field).repeated.max_items = 100,
     (buf.validate.field).repeated.items = {
-      string: {min_len: 2, max_len: 100},
+      string: {min_len: 2, max_len: 500},
     },
     (buf.validate.field).repeated.unique = true
   ];
@@ -775,9 +775,13 @@ message StreamForecastDataRequest {
     };
   }
 
-  string location_uuid = 1 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).string.uuid = true
+  repeated string location_uuids = 1 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 1000,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items = {
+      string: {uuid: true}
+    }
   ];
   EnergySource energy_source = 2 [
     (buf.validate.field).required = true 

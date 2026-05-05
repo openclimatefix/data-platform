@@ -2058,7 +2058,7 @@ func TestStreamForecastData(t *testing.T) {
 		{
 			name: "Should successfully stream forecasts for a single forecaster",
 			req: &pb.StreamForecastDataRequest{
-				LocationUuid:    siteResp.LocationUuid,
+				LocationUuids:   []string{siteResp.LocationUuid},
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster},
 				TimeWindow:      defaultTimeWindow,
@@ -2071,7 +2071,7 @@ func TestStreamForecastData(t *testing.T) {
 		{
 			name: "Should successfully stream forecasts for multiple forecasters",
 			req: &pb.StreamForecastDataRequest{
-				LocationUuid:    siteResp.LocationUuid,
+				LocationUuids:   []string{siteResp.LocationUuid},
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster, fc2Resp.Forecaster},
 				TimeWindow:      defaultTimeWindow,
@@ -2084,9 +2084,9 @@ func TestStreamForecastData(t *testing.T) {
 		{
 			name: "Should only return forecasts whos init times respect the time window boundaries",
 			req: &pb.StreamForecastDataRequest{
-				LocationUuid: siteResp.LocationUuid,
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				Forecasters:  []*pb.Forecaster{fc1Resp.Forecaster},
+				LocationUuids: []string{siteResp.LocationUuid},
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecasters:   []*pb.Forecaster{fc1Resp.Forecaster},
 				TimeWindow: &pb.StreamForecastDataRequest_TimeWindow{
 					// Constrain the window to only capture the most recent forecast
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Minute * 10)),
@@ -2100,7 +2100,7 @@ func TestStreamForecastData(t *testing.T) {
 		{
 			name: "Should include metadata when asked",
 			req: &pb.StreamForecastDataRequest{
-				LocationUuid:    siteResp.LocationUuid,
+				LocationUuids:   []string{siteResp.LocationUuid},
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster},
 				TimeWindow:      defaultTimeWindow,
@@ -2113,10 +2113,10 @@ func TestStreamForecastData(t *testing.T) {
 		{
 			name: "Should fail gracefully with an invalid UUID",
 			req: &pb.StreamForecastDataRequest{
-				LocationUuid: "not-a-valid-uuid",
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				Forecasters:  []*pb.Forecaster{fc1Resp.Forecaster},
-				TimeWindow:   defaultTimeWindow,
+				LocationUuids: []string{"not-a-valid-uuid"},
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecasters:   []*pb.Forecaster{fc1Resp.Forecaster},
+				TimeWindow:    defaultTimeWindow,
 			},
 			expectErr: true,
 		},

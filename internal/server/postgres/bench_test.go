@@ -252,6 +252,45 @@ func BenchmarkPostgresClient(b *testing.B) {
 					require.NoError(b, err)
 				}
 			})
+			b.Run("StreamForecastData", func(b *testing.B) {
+				for b.Loop() {
+					stream, err := dc.StreamForecastData(
+						b.Context(),
+						&pb.StreamForecastDataRequest{
+							LocationUuids: []string{
+								output.LocationUuids[0],
+								output.LocationUuids[1],
+							},
+							EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+							Forecasters: []*pb.Forecaster{{
+								ForecasterName:    tc.NamePrefix + "_forecaster_1",
+								ForecasterVersion: "v1",
+							}},
+							TimeWindow: &pb.StreamForecastDataRequest_TimeWindow{
+								StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
+								EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
+							},
+						},
+					)
+					require.NoError(b, err)
+
+					var numValues int
+					for {
+						_, err := stream.Recv()
+						if err != nil {
+							break
+						}
+
+						numValues++
+					}
+
+					require.GreaterOrEqual(
+						b,
+						numValues,
+						(48+12)*60/30,
+					)
+				}
+			})
 		})
 	}
 }
