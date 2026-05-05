@@ -581,6 +581,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					return ctx.Err()
 				}
 			}
+
 			l.Debug().
 				Str("dp.geometry.uuid", locationUuid.String()).
 				Msg("streamed forecasts for location")
