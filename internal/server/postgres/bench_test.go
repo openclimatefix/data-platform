@@ -276,12 +276,11 @@ func BenchmarkPostgresClient(b *testing.B) {
 
 					var numValues int
 					for {
-						_, err := stream.Recv()
+						resp, err := stream.Recv()
 						if err != nil {
 							break
 						}
-
-						numValues++
+						numValues += len(resp.Values)
 					}
 
 					require.GreaterOrEqual(

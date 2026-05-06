@@ -2135,7 +2135,7 @@ func TestStreamForecastData(t *testing.T) {
 
 			var actualRowsCount int
 			for {
-				resp, err := stream.Recv()
+				batchResp, err := stream.Recv()
 				if err == io.EOF {
 					break
 				}
@@ -2146,20 +2146,22 @@ func TestStreamForecastData(t *testing.T) {
 				}
 
 				require.NoError(t, err)
-				require.NotNil(t, resp)
+				require.NotNil(t, batchResp)
 
-				actualRowsCount++
+				for _, pt := range batchResp.Values {
+					actualRowsCount++
 
-				if tc.checkMetadata {
-					require.NotNil(t, resp.Metadata)
-					require.Equal(t, "true", resp.Metadata["stream_test"])
-				} else {
-					require.Empty(t, resp.Metadata)
+					if tc.checkMetadata {
+						require.NotNil(t, pt.Metadata)
+						require.Equal(t, "true", pt.Metadata["stream_test"])
+					} else {
+						require.Empty(t, pt.Metadata)
+					}
+
+					require.NotZero(t, pt.EffectiveCapacityWatts)
+					require.NotNil(t, pt.OtherStatisticsFractions)
+					require.Contains(t, pt.OtherStatisticsFractions, "p90")
 				}
-
-				require.NotZero(t, resp.EffectiveCapacityWatts)
-				require.NotNil(t, resp.OtherStatisticsFractions)
-				require.Contains(t, resp.OtherStatisticsFractions, "p90")
 			}
 
 			if !tc.expectErr {
