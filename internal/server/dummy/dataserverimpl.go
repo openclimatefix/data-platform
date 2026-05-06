@@ -632,6 +632,9 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 		horizons[i] = 30 * i
 	}
 
+	const batchSize = 1000
+	batch := make([]*pb.ForecastDatum, 0, batchSize)
+
 	for _, it := range initializationTimestamps {
 		for _, fc := range req.Forecasters {
 			for _, lu := range req.LocationUuids {
@@ -639,7 +642,7 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 					tt := it.Add(time.Duration(h) * time.Minute)
 					sd := determineIrradiance(tt, randomUkLngLat())
 
-					err := stream.Send(&pb.StreamForecastDataResponse{
+					batch = append(batch, &pb.ForecastDatum{
 						InitTimestamp: timestamppb.New(it),
 						LocationUuid:  lu,
 						ForecasterFullname: fmt.Sprintf(
@@ -656,11 +659,24 @@ func (d *DataPlatformDataServiceServerImpl) StreamForecastData(
 						CreatedTimestampUtc:    timestamppb.New(time.Now().UTC()),
 						EffectiveCapacityWatts: 150e6,
 					})
-					if err != nil {
-						return err
+
+					if len(batch) >= batchSize {
+						err := stream.Send(&pb.StreamForecastDataResponse{Values: batch})
+						if err != nil {
+							return err
+						}
+
+						batch = make([]*pb.ForecastDatum, 0, batchSize)
 					}
 				}
 			}
+		}
+	}
+
+	if len(batch) > 0 {
+		err := stream.Send(&pb.StreamForecastDataResponse{Values: batch})
+		if err != nil {
+			return err
 		}
 	}
 

@@ -798,6 +798,10 @@ message StreamForecastDataRequest {
 }
 
 message StreamForecastDataResponse {
+  repeated ForecastDatum values = 1;
+}
+
+message ForecastDatum {
   google.protobuf.Timestamp init_timestamp = 1;
   string location_uuid = 2;
   string forecaster_fullname = 3;

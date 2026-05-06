@@ -147,7 +147,7 @@ build-backend = "setuptools.build_meta"
 name = "dp-sdk"
 dynamic = ["version"]
 description = "Python client for OCF Data Platform API"
-dependencies = ["betterproto==2.0.0b7", "grpcio"]
+dependencies = ["betterproto==2.0.0b7", "grpcio==1.80.0", "protobuf==7.34.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

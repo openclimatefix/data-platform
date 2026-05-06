@@ -130,43 +130,23 @@ func (ti *transactionInterceptorBuilder) UnaryServerInterceptor(
 }
 
 // StreamServerInterceptor is the gRPC interceptor for handling transactions in streams.
-// For each streaming call, it sets up a transaction from the pool and cleanly rolls back on error.
-// However, it also adds the pool to the context for larger queries. This creates options in its
-// usage, so follow this rule of thumb:
-// - Use the transaction for smaller writes and reads
-// - Use the pool to control the number of connections large queries requiring fan-out.
+// This does not automatically manage transactions like the unary interceptor, since server-streaming
+// RPCs are expected to be longer-lived, read only, and require concurrency. Instead, it adds the
+// connection pool as-is to the context. Errors and transactions must be handled by the
+// implementations, since opening a transaction for the stream here might result in long-lived
+// transactions, which prevent vacuuming.
 func (ti *transactionInterceptorBuilder) StreamServerInterceptor(
 	srv any,
 	ss grpc.ServerStream,
 	info *grpc.StreamServerInfo,
 	handler grpc.StreamHandler,
 ) error {
-	l := zerolog.Ctx(ss.Context())
-	// Since streaming queries are expected to ask for a lot of data, also add the pool as a whole
+	// Since streaming queries are expected to ask for a lot of data, add the pool as a whole
 	// to the context, to allow for internal fanning out.
 	poolCtx := context.WithValue(ss.Context(), poolKey{}, ti.pool)
 
-	// Establish a transaction with the database.
-	tx, err := ti.pool.Begin(poolCtx)
-	if err != nil {
-		return status.Error(codes.Internal, "Error communicating with backend")
-	}
-
-	// If an error occurred, rollback the transaction.
-	defer func() {
-		if err != nil {
-			l.Debug().Msg("rolling back transaction")
-			_ = tx.Rollback(poolCtx)
-		} else {
-			_ = tx.Commit(poolCtx)
-		}
-	}()
-
-	// Create a new context with the transaction injected. Returned errors will trigger the defer.
-	txCtx := context.WithValue(poolCtx, txKey{}, tx)
-
 	// Wrap the ServerStream to inject our new context.
-	err = handler(srv, &wrappedStream{ServerStream: ss, newCtx: txCtx})
+	err := handler(srv, &wrappedStream{ServerStream: ss, newCtx: poolCtx})
 	if err != nil {
 		return err
 	}

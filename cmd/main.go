@@ -99,6 +99,8 @@ func main() {
 				grpc.StreamServerInterceptor(logInterceptor.StreamServerInterceptor),
 				grpc.StreamServerInterceptor(txInterceptor.StreamServerInterceptor),
 			),
+			grpc.InitialWindowSize(1<<20),
+			grpc.InitialConnWindowSize(2<<20),
 		)
 	} else {
 		log.Fatal().Str("url", databaseUrl).Msg("unsupported DATABASE_URL format")
