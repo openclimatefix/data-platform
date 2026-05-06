@@ -280,6 +280,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 						if err != nil {
 							break
 						}
+
 						numValues += len(resp.Values)
 					}
 

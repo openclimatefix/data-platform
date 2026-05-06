@@ -492,7 +492,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 	// Instantiate a worker pool of a limited size to handle the query.
 	// Handy blog on errgroups: https://oneuptime.com/blog/post/2026-01-07-go-errgroup
 	eg, ctx := errgroup.WithContext(stream.Context())
-	eg.SetLimit(int(pool.Config().MaxConns) - 1)
+	eg.SetLimit(2)
 	resChan := make(chan *pb.StreamForecastDataResponse, 100)
 
 	// Fan out queries for each location to the database.
