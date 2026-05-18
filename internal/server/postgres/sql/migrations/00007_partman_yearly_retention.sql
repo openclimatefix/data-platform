@@ -9,6 +9,7 @@
  * extracting the date from their name, and attaching them with the appropriate range values.
  */
 
+-- +goose StatementBegin
 DO $$
 DECLARE
     partition_record RECORD;
@@ -45,7 +46,9 @@ BEGIN
         EXECUTE attach_sql;
     END LOOP;
 END $$;
+-- +goose StatementEnd
 
+-- +goose StatementBegin
 DO $$
 DECLARE
     target_table TEXT;
@@ -94,8 +97,9 @@ BEGIN
         END LOOP;
     END LOOP;
 END $$;
+-- +goose StatementEnd
 
---  +goose Down
+-- +goose Down
 
 UPDATE partman.part_config
 SET retention = '1 month'
