@@ -35,9 +35,9 @@ BEGIN
           )
     LOOP
         start_time := to_timestamp(partition_record.date_str, 'YYYYMMDD');
-        end_time := start_time + INTERVAL '1 week';
+        end_time := start_time + INTERVAL '7 days';
         attach_sql := format(
-            'ALTER TABLE obs.observed_generation_values ATTACH PARTITION %s FOR VALUES FROM (%L) TO (%L);',
+	    'ALTER TABLE obs.observed_generation_values ATTACH PARTITION %s FOR VALUES FROM (%L::TIMESTAMP) TO (%L::TIMESTAMP);',
             partition_record.full_table_name,
             start_time,
             end_time
@@ -55,8 +55,8 @@ DECLARE
     parent_table_name TEXT;
     partition_pattern TEXT;
     partition_record RECORD;
-    start_time TIMESTAMP;
-    end_time TIMESTAMP;
+    start_time TIMESTAMPTZ;
+    end_time TIMESTAMPTZ;
     attach_sql TEXT;
 BEGIN
     FOREACH target_table IN ARRAY ARRAY['forecasts', 'predicted_generation_values']
@@ -81,11 +81,11 @@ BEGIN
                     AND inhparent = parent_table_name::regclass
               )
         LOOP
-            start_time := to_timestamp(partition_record.date_str, 'YYYYMMDD');
-            end_time := start_time + INTERVAL '1 week';
+	    start_time := to_date(partition_record.date_str, 'YYYYMMDD')::TIMESTAMP AT TIME ZONE 'UTC';
+	    end_time := start_time + INTERVAL '7 days';
             
             attach_sql := format(
-                'ALTER TABLE %s ATTACH PARTITION %s FOR VALUES FROM (UUIDV7_BOUNDARY(%L::TIMESTAMP)) TO (UUIDV7_BOUNDARY(%L::TIMESTAMP));',
+	    'ALTER TABLE %s ATTACH PARTITION %s FOR VALUES FROM (partman.uuid7_time_encoder(%L::TIMESTAMPTZ)) TO (partman.uuid7_time_encoder(%L::TIMESTAMPTZ));',
                 parent_table_name,
                 partition_record.full_table_name,
                 start_time,

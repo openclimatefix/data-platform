@@ -544,7 +544,6 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					var row db.ListPredictionsForForecastsRow
 
 					err := rows.Scan(
-						&row.InitTimeUtc,
 						&row.ForecasterName,
 						&row.ForecasterVersion,
 						&row.CreatedAtUtc,
@@ -552,6 +551,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 						&row.P50Sip,
 						&row.OtherStatsFractions,
 						&row.CapacityWatts,
+						&row.InitTimeUtc,
 						&row.Metadata,
 					)
 					if err != nil {
