@@ -95,4 +95,12 @@ BEGIN
     END LOOP;
 END $$;
 
--- 
+--  +goose Down
+
+UPDATE partman.part_config
+SET retention = '1 month'
+WHERE parent_table = 'obs.observed_generation_values';
+
+UPDATE partman.part_config
+SET retention = '1 month'
+WHERE parent_table IN ('pred.forecasts', 'pred.predicted_generation_values');
