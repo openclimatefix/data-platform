@@ -149,7 +149,6 @@ matched_forecasters AS (
             AND f.forecaster_version = LOWER(rf.fversion)
 )
 SELECT
-    UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
     mf.forecaster_name,
     mf.forecaster_version,
     f.created_at_utc,
@@ -157,6 +156,7 @@ SELECT
     pg.p50_sip,
     pg.other_stats_fractions,
     sv.capacity_watts,
+    UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
     COALESCE(pg.metadata || f.metadata, pg.metadata, f.metadata) AS metadata
 FROM pred.forecasts AS f
     INNER JOIN matched_forecasters AS mf USING (forecaster_id)
@@ -310,8 +310,8 @@ latest_allowed_forecast_per_location AS (
         tl.geometry_uuid::UUID AS geometry_uuid, -- again, SQLC complains without this
         lf.source_type_id,
         lf.created_at_utc,
-        UUIDV7_EXTRACT_TIMESTAMP(lf.forecast_uuid)::TIMESTAMP AS init_time_utc,
-        lf.metadata
+        lf.metadata,
+        UUIDV7_EXTRACT_TIMESTAMP(lf.forecast_uuid)::TIMESTAMP AS init_time_utc
     FROM target_locations AS tl
         CROSS JOIN LATERAL (
             SELECT

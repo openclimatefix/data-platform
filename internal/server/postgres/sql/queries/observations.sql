@@ -95,11 +95,11 @@ target_observer AS (
 )
 SELECT
     tl.geometry_uuid::UUID AS geometry_uuid, -- SQLC complains without this
-    sqlc.arg(source_type_id)::SMALLINT AS source_type_id,
     latest_obs.observation_timestamp_utc,
     latest_obs.value_sip,
     sh.capacity_limit_sip,
-    sh.capacity_watts
+    sh.capacity_watts,
+    sqlc.arg(source_type_id)::SMALLINT AS source_type_id
 FROM target_locations AS tl
     CROSS JOIN target_observer AS tobs
     CROSS JOIN

@@ -96,9 +96,9 @@ new_state AS (
     SELECT
         $1::UUID AS geometry_uuid,
         $2::SMALLINT AS source_type_id,
+        $3::TIMESTAMP AS valid_from_utc,
         sqlc.arg(capacity_watts)::BIGINT AS capacity_watts,
         sqlc.narg(capacity_limit_sip)::SMALLINT AS capacity_limit_sip,
-        $3::TIMESTAMP AS valid_from_utc,
         CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END AS metadata
 )
 INSERT INTO loc.sources_history (

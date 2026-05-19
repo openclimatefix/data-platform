@@ -35,8 +35,8 @@ WHERE org_name = LOWER(sqlc.arg(org_name)::TEXT);
 SELECT
     org_uuid,
     org_name,
-    UUIDV7_EXTRACT_TIMESTAMP(org_uuid)::TIMESTAMP AS created_at_utc,
-    metadata
+    metadata,
+    UUIDV7_EXTRACT_TIMESTAMP(org_uuid)::TIMESTAMP AS created_at_utc
 FROM iam.orgs
 ORDER BY org_name;
 
@@ -79,9 +79,9 @@ SELECT
     u.user_uuid,
     u.org_uuid,
     o.org_name,
-    UUIDV7_EXTRACT_TIMESTAMP(u.user_uuid)::TIMESTAMP AS created_at_utc,
     u.oauth_id,
-    u.metadata
+    u.metadata,
+    UUIDV7_EXTRACT_TIMESTAMP(u.user_uuid)::TIMESTAMP AS created_at_utc
 FROM iam.orgs AS o
     INNER JOIN iam.users AS u USING (org_uuid)
 WHERE u.oauth_id = $1;
