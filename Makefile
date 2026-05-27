@@ -12,6 +12,7 @@ PROTOC           := $(LOCAL_BIN)/protoc
 PROTOC_INCLUDE   := $(LOCAL_BIN)/include
 PROTOC_GEN_GO    := $(LOCAL_BIN)/protoc-gen-go
 PROTOC_GEN_GRPC  := $(LOCAL_BIN)/protoc-gen-go-grpc
+PROTOC_GEN_DOC   := $(LOCAL_BIN)/protoc-gen-doc
 
 # --- Sources & Stamps ---
 GO_SOURCES          := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
@@ -65,7 +66,7 @@ clean:
 	@echo "Cleaning up..."
 	@rm -rf bin/
 	@rm -f ${SQLC_STAMP_FILE} ${PROTO_GO_STAMP_FILE} unit-tests.xml
-	@rm -rf internal/gen internal/server/postgres/gen gen/python
+	@rm -rf internal/gen internal/server/postgres/gen gen/
 
 .PHONY: doctor
 doctor: $(PROTOC)
@@ -136,6 +137,11 @@ ${PROTOC_GEN_GRPC}: go.tool.mod
 	@mkdir -p $(LOCAL_BIN)
 	@go build -modfile=go.tool.mod -o $@ google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
+${PROTOC_GEN_DOC}: go.tool.mod
+	@echo "Building protoc-gen-doc from go.tool.mod..."
+	@mkdir -p $(LOCAL_BIN)
+	@go build -modfile=go.tool.mod -o $@ github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc
+
 # --- EXTERNAL GENERATION TARGETS --------------------------------------------------------------- #
 
 define GEN_PYPROJ
@@ -158,7 +164,6 @@ endef
 export GEN_PYPROJ
 
 .PHONY: gen.proto.python
-.PHONY: gen.proto.python
 gen.proto.python: ${PROTOC}
 	@echo "Generating Python client bindings..."
 	@rm -rf gen/python && mkdir -p gen/python/src
@@ -175,6 +180,17 @@ gen.proto.python: ${PROTOC}
 	@echo "$$GEN_PYPROJ" > gen/python/pyproject.toml
 	@echo "Building wheel..."
 	@cd gen/python && echo $$(uv run python -m setuptools_git_versioning) && uv build
+
+.PHONY: gen.proto.docs
+gen.proto.docs: ${PROTOC} ${PROTOC_GEN_DOC}
+	@echo "Generating Markdown API docs..."
+	@rm -rf gen/docs && mkdir -p gen/docs
+	@${PROTOC} \
+		${PROTO_SOURCES} \
+		-I=proto \
+		-I=$(PROTOC_INCLUDE) \
+		--doc_out=gen/docs \
+		--doc_opt=markdown,docs.md:=buf/*,google/*,ocf/dp/dp.rules.proto,ocf/dp/dp-admin.service.proto,ocf/dp/dp-admin.messages.proto
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
 
