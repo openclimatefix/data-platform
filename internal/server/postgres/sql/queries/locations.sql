@@ -157,7 +157,7 @@ WHERE sh.geometry_uuid = $1
     AND sh.source_type_id = $2
     AND sh.valid_from_utc >= sqlc.arg(start_timestamp_utc)::TIMESTAMP
     AND sh.valid_from_utc < sqlc.arg(end_timestamp_utc)::TIMESTAMP
-ORDER BY valid_from_utc DESC;
+ORDER BY valid_from_utc ASC;
 
 -- name: ListSourcesAtTimestamp :many
 /* ListSourcesAtTimestamp returns all sources that match the given filters.

@@ -821,7 +821,7 @@ func TestGetLocationAsTimeseries(t *testing.T) {
 				LocationUuid: siteResp.LocationUuid,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				TimeWindow: &pb.TimeWindow{
-					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 12)),
+					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 24)),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 10)),
 				},
 			},
