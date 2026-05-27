@@ -1600,6 +1600,17 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 		out := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbPreds))
 		for i, pred := range dbPreds {
+			otherStats := make(map[string]float32)
+			for k, v := range pred.OtherStatsFractions.AsMap() {
+				floatVal, ok := v.(float64)
+				if !ok {
+					l.Warn().Str("key", k).Interface("value", v).Msg("skipping non-float statistic")
+					continue
+				}
+
+				otherStats[k] = float32(floatVal)
+			}
+
 			out[i] = &pb.GetForecastAsTimeseriesResponse_Value{
 				TargetTimestampUtc: timestamppb.New(
 					pred.InitTimeUtc.Time.Add(time.Duration(pred.HorizonMins) * time.Minute),
@@ -1608,6 +1619,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 				EffectiveCapacityWatts:     uint64(pred.CapacityWatts),
 				InitializationTimestampUtc: timestamppb.New(pred.InitTimeUtc.Time),
 				CreatedTimestampUtc:        timestamppb.New(pred.CreatedAtUtc.Time),
+				OtherStatisticsFractions:   otherStats,
 				Metadata:                   pred.Metadata,
 			}
 		}

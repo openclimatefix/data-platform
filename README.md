@@ -1,6 +1,6 @@
 # Data Platform
 
-**A complete redesign of OCF's forecast data stack for performance and useability.**
+**GRPC API and and database handler for storing and serving energy forecast data.**
 
 <p align="center">
   <picture align="center">
@@ -14,92 +14,11 @@ The Data Platform is a gRPC API server that provides efficient access to, and st
 energy forecast data. It has been architected to be performant under the specific workflows and
 data access patterns required by OCF's applications, in order to enable scaling, and to improve the
 developer experience when integrating with OCF's stack. With this in mind, there is a focus on not
-just the quality of the code, but also of the tooling surrounding the codebase.
-
-The benefits of the Data Platform, over the current OCF stack (datamodels) include, but aren't
-limited to:
-
-- **Two orders of magnitude faster** (milliseconds vs seconds)
-- **Performant at scale** (tested to 50x current org scope)
-- **Cheaper deployment** as on-the-fly calculation capability obsoletes analysis microservices
-- **Fully typed** client implementations in Python and Typescript
-- **Simple** to understand due to codegen of boilerplate
-- **Safer architecture** with single, considered source of entry to database
-- Unlocks greater depth of analysis with geometries, capacity limits, history and more
+just the quality of the code, but also of the tooling surrounding the codebase. This replaces the
+old SQLAlchemy `datamodel` repositories and databases.
 
 
-## Architecture
-
-The Data Platform has clear separation boundaries between its components:
-
-```
-                +-------------------------------------------------------------+
-                |                     Data Platform Server                    |
-                +-------------------+                     +-------------------+
---- Clients --> | External Schema   | <-- Server Impl --- | Database Schema   | <-- Database
-                +-------------------+                     +-------------------+
-                |                                                             |
-                +-------------------------------------------------------------+
-```
-
-### External schema
-
-The Data Platform defines a strongly typed _data contract_ as its external interface. This is the
-API that any external clients have to use to interact with the platform. The schema for this is
-defined via Protocol Buffers in `proto/ocf/dp`.
-
-Boilerplate code for client and server implementations is generated in the required language from
-these `.proto` files using the `protoc` compiler.
-
-> [!Note]
-> This is a direct analogue to the Pydantic models used in the old `datamodel` project.
-
-Changes to the schema modifies the data contract, and will require client and server
-implementations to regenerate their bindings and update their code. As such they should be made
-with purpose and care.
-
-### Database schema
-
-The Data Platform can be configured to use different database backends. Each backend has a server
-implementation that inherits the External Schema. The currently supported backends are:
-
-- PostgreSQL
-- Dummy (a memoryless databse for quick testing)
-
-and are selected according to the relevant environment variables (see the
-[Configration](#configuration) section). 
-
-The schema for the PostgreSQL backend is defined using PostgreSQL's native SQL dialect in the
-`internal/server/postgres/sql/migrations` directory, and access functions to the data are defined
-in `internal/server/postgres/sql/queries`.
-
-Boilerplate code for using these queries is generated using the `sqlc` tool. This generated code
-provides a strongly typed interface to the database.
-
-> [!Note]
-> This is a direct analogue to the SQLAlchemy models used in the old `datamodel` project.
-
-Having the queries defined in SQL allows for more efficient interaction with the database,
-as they can be written to take advantage of the design of the database's features and be written
-to be optimal with regards to its indexes.
-
-These changes can be made without having to update the data contract, and so will not require
-updates to clients using the Data Platform.
-
-> [!Note]
-> If using PostgreSQL as a backend, it is recommended that you tune your database instance
-> according to the specifications of said instance (available CPU and RAM etc). This will ensure
-> optimal performance for the Data Platform server.
-
-### Server
-
-The Database Schema is mapped to the External Schema by implementing the server interface generated
-from the Data Contract. This is done in `internal/server/<database>/serverimpl.go`. It isn't much
-more than a conversion layer, with the business logic shared between the implemented functions and
-the SQL queries.
-
-
-## Usage
+## Quickstart
 
 ### Running the server
 
@@ -130,13 +49,13 @@ configuration file in `cmd/server.conf`.
 The available configuration may differ between versions of the Data Platform. Ensure you check the
 correct version of the configuration file for your deployment.
 
-### Running a client
+### Connecting a client
 
-There is an example Python notebook, written with [Marimo](https://docs.marimo.io/), demonstrating
-how to use the Python bindings in a client to a Data Platform server. The example runs through a
-data analysis workflow. To run it, ensure first that the Data Platform Server is running on
-`localhost:50051` (see [Getting Started](#getting-started)); and that the python bindings have been
-generated (see [Generating Code](#generating-code)). Then use
+There is an example Python script demonstrating how to use the Python bindings in a client to a
+Data Platform server. The example runs through a data analysis workflow. To run it, ensure first
+that the Data Platform Server is running on `localhost:50051`
+(see [Getting Started](#getting-started)); and that the python bindings have been generated (see
+[Generating Code](#generating-code)). Then use 
 [uvx](https://docs.astral.sh/uv/reference/cli/#uv-tool-run) to run the notebook:
 
 ```bash
@@ -149,6 +68,73 @@ For ease, the above process is wrapped in a Makefile target:
 ```bash
 $ make run.notebook
 ```
+
+
+## Architecture
+
+The Data Platform has clear separation boundaries between its components:
+
+```
+                +-------------------------------------------------------------+
+                |                     Data Platform Server                    |
+                +-------------------+                     +-------------------+
+--- Clients --> | External Schema   | <-- Server Impl --- | Database Schema   | <-- Database
+                +-------------------+                     +-------------------+
+                |                                                             |
+                +-------------------------------------------------------------+
+```
+
+### gRPC API schema
+
+The Data Platform defines a strongly typed _data contract_ as its external interface, served via
+gRPC. This is the API that any external clients have to use to interact with the platform. The
+schema for this is defined in Protocol Buffers, located at `proto/ocf/dp`.
+
+Boilerplate code for client and server implementations is generated in the required language from
+these `.proto` files using the `protoc` compiler.
+
+> [!Important]
+> Changes to the schema modifies the data contract, and may require client and server
+> implementations to regenerate their bindings and update their code. As such they should be made
+> with purpose and care, and aim to be backwards compatible whenever the affect the hot path.
+
+### Database schema
+
+The Data Platform can be configured to use different database backends. Each backend has a server
+implementation that inherits the External Schema. The currently supported backends are:
+
+- PostgreSQL
+- Dummy (a memoryless backend for quick testing)
+
+and are selected according to the relevant environment variables (see the
+[Configration](#configuration) section). 
+
+The schema for the PostgreSQL backend is defined using PostgreSQL's native SQL dialect in the
+`internal/server/postgres/sql/migrations` directory, and access functions to the data are defined
+in `internal/server/postgres/sql/queries`.
+
+Boilerplate code for using these queries is generated using the `sqlc` tool. This generated code
+provides a strongly typed interface to the database.
+
+> [!Note]
+> These changes can be made without having to update the data contract, and so will not require
+> updates to clients using the Data Platform.
+
+Having the queries defined in SQL allows for more efficient interaction with the database,
+as they can be written to take advantage of the design of the database's features and be written
+to be optimal with regards to its indexes.
+
+> [!Important]
+> If using PostgreSQL as a backend, it is recommended that you tune your database instance
+> according to the specifications of said instance (available CPU and RAM etc). This will ensure
+> optimal performance for the Data Platform server.
+
+### Server
+
+The Database Schema is mapped to the External Schema by implementing the server interface generated
+from the Data Contract. This is done in `internal/server/<database>/serverimpl.go`. It isn't much
+more than a conversion layer, with the business logic shared between the implemented functions and
+the SQL queries.
 
 
 ## Development
@@ -231,60 +217,4 @@ $ make gen.proto.python
 
 This places the generated code in `gen/python`. See the `Makefile` for more external targets.
 
-## Further Comparisons
-
-<details><summary>Complexity analysis of Data Platform vs old datamodels & metrics (scc)</summary>
-
-```
-Data Platform:
-───────────────────────────────────────────────────────────────────────────────
-Language                 Files     Lines   Blanks  Comments     Code Complexity
-───────────────────────────────────────────────────────────────────────────────
-SQL                          7      1288       75       566      647          6
-Go                           5      2353      222       191     1940        253
-Shell                        4       108       11        17       80         11
-YAML                         4       224       34         2      188          0
-Protocol Buffers             2       418       82        79      257          0
-Makefile                     1        88       20         3       65          7
-Markdown                     1       143       33         0      110          0
-───────────────────────────────────────────────────────────────────────────────
-Total                       24      4622      477       858     3287        277
-───────────────────────────────────────────────────────────────────────────────
-Estimated Cost to Develop (organic) $94,239
-Estimated Schedule Effort (organic) 5.61 months
-Estimated People Required (organic) 1.49
-───────────────────────────────────────────────────────────────────────────────
-Processed 11480397 bytes, 11.480 megabytes (SI)
-───────────────────────────────────────────────────────────────────────────────
-
-Datamodels & Metrics:
-───────────────────────────────────────────────────────────────────────────────
-Language                 Files     Lines   Blanks  Comments     Code Complexity
-───────────────────────────────────────────────────────────────────────────────
-Python                     190     23776     3213      3119    17444        508
-YAML                         9       294       30        10      254          0
-Markdown                     6       825      222         0      603          0
-CSV                          3       978        0         0      978          0
-Mako                         3        74       21         0       53          0
-TOML                         3       196       28        20      148          2
-Dockerfile                   2        56       18        12       26          2
-INI                          2       213       46        99       68          0
-Plain Text                   2        12        0         0       12          0
-Autoconf                     1         1        0         0        1          0
-License                      1        21        4         0       17          0
-Makefile                     1        23        4         5       14          0
-───────────────────────────────────────────────────────────────────────────────
-Total                      223     26469     3586      3265    19618        512
-───────────────────────────────────────────────────────────────────────────────
-Estimated Cost to Develop (organic) $615,010
-Estimated Schedule Effort (organic) 11.43 months
-Estimated People Required (organic) 4.78
-───────────────────────────────────────────────────────────────────────────────
-Processed 909596 bytes, 0.910 megabytes (SI)
-───────────────────────────────────────────────────────────────────────────────
-```
-
-(Produced via `$ scc --exclude-dir=".git,examples,proto/buf,proto/google"`. Data may be out of date.)
-
-</details>
-
+## API Documentation

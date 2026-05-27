@@ -1121,6 +1121,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			for i, v := range resp.Values {
 				targetTimes[i] = v.TargetTimestampUtc.AsTime().Unix()
 				actualValues[i] = v.P50ValueFraction
+				require.NotEmpty(t, v.OtherStatisticsFractions)
 
 				// Assert that the capacity change has been picked up
 				if v.TargetTimestampUtc.AsTime().
