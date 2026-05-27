@@ -29,12 +29,7 @@ message TimeWindow {
    */
   google.protobuf.Timestamp start_timestamp_utc = 1 [
     (buf.validate.field).required = true,
-    (buf.validate.field).timestamp = { gt: { seconds: 112000000} },
-    (buf.validate.field).cel = {
-      id: "timestamp_not_too_far_in_future"
-      message: "start_timestamp_utc cannot be more than 30 days in the future"
-      expression: "this <= now + duration('720h')"
-    }
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000} }
   ];
   /* The end of the time window, inclusive.
    * Cannot be more than 7 days after start_timestamp_utc.
@@ -44,11 +39,6 @@ message TimeWindow {
     (buf.validate.field).timestamp.gt = { seconds: 112000000}
   ];
 
-  option (buf.validate.message).cel = {
-    id: "maximum_window_size"
-    message: "window size must not exceed 7 days"
-    expression: "this.end_timestamp_utc - this.start_timestamp_utc <= duration('604800s')"
-  };
   option (buf.validate.message).cel = {
     id: "start_before_end"
     message: "start_timestamp_utc must be before end_timestamp_utc"
@@ -69,7 +59,17 @@ message GetForecastAsTimeseriesRequest {
 
   uint32 horizon_mins = 3;
   TimeWindow time_window = 4 [
-    (buf.validate.field).required = true
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "window_size_limit"
+      message: "window size must not exceed 7 days"
+      expression: "this.end_timestamp_utc - this.start_timestamp_utc <= duration('168h')"
+    },
+    (buf.validate.field).cel = {
+      id: "start_time_near_future_limit"
+      message: "start time cannot be more than 30 days in the future"
+      expression: "this.start_timestamp_utc <= now + duration('720h')"
+    }
   ];
   Forecaster forecaster = 5 [
     (buf.validate.field).required = true
@@ -128,7 +128,17 @@ message GetObservationsAsTimeseriesRequest {
     (buf.validate.field).required = true 
   ];
   TimeWindow time_window = 4 [
-    (buf.validate.field).required = true
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "window_size_limit"
+      message: "window size must not exceed 7 days"
+      expression: "this.end_timestamp_utc - this.start_timestamp_utc <= duration('168h')"
+    },
+    (buf.validate.field).cel = {
+      id: "start_time_near_future_limit"
+      message: "start time cannot be more than 30 days in the future"
+      expression: "this.start_timestamp_utc <= now + duration('720h')"
+    }
   ];
 }
 
@@ -476,6 +486,38 @@ message GetLocationResponse {
   optional bytes geometry_wkb = 6;
 }
 
+message GetLocationAsTimeseriesRequest {
+  string location_uuid = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true 
+  ];
+  TimeWindow time_window = 3 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "window_size_limit"
+      message: "window size must not exceed 1 year"
+      expression: "this.end_timestamp_utc - this.start_timestamp_utc <= duration('8760h')"
+    },
+    (buf.validate.field).cel = {
+      id: "start_time_near_future_limit"
+      message: "start time cannot be more than 30 days in the future"
+      expression: "this.start_timestamp_utc <= now + duration('720h')"
+    }
+  ];
+}
+
+message GetLocationAsTimeseriesResponse {
+  message LocationSnapshot {
+    google.protobuf.Timestamp timestamp_utc = 1;
+    uint64 effective_capacity_watts = 2;
+    google.protobuf.Struct metadata = 3;
+  }
+  repeated LocationSnapshot values = 1;
+}
+
 message UpdateLocationRequest {
   string location_uuid = 1 [
     (buf.validate.field).required = true,
@@ -747,34 +789,6 @@ message ListLocationsResponse {
 
 
 message StreamForecastDataRequest {
-  message TimeWindow {
-    /* The start of the time window, inclusive.
-     * Cannot be more than 31 days before end_timestamp_utc.
-     */
-    google.protobuf.Timestamp start_timestamp_utc = 1 [
-      (buf.validate.field).required = true,
-      (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
-    ];
-    /* The end of the time window, inclusive.
-     * Cannot be more than 31 days after start_timestamp_utc.
-     */
-    google.protobuf.Timestamp end_timestamp_utc = 2 [
-      (buf.validate.field).required = true,
-      (buf.validate.field).timestamp.gt = { seconds: 112000000}
-    ];
-
-    option (buf.validate.message).cel = {
-      id: "maximum_window_size"
-      message: "window size must not exceed 31 days"
-      expression: "this.end_timestamp_utc - this.start_timestamp_utc <= duration('2678400s')"
-    };
-    option (buf.validate.message).cel = {
-      id: "start_before_end"
-      message: "start_timestamp_utc must be before end_timestamp_utc"
-      expression: "this.start_timestamp_utc <= this.end_timestamp_utc"
-    };
-  }
-
   repeated string location_uuids = 1 [
     (buf.validate.field).repeated.min_items = 1,
     (buf.validate.field).repeated.max_items = 1000,
@@ -786,8 +800,18 @@ message StreamForecastDataRequest {
   EnergySource energy_source = 2 [
     (buf.validate.field).required = true 
   ];
-  StreamForecastDataRequest.TimeWindow time_window = 3 [
-    (buf.validate.field).required = true
+  TimeWindow time_window = 3 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "window_size_limit"
+      message: "window size must not exceed 31 days"
+      expression: "this.end_timestamp_utc - this.start_timestamp_utc <= duration('744h')"
+    },
+    (buf.validate.field).cel = {
+      id: "start_time_near_future_limit"
+      message: "start time cannot be more than 30 days in the future"
+      expression: "this.start_timestamp_utc <= now + duration('720h')"
+    }
   ];
   repeated Forecaster forecasters = 4 [
     (buf.validate.field).required = true,

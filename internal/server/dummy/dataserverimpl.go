@@ -508,6 +508,22 @@ func (d *DataPlatformDataServiceServerImpl) GetLocation(
 	}, nil
 }
 
+// GetLocationAsTimeseries implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetLocationAsTimeseries(
+	ctx context.Context,
+	req *pb.GetLocationAsTimeseriesRequest,
+) (*pb.GetLocationAsTimeseriesResponse, error) {
+	return &pb.GetLocationAsTimeseriesResponse{
+		Values: []*pb.GetLocationAsTimeseriesResponse_LocationSnapshot{
+			{
+				EffectiveCapacityWatts: 150e6,
+				TimestampUtc:           timestamppb.New(time.Now().UTC()),
+				Metadata:               &structpb.Struct{},
+			},
+		},
+	}, nil
+}
+
 // ListLocations implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) ListLocations(
 	context.Context,

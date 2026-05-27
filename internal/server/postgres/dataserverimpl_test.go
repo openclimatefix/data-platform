@@ -750,6 +750,144 @@ func TestGetLocation(t *testing.T) {
 	}
 }
 
+func TestGetLocationAsTimeseries(t *testing.T) {
+	pivotTime := time.Date(2026, 1, 4, 12, 0, 0, 0, time.UTC)
+
+	metadata, err := structpb.NewStruct(map[string]any{"source": "test_initial"})
+	require.NoError(t, err)
+
+	// Site is valid from 48 hours before pivot
+	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_get_location_as_timeseries_site",
+		GeometryWkt:            "POINT(-60.25 57.5)",
+		EffectiveCapacityWatts: 1000000, // 1 MW
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 48)),
+	})
+	require.NoError(t, err)
+
+	// Update the metadata and capacity at 24 hours before pivot
+	updatedMetadata, err := structpb.NewStruct(map[string]any{"source": "test_update_1"})
+	require.NoError(t, err)
+	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
+		LocationUuid:              siteResp.LocationUuid,
+		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		NewEffectiveCapacityWatts: func() *uint64 { v := uint64(1500000); return &v }(), // 1.5 MW
+		NewMetadata:               updatedMetadata,
+		ValidFromUtc:              timestamppb.New(pivotTime.Add(-time.Hour * 24)),
+	})
+	require.NoError(t, err)
+
+	// Update the metadata and capacity again at pivot
+	finalMetadata, err := structpb.NewStruct(map[string]any{"source": "test_update_2"})
+	require.NoError(t, err)
+	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
+		LocationUuid:              siteResp.LocationUuid,
+		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		NewEffectiveCapacityWatts: func() *uint64 { v := uint64(2000000); return &v }(), // 2.0 MW
+		NewMetadata:               finalMetadata,
+		ValidFromUtc:              timestamppb.New(pivotTime),
+	})
+	require.NoError(t, err)
+
+	defaultTimeWindow := &pb.TimeWindow{
+		StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 50)),
+		EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 10)),
+	}
+
+	testcases := []struct {
+		name               string
+		req                *pb.GetLocationAsTimeseriesRequest
+		expectedCapacities []uint64
+		expectedSources    []string
+		expectErr          bool
+	}{
+		{
+			name: "Should return full history of capacity changes when window covers everything",
+			req: &pb.GetLocationAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimeWindow:   defaultTimeWindow,
+			},
+			expectedCapacities: []uint64{1000000, 1500000, 2000000},
+			expectedSources:    []string{"test_initial", "test_update_1", "test_update_2"},
+			expectErr:          false,
+		},
+		{
+			name: "Should return only changes covered by time window and exclude others",
+			req: &pb.GetLocationAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 24)),
+					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 10)),
+				},
+			},
+			expectedCapacities: []uint64{1500000, 2000000},
+			expectedSources:    []string{"test_update_1", "test_update_2"},
+			expectErr:          false,
+		},
+		{
+			name: "Should return no values if time window is before the location existed",
+			req: &pb.GetLocationAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 100)),
+					EndTimestampUtc:   timestamppb.New(pivotTime.Add(-time.Hour * 50)),
+				},
+			},
+			expectedCapacities: []uint64{},
+			expectedSources:    []string{},
+			expectErr:          false,
+		},
+		{
+			name: "Shouldn't work with an invalid UUID",
+			req: &pb.GetLocationAsTimeseriesRequest{
+				LocationUuid: "not-a-valid-uuid",
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				TimeWindow:   defaultTimeWindow,
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := dc.GetLocationAsTimeseries(t.Context(), tc.req)
+
+			if tc.expectErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+
+			actualCapacities := make([]uint64, len(resp.Values))
+			actualSources := make([]string, len(resp.Values))
+			targetTimes := make([]int64, len(resp.Values))
+
+			for i, v := range resp.Values {
+				actualCapacities[i] = v.EffectiveCapacityWatts
+				targetTimes[i] = v.TimestampUtc.AsTime().Unix()
+
+				if v.Metadata != nil && v.Metadata.Fields["source"] != nil {
+					actualSources[i] = v.Metadata.Fields["source"].GetStringValue()
+				} else {
+					actualSources[i] = ""
+				}
+			}
+
+			require.IsIncreasing(t, targetTimes)
+			require.Equal(t, tc.expectedCapacities, actualCapacities)
+			require.Equal(t, tc.expectedSources, actualSources)
+		})
+	}
+}
+
 func TestGetLocationsAsGeoJSON(t *testing.T) {
 	// Create some locations
 	siteUuids := make([]string, 3)
@@ -846,7 +984,6 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Standardise the time window reused across most requests
 	defaultTimeWindow := &pb.TimeWindow{
 		StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
 		EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
@@ -1978,7 +2115,7 @@ func TestGetLatestForecasts(t *testing.T) {
 }
 
 func TestStreamForecastData(t *testing.T) {
-	pivotTime := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
+	pivotTime := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 
 	// Create a site to attach the forecasts to
 	metadata, err := structpb.NewStruct(map[string]any{"stream_test": "true"})
@@ -2043,7 +2180,7 @@ func TestStreamForecastData(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	defaultTimeWindow := &pb.StreamForecastDataRequest_TimeWindow{
+	defaultTimeWindow := &pb.TimeWindow{
 		StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 10)),
 		EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 10)),
 	}
@@ -2087,7 +2224,7 @@ func TestStreamForecastData(t *testing.T) {
 				LocationUuids: []string{siteResp.LocationUuid},
 				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				Forecasters:   []*pb.Forecaster{fc1Resp.Forecaster},
-				TimeWindow: &pb.StreamForecastDataRequest_TimeWindow{
+				TimeWindow: &pb.TimeWindow{
 					// Constrain the window to only capture the most recent forecast
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Minute * 10)),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Minute * 10)),

@@ -27,8 +27,10 @@ service DataPlatformDataService {
    */
   rpc GetObservationsAtTimestamp(GetObservationsAtTimestampRequest) returns (GetObservationsAtTimestampResponse) {}
 
-  /* GetLocation fetches detailed information about a specific location. */
+  /* GetLocation fetches detailed information about a specific location at a specific time. */
   rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
+  /* GetLocationAsTimeseries fetches the history of a location across a given time window. */
+  rpc GetLocationAsTimeseries(GetLocationAsTimeseriesRequest) returns (GetLocationAsTimeseriesResponse) {}
   /* CreateLocation registers a new location in which to log or forecast generation. */
   rpc CreateLocation(CreateLocationRequest) returns (CreateLocationResponse) {}
   /* UpdateLocation modifies various attributes associated with a given location. */

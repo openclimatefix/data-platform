@@ -266,7 +266,7 @@ func BenchmarkPostgresClient(b *testing.B) {
 								ForecasterName:    tc.NamePrefix + "_forecaster_1",
 								ForecasterVersion: "v1",
 							}},
-							TimeWindow: &pb.StreamForecastDataRequest_TimeWindow{
+							TimeWindow: &pb.TimeWindow{
 								StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 48)),
 								EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 36)),
 							},
