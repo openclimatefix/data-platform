@@ -1236,6 +1236,54 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 	}, nil
 }
 
+func (s *DataPlatformDataServiceServerImpl) GetLocationAsTimeseries(
+	ctx context.Context,
+	req *pb.GetLocationAsTimeseriesRequest,
+) (*pb.GetLocationAsTimeseriesResponse, error) {
+	l := zerolog.Ctx(ctx)
+
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	locationUuid := uuid.MustParse(req.LocationUuid)
+
+	gprms := db.GetSourceHistoryParams{
+		GeometryUuid: locationUuid,
+		SourceTypeID: int16(req.EnergySource.Number()),
+		StartTimestampUtc: pgtype.Timestamp{
+			Time:  req.TimeWindow.StartTimestampUtc.AsTime(),
+			Valid: true,
+		},
+		EndTimestampUtc: pgtype.Timestamp{
+			Time:  req.TimeWindow.EndTimestampUtc.AsTime(),
+			Valid: true,
+		},
+	}
+
+	dbValues, err := querier.GetSourceHistory(ctx, gprms)
+	if err != nil {
+		l.Err(err).Msgf("querier.GetSourceHistory(%+v)", gprms)
+
+		return nil, status.Errorf(
+			codes.NotFound,
+			"No such location or no history for location in the specified time window. "+
+				"Ensure the location exists and has source entries in the given time window.",
+		)
+	}
+
+	values := make([]*pb.GetLocationAsTimeseriesResponse_LocationSnapshot, len(dbValues))
+	for i, v := range dbValues {
+		values[i] = &pb.GetLocationAsTimeseriesResponse_LocationSnapshot{
+			EffectiveCapacityWatts: uint64(v.CapacityWatts),
+			TimestampUtc:           timestamppb.New(v.ValidFromUtc.Time),
+			Metadata:               v.Metadata,
+		}
+	}
+
+	return &pb.GetLocationAsTimeseriesResponse{
+		Values: values,
+	}, nil
+}
+
 func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	ctx context.Context,
 	req *pb.CreateLocationRequest,

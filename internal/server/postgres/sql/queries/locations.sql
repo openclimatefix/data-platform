@@ -150,9 +150,13 @@ INSERT INTO loc.sources_history (
 SELECT
     sh.capacity_watts,
     sh.capacity_limit_sip,
-    sh.valid_from_utc
+    sh.valid_from_utc,
+    sh.metadata
 FROM loc.sources_history AS sh
-WHERE sh.geometry_uuid = $1 AND sh.source_type_id = $2
+WHERE sh.geometry_uuid = $1
+    AND sh.source_type_id = $2
+    AND sh.valid_from_utc >= sqlc.arg(start_timestamp_utc)::TIMESTAMP
+    AND sh.valid_from_utc < sqlc.arg(end_timestamp_utc)::TIMESTAMP
 ORDER BY valid_from_utc DESC;
 
 -- name: ListSourcesAtTimestamp :many
