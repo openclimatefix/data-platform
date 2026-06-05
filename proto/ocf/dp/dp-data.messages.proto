@@ -12,7 +12,7 @@ import "ocf/dp/dp.common.proto";
 
 option go_package = "github.com/openclimatefix/data-platform/internal/protogen/ocf/dp;dp";
 
-// --- Common message types ----------------------------------------------------------------------
+// Forecaster represents a generative source of predicted values.
 message Forecaster {
   string forecaster_name = 1 [
     (buf.validate.field).required = true,
@@ -46,7 +46,6 @@ message TimeWindow {
   };
 }
 
-// --- Requests and Responses --------------------------------------------------------
 
 message GetForecastAsTimeseriesRequest {
   string location_uuid = 1 [
