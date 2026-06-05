@@ -13,7 +13,7 @@ RUN curl -LO $PB_REL/download/v30.2/protoc-30.2-linux-x86_64.zip \
 
 WORKDIR /go/src/app
 COPY .git .git
-COPY go.mod go.sum go.tool.mod go.tool.sum Makefile ./
+COPY go.mod go.sum go.tool.mod go.tool.sum Makefile README.md ./
 COPY cmd/ cmd/
 COPY internal/ internal/
 COPY proto/ proto/

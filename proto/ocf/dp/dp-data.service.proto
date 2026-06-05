@@ -8,26 +8,27 @@ option go_package = "github.com/openclimatefix/data-platform/internal/protogen/o
 
 service DataPlatformDataService {
 
-  /* GetForecastTimeseries fetches a horizontal slice of predicted data.
-   * (i.e. many points in time for a single location). Since individually created forecasts can
-   * have overlapping time ranges, identically-timestamped values are discarded, excepting the one
-   * with the lowest allowable lead time (horizon), where required.
+  /* GetForecastTimeseries fetches a 1-D horizontal slice of predicted data.
+   * These values can either come from a sample of many forecasts; or from one specific forecast. 
+   * In the case of the sample, values whose timestamps are shared across overlapping forecasts
+   * are cherry-picked based on the lowest allowable lead time (horizon).
    */
   rpc GetForecastAsTimeseries(GetForecastAsTimeseriesRequest) returns (GetForecastAsTimeseriesResponse) {}
-  /* GetForecastAtTimestamp fetches a vertical slice of predicted data.
-   * (i.e. many locations, at a single point in time). This is handy for e.g. display on a map.
+  /* GetForecastAtTimestamp fetches a 1-D vertical slice of predicted data.
+   * Useful for spatial snapshots at a given time, for instance to display on a map.
    */
   rpc GetForecastAtTimestamp(GetForecastAtTimestampRequest) returns (GetForecastAtTimestampResponse) {}
-  /* GetObservationsAsTimeseries fetches a horizontal slice of observed data.
-   * (i.e. many points in time, one single location).
+  /* GetObservationsAsTimeseries fetches a 1-D horizontal slice of observed data.
+   * It is the observations analogue of GetForecastAsTimeseries.
    */
   rpc GetObservationsAsTimeseries(GetObservationsAsTimeseriesRequest) returns (GetObservationsAsTimeseriesResponse) {}
-  /* GetObservationAtTimestamp fetches a vertical slice of observed data.
-   * (i.e. many locations, at a single point in time). This is handy for e.g. display on a map.
+  /* GetObservationAtTimestamp fetches a 1-D vertical slice of observation data.
+   * It is the observations analogue of GetForecastsAtTimestamp.
    */
   rpc GetObservationsAtTimestamp(GetObservationsAtTimestampRequest) returns (GetObservationsAtTimestampResponse) {}
-
-  /* GetLocation fetches detailed information about a specific location at a specific time. */
+  /* GetLocation fetches a snapshot of information about a specific location at a point in time. 
+   * It can also optionally return the geometry of the location.
+   */
   rpc GetLocation(GetLocationRequest) returns (GetLocationResponse) {}
   /* GetLocationAsTimeseries fetches the history of a location across a given time window. */
   rpc GetLocationAsTimeseries(GetLocationAsTimeseriesRequest) returns (GetLocationAsTimeseriesResponse) {}
@@ -37,17 +38,27 @@ service DataPlatformDataService {
   rpc UpdateLocation(UpdateLocationRequest) returns (UpdateLocationResponse) {}
   /* ListLocations fetches a list of registered locations that match the supplied filters. */
   rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse) {}
-
+  /* CreateForecaster registers a new forecaster. 
+   * A forecaster is a producer of predicted values. Forecasters are differentiated by their name and version. */
   rpc CreateForecaster(CreateForecasterRequest) returns (CreateForecasterResponse) {}
+  /* UpdateForecaster modifies the version of an existing forecaster. */
   rpc UpdateForecaster(UpdateForecasterRequest) returns (UpdateForecasterResponse) {}
+  /* ListForecasters fetches a list of registered forecasters that match the supplied filters. */
   rpc ListForecasters(ListForecastersRequest) returns (ListForecastersResponse) {}
 
+  /* CreateForecast saves a timeseries of predicted values from a given forecaster. */
   rpc CreateForecast(CreateForecastRequest) returns (CreateForecastResponse) {}
+  /* GetLatestForecasts fetches metadata for the most recently produced forecasts. */
   rpc GetLatestForecasts(GetLatestForecastsRequest) returns (GetLatestForecastsResponse) {}
+  /* DeleteForecast removes a series of forecast values from the database. */
   rpc DeleteForecast(DeleteForecastRequest) returns (DeleteForecastResponse) {}
 
+  /* CreateObserver registers a new observer. 
+   * An observer is a producer of observed, or measured, values. */
   rpc CreateObserver(CreateObserverRequest) returns (CreateObserverResponse) {}
+  /* ListObservers fetches a list of registered observers that match the supplied filters. */
   rpc ListObservers(ListObserversRequest) returns (ListObserversResponse) {}
+  /* CreateObservations saves a timeseries of observed values from a given observer. */
   rpc CreateObservations(CreateObservationsRequest) returns (CreateObservationsResponse) {}
   /* GetLatestObservation fetches the most recent observation for a given location and observer. */
   rpc GetLatestObservations(GetLatestObservationsRequest) returns (GetLatestObservationsResponse) {}
