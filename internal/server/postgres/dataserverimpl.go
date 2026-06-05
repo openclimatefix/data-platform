@@ -715,7 +715,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 		ForecasterID:   dbExistingForecaster.ForecasterID,
 		ObserverUuid:   dbObserver.ObserverUuid,
 		PivotTimestamp: pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true},
-		GeometryUuids:  []uuid.UUID{locationUuid},
+		GeometryUuid:   locationUuid,
 	}
 
 	dbDeltas, err := querier.GetWeekAverageDeltasForLocations(ctx, avgprms)
