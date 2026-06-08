@@ -220,575 +220,447 @@ This places the generated code in `gen/python`. See the `Makefile` for more exte
 <!-- DOCS START -->
 
 ## GRPC API Documentation
-
-
-### Messages (ocf/dp/dp-data.messages.proto)
+<details><summary>Messages (ocf/dp/dp-data.messages.proto)</summary>
 
 <a name="ocf-dp-CreateForecastRequest"></a>
-
-#### CreateForecastRequest
+<details><summary>CreateForecastRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  || location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || init_time_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || values | [CreateForecastRequest.ForecastValue](#ocf-dp-CreateForecastRequest-ForecastValue) | repeated |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) | optional |  || created_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The UTC time to set as the created_timestamp for the forecast. Leave empty to use current time. This is useful for backfilling historical forecasts with accurate created timestamps, but should generally be left empty for new forecasts. |
-
-<a name="ocf-dp-CreateForecastRequest-ForecastValue"></a>
-
-#### CreateForecastRequest.ForecastValue
+</details><a name="ocf-dp-CreateForecastRequest-ForecastValue"></a>
+<details><summary>CreateForecastRequest.ForecastValue</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | horizon_mins | [uint32](#uint32) |  |  || p50_fraction | [float](#float) |  |  || other_statistics_fractions | [CreateForecastRequest.ForecastValue.OtherStatisticsFractionsEntry](#ocf-dp-CreateForecastRequest-ForecastValue-OtherStatisticsFractionsEntry) | repeated | Struct for storing additional statistics like p10, p90, mean etc. || metadata | [google.protobuf.Struct](#google-protobuf-Struct) | optional |  |
-
-<a name="ocf-dp-CreateForecastRequest-ForecastValue-OtherStatisticsFractionsEntry"></a>
-
-#### CreateForecastRequest.ForecastValue.OtherStatisticsFractionsEntry
+</details><a name="ocf-dp-CreateForecastRequest-ForecastValue-OtherStatisticsFractionsEntry"></a>
+<details><summary>CreateForecastRequest.ForecastValue.OtherStatisticsFractionsEntry</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | key | [string](#string) |  |  || value | [float](#float) |  |  |
-
-<a name="ocf-dp-CreateForecastResponse"></a>
-
-#### CreateForecastResponse
+</details><a name="ocf-dp-CreateForecastResponse"></a>
+<details><summary>CreateForecastResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecast_uuid | [string](#string) |  |  |
-
-<a name="ocf-dp-CreateForecasterRequest"></a>
-
-#### CreateForecasterRequest
+</details><a name="ocf-dp-CreateForecasterRequest"></a>
+<details><summary>CreateForecasterRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | name | [string](#string) |  |  || version | [string](#string) |  |  |
-
-<a name="ocf-dp-CreateForecasterResponse"></a>
-
-#### CreateForecasterResponse
+</details><a name="ocf-dp-CreateForecasterResponse"></a>
+<details><summary>CreateForecasterResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  |
-
-<a name="ocf-dp-CreateLocationRequest"></a>
-
-#### CreateLocationRequest
+</details><a name="ocf-dp-CreateLocationRequest"></a>
+<details><summary>CreateLocationRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_name | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || geometry_wkt | [string](#string) |  | A geometry string in Well-Known-Text (WKT) format. Geometry type must be POINT, POLYGON, or MULTIPOLYGON, must have 2 dimensions, and must be in the EPSG:4326 coordinate system (longitude/latitude). || effective_capacity_watts | [uint64](#uint64) |  | The effective capacity of the location in watts. This refers to the useable capacity for generation, not the installed capacity. If tracking of installed capacity is required, this should be stored in metadata. || location_type | [LocationType](#ocf-dp-LocationType) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) | optional |  || valid_from_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The UTC time from which this location is considered valid. Leave empty to use current time. || associated_latlng | [LatLng](#ocf-dp-LatLng) | optional | Optional latitude/longitude to associate with the location. Defaults to the centroid of the geometry if not provided. Not required for Point geometries. |
-
-<a name="ocf-dp-CreateLocationResponse"></a>
-
-#### CreateLocationResponse
+</details><a name="ocf-dp-CreateLocationResponse"></a>
+<details><summary>CreateLocationResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || location_name | [string](#string) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  |
-
-<a name="ocf-dp-CreateObservationsRequest"></a>
-
-#### CreateObservationsRequest
+</details><a name="ocf-dp-CreateObservationsRequest"></a>
+<details><summary>CreateObservationsRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || observer_name | [string](#string) |  |  || values | [CreateObservationsRequest.Value](#ocf-dp-CreateObservationsRequest-Value) | repeated |  |
-
-<a name="ocf-dp-CreateObservationsRequest-Value"></a>
-
-#### CreateObservationsRequest.Value
+</details><a name="ocf-dp-CreateObservationsRequest-Value"></a>
+<details><summary>CreateObservationsRequest.Value</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || value_watts | [uint64](#uint64) |  |  |
-
-<a name="ocf-dp-CreateObservationsResponse"></a>
-
-#### CreateObservationsResponse
+</details><a name="ocf-dp-CreateObservationsResponse"></a>
+<details><summary>CreateObservationsResponse</summary>
 
 
 
-
-<a name="ocf-dp-CreateObserverRequest"></a>
-
-#### CreateObserverRequest
+</details><a name="ocf-dp-CreateObserverRequest"></a>
+<details><summary>CreateObserverRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | name | [string](#string) |  |  |
-
-<a name="ocf-dp-CreateObserverResponse"></a>
-
-#### CreateObserverResponse
+</details><a name="ocf-dp-CreateObserverResponse"></a>
+<details><summary>CreateObserverResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | observer_uuid | [string](#string) |  |  || observer_name | [string](#string) |  |  |
-
-<a name="ocf-dp-DeleteForecastRequest"></a>
-
-#### DeleteForecastRequest
+</details><a name="ocf-dp-DeleteForecastRequest"></a>
+<details><summary>DeleteForecastRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  || init_time_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
-
-<a name="ocf-dp-DeleteForecastResponse"></a>
-
-#### DeleteForecastResponse
+</details><a name="ocf-dp-DeleteForecastResponse"></a>
+<details><summary>DeleteForecastResponse</summary>
 
 
 
-
-<a name="ocf-dp-ForecastDatum"></a>
-
-#### ForecastDatum
+</details><a name="ocf-dp-ForecastDatum"></a>
+<details><summary>ForecastDatum</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | init_timestamp | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || location_uuid | [string](#string) |  |  || forecaster_fullname | [string](#string) |  |  || horizon_mins | [uint32](#uint32) |  |  || p50_fraction | [float](#float) |  |  || other_statistics_fractions | [ForecastDatum.OtherStatisticsFractionsEntry](#ocf-dp-ForecastDatum-OtherStatisticsFractionsEntry) | repeated |  || created_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || metadata | [ForecastDatum.MetadataEntry](#ocf-dp-ForecastDatum-MetadataEntry) | repeated |  || target_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
-
-<a name="ocf-dp-ForecastDatum-MetadataEntry"></a>
-
-#### ForecastDatum.MetadataEntry
+</details><a name="ocf-dp-ForecastDatum-MetadataEntry"></a>
+<details><summary>ForecastDatum.MetadataEntry</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | key | [string](#string) |  |  || value | [string](#string) |  |  |
-
-<a name="ocf-dp-ForecastDatum-OtherStatisticsFractionsEntry"></a>
-
-#### ForecastDatum.OtherStatisticsFractionsEntry
+</details><a name="ocf-dp-ForecastDatum-OtherStatisticsFractionsEntry"></a>
+<details><summary>ForecastDatum.OtherStatisticsFractionsEntry</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | key | [string](#string) |  |  || value | [float](#float) |  |  |
-
-<a name="ocf-dp-Forecaster"></a>
-
-#### Forecaster
+</details><a name="ocf-dp-Forecaster"></a>
+<details><summary>Forecaster</summary>
 Forecaster represents a generative source of predicted values.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecaster_name | [string](#string) |  |  || forecaster_version | [string](#string) |  | The version of the forecaster to use. If not specified, the latest version will be used. |
-
-<a name="ocf-dp-GetForecastAsTimeseriesRequest"></a>
-
-#### GetForecastAsTimeseriesRequest
+</details><a name="ocf-dp-GetForecastAsTimeseriesRequest"></a>
+<details><summary>GetForecastAsTimeseriesRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || horizon_mins | [uint32](#uint32) |  |  || time_window | [TimeWindow](#ocf-dp-TimeWindow) |  |  || forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  || pivot_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The time to search backwards from to find forecasts. If not specified, the current time will be used. Forecasts created after this time are not included. || initialization_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | An individual init time to filter forecasts by. If specified, only forecasts with this init time will be returned. This enables fetching data from a single, specific forecast run. |
-
-<a name="ocf-dp-GetForecastAsTimeseriesResponse"></a>
-
-#### GetForecastAsTimeseriesResponse
+</details><a name="ocf-dp-GetForecastAsTimeseriesResponse"></a>
+<details><summary>GetForecastAsTimeseriesResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || location_name | [string](#string) |  |  || values | [GetForecastAsTimeseriesResponse.Value](#ocf-dp-GetForecastAsTimeseriesResponse-Value) | repeated |  |
-
-<a name="ocf-dp-GetForecastAsTimeseriesResponse-Value"></a>
-
-#### GetForecastAsTimeseriesResponse.Value
+</details><a name="ocf-dp-GetForecastAsTimeseriesResponse-Value"></a>
+<details><summary>GetForecastAsTimeseriesResponse.Value</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | target_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || p50_value_fraction | [float](#float) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || initialization_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || created_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || other_statistics_fractions | [GetForecastAsTimeseriesResponse.Value.OtherStatisticsFractionsEntry](#ocf-dp-GetForecastAsTimeseriesResponse-Value-OtherStatisticsFractionsEntry) | repeated |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  |
-
-<a name="ocf-dp-GetForecastAsTimeseriesResponse-Value-OtherStatisticsFractionsEntry"></a>
-
-#### GetForecastAsTimeseriesResponse.Value.OtherStatisticsFractionsEntry
+</details><a name="ocf-dp-GetForecastAsTimeseriesResponse-Value-OtherStatisticsFractionsEntry"></a>
+<details><summary>GetForecastAsTimeseriesResponse.Value.OtherStatisticsFractionsEntry</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | key | [string](#string) |  |  || value | [float](#float) |  |  |
-
-<a name="ocf-dp-GetForecastAtTimestampRequest"></a>
-
-#### GetForecastAtTimestampRequest
+</details><a name="ocf-dp-GetForecastAtTimestampRequest"></a>
+<details><summary>GetForecastAtTimestampRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuids | [string](#string) | repeated |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The time to fetch predicted yields for. If not specified, the current time will be used. || forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  |
-
-<a name="ocf-dp-GetForecastAtTimestampResponse"></a>
-
-#### GetForecastAtTimestampResponse
+</details><a name="ocf-dp-GetForecastAtTimestampResponse"></a>
+<details><summary>GetForecastAtTimestampResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || values | [GetForecastAtTimestampResponse.Value](#ocf-dp-GetForecastAtTimestampResponse-Value) | repeated |  |
-
-<a name="ocf-dp-GetForecastAtTimestampResponse-Value"></a>
-
-#### GetForecastAtTimestampResponse.Value
+</details><a name="ocf-dp-GetForecastAtTimestampResponse-Value"></a>
+<details><summary>GetForecastAtTimestampResponse.Value</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || location_name | [string](#string) |  |  || value_fraction | [float](#float) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || latlng | [LatLng](#ocf-dp-LatLng) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  || initialization_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || created_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
-
-<a name="ocf-dp-GetLatestForecastsRequest"></a>
-
-#### GetLatestForecastsRequest
+</details><a name="ocf-dp-GetLatestForecastsRequest"></a>
+<details><summary>GetLatestForecastsRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || pivot_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The time to search backwards from to find the 'latest' forecast. If not specified, the current time will be used. |
-
-<a name="ocf-dp-GetLatestForecastsResponse"></a>
-
-#### GetLatestForecastsResponse
+</details><a name="ocf-dp-GetLatestForecastsResponse"></a>
+<details><summary>GetLatestForecastsResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecasts | [GetLatestForecastsResponse.Forecast](#ocf-dp-GetLatestForecastsResponse-Forecast) | repeated |  |
-
-<a name="ocf-dp-GetLatestForecastsResponse-Forecast"></a>
-
-#### GetLatestForecastsResponse.Forecast
+</details><a name="ocf-dp-GetLatestForecastsResponse-Forecast"></a>
+<details><summary>GetLatestForecastsResponse.Forecast</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | initialization_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || created_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  || location_uuid | [string](#string) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  |
-
-<a name="ocf-dp-GetLatestObservationsRequest"></a>
-
-#### GetLatestObservationsRequest
+</details><a name="ocf-dp-GetLatestObservationsRequest"></a>
+<details><summary>GetLatestObservationsRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuids | [string](#string) | repeated |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || observer_name | [string](#string) |  |  || pivot_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The time to search backwards from to find the 'latest' observation. If not specified, the current time will be used. |
-
-<a name="ocf-dp-GetLatestObservationsResponse"></a>
-
-#### GetLatestObservationsResponse
+</details><a name="ocf-dp-GetLatestObservationsResponse"></a>
+<details><summary>GetLatestObservationsResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | observations | [GetLatestObservationsResponse.Observation](#ocf-dp-GetLatestObservationsResponse-Observation) | repeated |  |
-
-<a name="ocf-dp-GetLatestObservationsResponse-Observation"></a>
-
-#### GetLatestObservationsResponse.Observation
+</details><a name="ocf-dp-GetLatestObservationsResponse-Observation"></a>
+<details><summary>GetLatestObservationsResponse.Observation</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || value_fraction | [float](#float) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  |
-
-<a name="ocf-dp-GetLocationAsTimeseriesRequest"></a>
-
-#### GetLocationAsTimeseriesRequest
+</details><a name="ocf-dp-GetLocationAsTimeseriesRequest"></a>
+<details><summary>GetLocationAsTimeseriesRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || time_window | [TimeWindow](#ocf-dp-TimeWindow) |  |  |
-
-<a name="ocf-dp-GetLocationAsTimeseriesResponse"></a>
-
-#### GetLocationAsTimeseriesResponse
+</details><a name="ocf-dp-GetLocationAsTimeseriesResponse"></a>
+<details><summary>GetLocationAsTimeseriesResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | values | [GetLocationAsTimeseriesResponse.LocationSnapshot](#ocf-dp-GetLocationAsTimeseriesResponse-LocationSnapshot) | repeated |  |
-
-<a name="ocf-dp-GetLocationAsTimeseriesResponse-LocationSnapshot"></a>
-
-#### GetLocationAsTimeseriesResponse.LocationSnapshot
+</details><a name="ocf-dp-GetLocationAsTimeseriesResponse-LocationSnapshot"></a>
+<details><summary>GetLocationAsTimeseriesResponse.LocationSnapshot</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  |
-
-<a name="ocf-dp-GetLocationRequest"></a>
-
-#### GetLocationRequest
+</details><a name="ocf-dp-GetLocationRequest"></a>
+<details><summary>GetLocationRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || include_geometry | [bool](#bool) |  | If true, the geometry_wkb field will be included in the response. This may be very big, so only include if necessary. || pivot_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The UTC time the data should be valid for. Leave empty to use current time. |
-
-<a name="ocf-dp-GetLocationResponse"></a>
-
-#### GetLocationResponse
+</details><a name="ocf-dp-GetLocationResponse"></a>
+<details><summary>GetLocationResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || location_name | [string](#string) |  |  || latlng | [LatLng](#ocf-dp-LatLng) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  || geometry_wkb | [bytes](#bytes) | optional |  |
-
-<a name="ocf-dp-GetLocationsAsGeoJSONRequest"></a>
-
-#### GetLocationsAsGeoJSONRequest
+</details><a name="ocf-dp-GetLocationsAsGeoJSONRequest"></a>
+<details><summary>GetLocationsAsGeoJSONRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuids | [string](#string) | repeated |  || unsimplified | [bool](#bool) |  | If true, the GeoJSON will not be simplified. Defaults to false if not set to reduce response size. |
-
-<a name="ocf-dp-GetLocationsAsGeoJSONResponse"></a>
-
-#### GetLocationsAsGeoJSONResponse
+</details><a name="ocf-dp-GetLocationsAsGeoJSONResponse"></a>
+<details><summary>GetLocationsAsGeoJSONResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | geojson | [string](#string) |  |  |
-
-<a name="ocf-dp-GetObservationsAsTimeseriesRequest"></a>
-
-#### GetObservationsAsTimeseriesRequest
+</details><a name="ocf-dp-GetObservationsAsTimeseriesRequest"></a>
+<details><summary>GetObservationsAsTimeseriesRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || observer_name | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || time_window | [TimeWindow](#ocf-dp-TimeWindow) |  |  |
-
-<a name="ocf-dp-GetObservationsAsTimeseriesResponse"></a>
-
-#### GetObservationsAsTimeseriesResponse
+</details><a name="ocf-dp-GetObservationsAsTimeseriesResponse"></a>
+<details><summary>GetObservationsAsTimeseriesResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || values | [GetObservationsAsTimeseriesResponse.Value](#ocf-dp-GetObservationsAsTimeseriesResponse-Value) | repeated |  |
-
-<a name="ocf-dp-GetObservationsAsTimeseriesResponse-Value"></a>
-
-#### GetObservationsAsTimeseriesResponse.Value
+</details><a name="ocf-dp-GetObservationsAsTimeseriesResponse-Value"></a>
+<details><summary>GetObservationsAsTimeseriesResponse.Value</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || value_fraction | [float](#float) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  |
-
-<a name="ocf-dp-GetObservationsAtTimestampRequest"></a>
-
-#### GetObservationsAtTimestampRequest
+</details><a name="ocf-dp-GetObservationsAtTimestampRequest"></a>
+<details><summary>GetObservationsAtTimestampRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuids | [string](#string) | repeated |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || observer_name | [string](#string) |  |  || timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The time to fetch observations for. If not specified, the current time will be used. |
-
-<a name="ocf-dp-GetObservationsAtTimestampResponse"></a>
-
-#### GetObservationsAtTimestampResponse
+</details><a name="ocf-dp-GetObservationsAtTimestampResponse"></a>
+<details><summary>GetObservationsAtTimestampResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || values | [GetObservationsAtTimestampResponse.Value](#ocf-dp-GetObservationsAtTimestampResponse-Value) | repeated |  |
-
-<a name="ocf-dp-GetObservationsAtTimestampResponse-Value"></a>
-
-#### GetObservationsAtTimestampResponse.Value
+</details><a name="ocf-dp-GetObservationsAtTimestampResponse-Value"></a>
+<details><summary>GetObservationsAtTimestampResponse.Value</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || value_fraction | [float](#float) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || latlng | [LatLng](#ocf-dp-LatLng) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  |
-
-<a name="ocf-dp-GetWeekAverageDeltasRequest"></a>
-
-#### GetWeekAverageDeltasRequest
+</details><a name="ocf-dp-GetWeekAverageDeltasRequest"></a>
+<details><summary>GetWeekAverageDeltasRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || pivot_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | The characteristic time to detrmine averages for. The time component specifies the initialization time, and the date component is to define the end of the seven-day period over which to average. || forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  || observer_name | [string](#string) |  |  |
-
-<a name="ocf-dp-GetWeekAverageDeltasResponse"></a>
-
-#### GetWeekAverageDeltasResponse
+</details><a name="ocf-dp-GetWeekAverageDeltasResponse"></a>
+<details><summary>GetWeekAverageDeltasResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | deltas | [GetWeekAverageDeltasResponse.AverageDelta](#ocf-dp-GetWeekAverageDeltasResponse-AverageDelta) | repeated |  || init_time_of_day | [string](#string) |  | The initialisation time that was compared across the week. Formatted as HH:MM, e.g. "12:00" |
-
-<a name="ocf-dp-GetWeekAverageDeltasResponse-AverageDelta"></a>
-
-#### GetWeekAverageDeltasResponse.AverageDelta
+</details><a name="ocf-dp-GetWeekAverageDeltasResponse-AverageDelta"></a>
+<details><summary>GetWeekAverageDeltasResponse.AverageDelta</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | horizon_mins | [uint32](#uint32) |  |  || delta_fraction | [float](#float) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  |
-
-<a name="ocf-dp-ListForecastersRequest"></a>
-
-#### ListForecastersRequest
+</details><a name="ocf-dp-ListForecastersRequest"></a>
+<details><summary>ListForecastersRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecaster_names_filter | [string](#string) | repeated | Optional filter to only return forecasters from a given set. If empty, all forecasters will be returned. || latest_versions_only | [bool](#bool) |  | If true, only the latest version of each forecaster will be returned. |
-
-<a name="ocf-dp-ListForecastersResponse"></a>
-
-#### ListForecastersResponse
+</details><a name="ocf-dp-ListForecastersResponse"></a>
+<details><summary>ListForecastersResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecasters | [Forecaster](#ocf-dp-Forecaster) | repeated |  |
-
-<a name="ocf-dp-ListLocationsRequest"></a>
-
-#### ListLocationsRequest
+</details><a name="ocf-dp-ListLocationsRequest"></a>
+<details><summary>ListLocationsRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | energy_source_filter | [EnergySource](#ocf-dp-EnergySource) | optional | Optional filter to only return locations of a specific energy source. || location_type_filter | [LocationType](#ocf-dp-LocationType) | optional | Optional filter to only return locations of a specific location type. || location_uuids_filter | [string](#string) | repeated | Optional filter to only return locations from a given set. || user_oauth_id_filter | [string](#string) | optional | Optional filter to only return locations belonging to a specific user. || permission_filter | [Permission](#ocf-dp-Permission) | optional | Optional filter to only return locations for which the user has a specific permission. || enclosing_location_uuid_filter | [string](#string) | optional | Optional filter to only return locations enclosed within a specific location. || enclosed_location_uuid_filter | [string](#string) | optional | Optional filter to only return locations that enclose a specific location. || location_names_filter | [string](#string) | repeated | Optional filter to only return locations with a specific name. |
-
-<a name="ocf-dp-ListLocationsResponse"></a>
-
-#### ListLocationsResponse
+</details><a name="ocf-dp-ListLocationsResponse"></a>
+<details><summary>ListLocationsResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | locations | [ListLocationsResponse.LocationSummary](#ocf-dp-ListLocationsResponse-LocationSummary) | repeated |  |
-
-<a name="ocf-dp-ListLocationsResponse-LocationSummary"></a>
-
-#### ListLocationsResponse.LocationSummary
+</details><a name="ocf-dp-ListLocationsResponse-LocationSummary"></a>
+<details><summary>ListLocationsResponse.LocationSummary</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || location_name | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || location_type | [LocationType](#ocf-dp-LocationType) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || latlng | [LatLng](#ocf-dp-LatLng) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  |
-
-<a name="ocf-dp-ListObserversRequest"></a>
-
-#### ListObserversRequest
+</details><a name="ocf-dp-ListObserversRequest"></a>
+<details><summary>ListObserversRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | observer_names_filter | [string](#string) | repeated | Optional filter to only return observers from a given set. If empty, all observers will be returned. |
-
-<a name="ocf-dp-ListObserversResponse"></a>
-
-#### ListObserversResponse
+</details><a name="ocf-dp-ListObserversResponse"></a>
+<details><summary>ListObserversResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | observers | [ListObserversResponse.ObserverSummary](#ocf-dp-ListObserversResponse-ObserverSummary) | repeated |  |
-
-<a name="ocf-dp-ListObserversResponse-ObserverSummary"></a>
-
-#### ListObserversResponse.ObserverSummary
+</details><a name="ocf-dp-ListObserversResponse-ObserverSummary"></a>
+<details><summary>ListObserversResponse.ObserverSummary</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | observer_uuid | [string](#string) |  |  || observer_name | [string](#string) |  |  |
-
-<a name="ocf-dp-StreamForecastDataRequest"></a>
-
-#### StreamForecastDataRequest
+</details><a name="ocf-dp-StreamForecastDataRequest"></a>
+<details><summary>StreamForecastDataRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuids | [string](#string) | repeated |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || time_window | [TimeWindow](#ocf-dp-TimeWindow) |  |  || forecasters | [Forecaster](#ocf-dp-Forecaster) | repeated |  || include_metadata | [bool](#bool) |  |  |
-
-<a name="ocf-dp-StreamForecastDataResponse"></a>
-
-#### StreamForecastDataResponse
+</details><a name="ocf-dp-StreamForecastDataResponse"></a>
+<details><summary>StreamForecastDataResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | values | [ForecastDatum](#ocf-dp-ForecastDatum) | repeated |  |
-
-<a name="ocf-dp-TimeWindow"></a>
-
-#### TimeWindow
+</details><a name="ocf-dp-TimeWindow"></a>
+<details><summary>TimeWindow</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | start_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | The start of the time window, inclusive. Cannot be more than 7 days before end_timestamp_utc, nor more than 1 month in the future. || end_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | The end of the time window, inclusive. Cannot be more than 7 days after start_timestamp_utc. |
-
-<a name="ocf-dp-UpdateForecasterRequest"></a>
-
-#### UpdateForecasterRequest
+</details><a name="ocf-dp-UpdateForecasterRequest"></a>
+<details><summary>UpdateForecasterRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | name | [string](#string) |  |  || new_version | [string](#string) |  |  |
-
-<a name="ocf-dp-UpdateForecasterResponse"></a>
-
-#### UpdateForecasterResponse
+</details><a name="ocf-dp-UpdateForecasterResponse"></a>
+<details><summary>UpdateForecasterResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  |
-
-<a name="ocf-dp-UpdateLocationRequest"></a>
-
-#### UpdateLocationRequest
+</details><a name="ocf-dp-UpdateLocationRequest"></a>
+<details><summary>UpdateLocationRequest</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || energy_source | [EnergySource](#ocf-dp-EnergySource) |  |  || new_location_name | [string](#string) | optional | The new name for the location. || new_effective_capacity_watts | [uint64](#uint64) | optional |  || new_metadata | [google.protobuf.Struct](#google-protobuf-Struct) | optional | The new metadata object to set for the location. Note that this will replace any existing metadata, so be sure to include existing fields where needed. || valid_from_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | The UTC time from which this name is considered valid. Leave empty to use current time. |
-
-<a name="ocf-dp-UpdateLocationResponse"></a>
-
-#### UpdateLocationResponse
+</details><a name="ocf-dp-UpdateLocationResponse"></a>
+<details><summary>UpdateLocationResponse</summary>
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | location_uuid | [string](#string) |  |  || location_name | [string](#string) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  |
-
-
-
+</details>
+</details>
 
 
 
@@ -988,17 +860,10 @@ _[StreamForecastDataRequest](#ocf-dp-StreamForecastDataRequest) / [StreamForecas
 
 
 
-
-
-
-
-
-
-### Messages (ocf/dp/dp.common.proto)
+<details><summary>Messages (ocf/dp/dp.common.proto)</summary>
 
 <a name="ocf-dp-LatLng"></a>
-
-#### LatLng
+<details><summary>LatLng</summary>
 LatLng represents a WSG84 coordinate pair.
 Float precision enables a resolution of about 1cm,
 which is more precise than we'll ever have data for.
@@ -1006,29 +871,24 @@ which is more precise than we'll ever have data for.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | latitude | [float](#float) |  |  || longitude | [float](#float) |  |  |
+</details>
+</details>
 
-
-
-
-### Enums (ocf/dp/dp.common.proto)
+<details><summary>Enums (ocf/dp/dp.common.proto)</summary>
 
 <a name="ocf-dp-EnergySource"></a>
 
-#### EnergySource
+<details><summary>EnergySource</summary>
 EnergySource indicates the type of energy generation.
 NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
 Do not change without considering this first!
 
 | Name | Number | Description |
 | ---- | ------ | ----------- |
-| ENERGY_SOURCE_UNSPECIFIED | 0 |  |
-| ENERGY_SOURCE_SOLAR | 1 |  |
-| ENERGY_SOURCE_WIND | 2 |  |
+| ENERGY_SOURCE_UNSPECIFIED | 0 |  || ENERGY_SOURCE_SOLAR | 1 |  || ENERGY_SOURCE_WIND | 2 |  |
+</details><a name="ocf-dp-LocationType"></a>
 
-
-<a name="ocf-dp-LocationType"></a>
-
-#### LocationType
+<details><summary>LocationType</summary>
 LocationType indicates the type of location.
 NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
 Do not change without considering this first!
@@ -1036,54 +896,22 @@ The values are spaced apart in order to allow for future expansion.
 
 | Name | Number | Description |
 | ---- | ------ | ----------- |
-| LOCATION_TYPE_UNSPECIFIED | 0 |  |
-| LOCATION_TYPE_SITE | 1 |  |
-| LOCATION_TYPE_GSP | 2 |  |
-| LOCATION_TYPE_DNO | 3 |  |
-| LOCATION_TYPE_NATION | 4 |  |
-| LOCATION_TYPE_STATE | 5 |  |
-| LOCATION_TYPE_COUNTY | 6 |  |
-| LOCATION_TYPE_CITY | 7 |  |
-| LOCATION_TYPE_PRIMARY_SUBSTATION | 8 |  |
+| LOCATION_TYPE_UNSPECIFIED | 0 |  || LOCATION_TYPE_SITE | 1 |  || LOCATION_TYPE_GSP | 2 |  || LOCATION_TYPE_DNO | 3 |  || LOCATION_TYPE_NATION | 4 |  || LOCATION_TYPE_STATE | 5 |  || LOCATION_TYPE_COUNTY | 6 |  || LOCATION_TYPE_CITY | 7 |  || LOCATION_TYPE_PRIMARY_SUBSTATION | 8 |  |
+</details><a name="ocf-dp-Permission"></a>
 
-
-<a name="ocf-dp-Permission"></a>
-
-#### Permission
+<details><summary>Permission</summary>
 Permission indicates the level of access a user has to a resource.
 NOTE: These enum numbers are used to find the corresponding entry in the postgres database.
 Do not change without considering this first!
 
 | Name | Number | Description |
 | ---- | ------ | ----------- |
-| PERMISSION_UNSPECIFIED | 0 |  |
-| PERMISSION_READ | 1 |  |
-| PERMISSION_WRITE | 2 |  |
+| PERMISSION_UNSPECIFIED | 0 |  || PERMISSION_READ | 1 |  || PERMISSION_WRITE | 2 |  |
+</details>
+</details>
 
 
 
-
-
-
-## Scalar Value Types
-
-| .proto Type | Notes | C++ | Java | Python | Go | C# | PHP | Ruby |
-| ----------- | ----- | --- | ---- | ------ | -- | -- | --- | ---- |
-| <a name="double" /> double |  | double | double | float | float64 | double | float | Float |
-| <a name="float" /> float |  | float | float | float | float32 | float | float | Float |
-| <a name="int32" /> int32 | Uses variable-length encoding. Inefficient for encoding negative numbers – if your field is likely to have negative values, use sint32 instead. | int32 | int | int | int32 | int | integer | Bignum or Fixnum (as required) |
-| <a name="int64" /> int64 | Uses variable-length encoding. Inefficient for encoding negative numbers – if your field is likely to have negative values, use sint64 instead. | int64 | long | int/long | int64 | long | integer/string | Bignum |
-| <a name="uint32" /> uint32 | Uses variable-length encoding. | uint32 | int | int/long | uint32 | uint | integer | Bignum or Fixnum (as required) |
-| <a name="uint64" /> uint64 | Uses variable-length encoding. | uint64 | long | int/long | uint64 | ulong | integer/string | Bignum or Fixnum (as required) |
-| <a name="sint32" /> sint32 | Uses variable-length encoding. Signed int value. These more efficiently encode negative numbers than regular int32s. | int32 | int | int | int32 | int | integer | Bignum or Fixnum (as required) |
-| <a name="sint64" /> sint64 | Uses variable-length encoding. Signed int value. These more efficiently encode negative numbers than regular int64s. | int64 | long | int/long | int64 | long | integer/string | Bignum |
-| <a name="fixed32" /> fixed32 | Always four bytes. More efficient than uint32 if values are often greater than 2^28. | uint32 | int | int | uint32 | uint | integer | Bignum or Fixnum (as required) |
-| <a name="fixed64" /> fixed64 | Always eight bytes. More efficient than uint64 if values are often greater than 2^56. | uint64 | long | int/long | uint64 | ulong | integer/string | Bignum |
-| <a name="sfixed32" /> sfixed32 | Always four bytes. | int32 | int | int | int32 | int | integer | Bignum or Fixnum (as required) |
-| <a name="sfixed64" /> sfixed64 | Always eight bytes. | int64 | long | int/long | int64 | long | integer/string | Bignum |
-| <a name="bool" /> bool |  | bool | boolean | boolean | bool | bool | boolean | TrueClass/FalseClass |
-| <a name="string" /> string | A string must always contain UTF-8 encoded or 7-bit ASCII text. | string | String | str/unicode | string | string | string | String (UTF-8) |
-| <a name="bytes" /> bytes | May contain any arbitrary sequence of bytes. | string | ByteString | str | []byte | ByteString | string | String (ASCII-8BIT) |
 
 
 <!-- DOCS END -->

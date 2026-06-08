@@ -363,67 +363,56 @@ WHERE
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed generation values
  * for a given source type, forecaster, and observer, across a week of forecasts made with the same init time.
- * The pivot timestamp is used to determine the week and init time of interest.
- * The results are grouped by location and horizon.
+ * The pivot timestamp is used to determine the week and init time of interest. The results are
+ * grouped by location and horizon. MATERIALIZED is used because the count assumptions made by postgres on the
+ * CTEs are unreliable thanks to the UUIDV7_EXTRACT_TIMESTAMP function call.
  */
-WITH desired_init_times AS (
-    SELECT (d.day::DATE + sqlc.arg(pivot_timestamp)::TIMESTAMP::TIME)::TIMESTAMP AS init_time_utc
-    FROM
-        GENERATE_SERIES(
-            sqlc.arg(pivot_timestamp)::TIMESTAMP::DATE - INTERVAL '7 days',
-            sqlc.arg(pivot_timestamp)::TIMESTAMP::DATE - INTERVAL '1 day',
-            INTERVAL '1 day'
-        ) AS d (day)
-    ORDER BY d.day ASC
-),
-relevant_forecasts AS (
+WITH relevant_forecasts AS (
     SELECT
         f.forecast_uuid,
         f.source_type_id,
         f.geometry_uuid,
-        f.forecaster_id,
-        dit.init_time_utc
-    FROM desired_init_times AS dit
-        INNER JOIN pred.forecasts AS f
-        ON f.forecast_uuid >= UUIDV7_BOUNDARY(dit.init_time_utc)
-            AND f.forecast_uuid < UUIDV7_BOUNDARY(dit.init_time_utc + INTERVAL '1 millisecond')
-    WHERE f.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+        f.forecaster_id
+    FROM pred.forecasts AS f
+    WHERE f.geometry_uuid = $4
         AND f.source_type_id = $1
         AND f.forecaster_id = $2
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days')
         AND f.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 millisecond')
+        AND UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIME = sqlc.arg(pivot_timestamp)::TIMESTAMP::TIME
 ),
-relevant_predicted_values AS (
+relevant_predicted_values AS MATERIALIZED (
     SELECT
         rf.geometry_uuid,
-        rf.forecast_uuid,
         rf.source_type_id,
         pg.target_time_utc,
         pg.horizon_mins,
         pg.p50_sip
     FROM relevant_forecasts AS rf
         INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
+    WHERE pg.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days')
+        AND pg.forecast_uuid < UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 millisecond')
 ),
-deltas AS (
+relevant_observations AS MATERIALIZED (
     SELECT
-        rv.geometry_uuid,
-        rv.horizon_mins,
-        rv.p50_sip - og.value_sip AS delta_sip
-    FROM relevant_predicted_values AS rv
-        INNER JOIN obs.observed_generation_values AS og
-        ON rv.geometry_uuid = og.geometry_uuid
-            AND rv.source_type_id = og.source_type_id
-            AND rv.target_time_utc = og.observation_timestamp_utc
-    WHERE
-        og.observer_uuid = $3
-        AND og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
-        AND og.observation_timestamp_utc >= sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days'
-        AND og.observation_timestamp_utc < sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 millisecond'
+        geometry_uuid,
+        source_type_id,
+        observation_timestamp_utc,
+        value_sip
+    FROM obs.observed_generation_values
+    WHERE observer_uuid = $3
+        AND geometry_uuid = $4
+        AND observation_timestamp_utc >= sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days'
+        AND observation_timestamp_utc < sqlc.arg(pivot_timestamp)::TIMESTAMP + INTERVAL '1 millisecond'
 )
 SELECT
-    d.geometry_uuid,
-    d.horizon_mins,
-    AVG(d.delta_sip) AS avg_delta_sip
-FROM deltas AS d
-GROUP BY d.geometry_uuid, d.horizon_mins
-ORDER BY d.geometry_uuid, d.horizon_mins;
+    rv.geometry_uuid,
+    rv.horizon_mins,
+    AVG(rv.p50_sip - og.value_sip) AS avg_delta_sip
+FROM relevant_predicted_values AS rv
+    INNER JOIN relevant_observations AS og
+    ON rv.geometry_uuid = og.geometry_uuid
+        AND rv.source_type_id = og.source_type_id
+        AND rv.target_time_utc = og.observation_timestamp_utc
+GROUP BY rv.geometry_uuid, rv.horizon_mins
+ORDER BY rv.geometry_uuid, rv.horizon_mins;

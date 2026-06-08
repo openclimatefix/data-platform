@@ -208,14 +208,12 @@ _[{{.RequestLongType}}](#{{.RequestFullType | anchor}}){{if .RequestStreaming}} 
 {{- end}}{{/* end services */}}
 {{- end}}{{/* end has_services */}}
 
-{{/* --- MESSAGES --- */}}
 {{- if .HasMessages}}
-### Messages ({{$$file_name}})
+<details><summary>Messages ({{$$file_name}})</summary>
 
 {{range .Messages -}}
 <a name="{{.FullName | anchor}}"></a>
-
-#### {{.LongName}}
+<details><summary>{{.LongName}}</summary>
 {{.Description}}
 
 {{if .HasFields -}}
@@ -231,30 +229,33 @@ _[{{.RequestLongType}}](#{{.RequestFullType | anchor}}){{if .RequestStreaming}} 
 | --------- | ---- | ---- | ------ | ----------- |
 {{range .Extensions -}}
   | {{.Name}} | {{.LongType}} | {{.ContainingLongType}} | {{.Number}} | {{nobr .Description}}{{if .DefaultValue}} Default: `{{.DefaultValue}}`{{end}} |
-{{end}}
-{{- end}}
+{{- end }}
+{{- end }}
+</details>
 
-{{end}}{{/* end messages */}}
-{{- end}}{{/* end has_messages */}}
+{{- end }}{{/* end messages */}}
+</details>
+{{ end -}}{{/* end has_messages */}}
 
-{{/* --- ENUMS --- */}}
 {{- if .HasEnums}}
-### Enums ({{$$file_name}})
+<details><summary>Enums ({{$$file_name}})</summary>
 
 {{range .Enums -}}
 <a name="{{.FullName | anchor}}"></a>
 
-#### {{.LongName}}
+<details><summary>{{.LongName}}</summary>
 {{.Description}}
 
 | Name | Number | Description |
 | ---- | ------ | ----------- |
 {{range .Values -}}
   | {{.Name}} | {{.Number}} | {{nobr .Description}} |
-{{end}}
+{{- end }}
+</details>
 
-{{end}}{{/* end enums */}}
-{{- end}}{{/* end has_enums */}}
+{{- end}}{{/* end enums */}}
+</details>
+{{ end -}}{{/* end has_enums */}}
 
 {{/* --- FILE-LEVEL EXTENSIONS --- */}}
 {{- if .HasExtensions}}
@@ -270,19 +271,11 @@ _[{{.RequestLongType}}](#{{.RequestFullType | anchor}}){{if .RequestStreaming}} 
 
 {{- end}}{{/* end files */}}
 
-## Scalar Value Types
-
-| .proto Type | Notes | C++ | Java | Python | Go | C# | PHP | Ruby |
-| ----------- | ----- | --- | ---- | ------ | -- | -- | --- | ---- |
-{{range .Scalars -}}
-  | <a name="{{.ProtoType | anchor}}" /> {{.ProtoType}} | {{.Notes}} | {{.CppType}} | {{.JavaType}} | {{.PythonType}} | {{.GoType}} | {{.CSharp}} | {{.PhpType}} | {{.RubyType}} |
-{{end}}
 endef
 export GEN_DOCS
 
 .PHONY: gen.proto.docs
 gen.proto.docs: ${PROTOC} ${PROTOC_GEN_DOC}
-	@echo "Generating Markdown API docs..."
 	@rm -rf gen/docs && mkdir -p gen/docs
 	@echo "$$GEN_DOCS" > gen/docs/markdown.tmpl
 	@${PROTOC} \
