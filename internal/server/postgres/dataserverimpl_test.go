@@ -92,6 +92,21 @@ func TestCreateLocation(t *testing.T) {
 			},
 		},
 		{
+			name: "Should create location with pipe in the name",
+			req: &pb.CreateLocationRequest{
+				LocationName:           "location|with|pipe",
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				GeometryWkt:            "POINT(0.0 51.5)",
+				EffectiveCapacityWatts: 1230,
+				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+				Metadata:               metadata,
+			},
+			expectedLatLng: &pb.LatLng{
+				Latitude:  51.5,
+				Longitude: 0.0,
+			},
+		},
+		{
 			name: "Should create location with large capacity",
 			req: &pb.CreateLocationRequest{
 				LocationName:           "oxfordshire",
@@ -312,6 +327,84 @@ func TestUpdateLocation(t *testing.T) {
 					int(newGetResp.EffectiveCapacityWatts),
 				)
 				require.Equal(t, tc.expectedMetadata, newGetResp.Metadata.AsMap())
+			}
+		})
+	}
+}
+
+func TestUpdateLocationOwner(t *testing.T) {
+	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+	require.NoError(t, err)
+	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_update_location_owner_site",
+		GeometryWkt:            "POINT(-0.1 51.5)",
+		EffectiveCapacityWatts: 1234e6,
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)),
+	})
+	require.NoError(t, err)
+
+	createResp, err = dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_update_location_owner_site_2",
+		GeometryWkt:            "POINT(-0.2 51.6)",
+		EffectiveCapacityWatts: 1000e6,
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)),
+	})
+	require.NoError(t, err)
+
+	testcases := []struct {
+		name        string
+		newOwner    string
+		shouldError bool
+	}{
+		{
+			name:        "Should update owner to a new value",
+			newOwner:    "first_owner",
+			shouldError: false,
+		},
+		{
+			name:        "Should update owner to the same value",
+			newOwner:    "first_owner",
+			shouldError: false,
+		},
+		{
+			name:        "Should update owner to a different value",
+			newOwner:    "second_owner",
+			shouldError: false,
+		},
+		{
+			name:        "Should remove owner with empty string",
+			newOwner:    "",
+			shouldError: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := dc.UpdateLocationOwner(t.Context(), &pb.UpdateLocationOwnerRequest{
+				LocationUuid:      createResp.LocationUuid,
+				NewOrganisationId: tc.newOwner,
+			})
+			if tc.shouldError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				listResp, err := dc.ListLocations(t.Context(), &pb.ListLocationsRequest{
+					LocationUuidsFilter:  []string{createResp.LocationUuid},
+					OrganisationIdFilter: &tc.newOwner,
+				})
+				require.NoError(t, err)
+
+				if tc.newOwner == "" {
+					require.Len(t, listResp.Locations, 0)
+				} else {
+					require.Len(t, listResp.Locations, 1)
+				}
 			}
 		})
 	}

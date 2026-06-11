@@ -21,6 +21,36 @@ WHERE l.geometry_uuid = $1
 RETURNING
     l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
 
+-- name: ReownGeometry :one
+/* ReownGeometry assigns a new owning_entity_id to a geometry.
+ * To keep maintenance down to a minimum, it creates any missing entities on the fly.
+* If the input external_id is an empty string, the owning_entity_id is set to NULL.
+ */
+WITH input AS (
+    SELECT NULLIF(sqlc.arg(new_owning_entity_external_id)::TEXT, '') AS ext_id
+),
+target_entity AS (
+    INSERT INTO loc.entities (external_id)
+    SELECT ext_id FROM input
+    WHERE ext_id IS NOT NULL
+    ON CONFLICT (external_id) DO NOTHING
+    RETURNING entity_id
+),
+selected_entity AS (
+    SELECT entity_id FROM target_entity
+    UNION ALL
+    SELECT e.entity_id
+    FROM loc.entities AS e
+        INNER JOIN input AS i ON e.external_id = i.ext_id
+    LIMIT 1
+)
+UPDATE loc.geometries AS l
+SET owning_entity_id = (SELECT entity_id FROM selected_entity)
+WHERE l.geometry_uuid = $1
+RETURNING
+    l.geometry_uuid,
+    l.owning_entity_id;
+
 -- name: GetGeometryWKB :one
 /* GetGeometryWKB returns the geometries in WKB format for the given geometry UUIDs. */
 SELECT
@@ -63,15 +93,15 @@ SELECT
     s.capacity_limit_sip,
     s.source_type_id,
     s.geometry_uuid,
-    l.geometry_name,
+    s.geometry_name,
     s.sys_period,
-    ST_X(l.associated_point)::REAL AS longitude,
-    ST_Y(l.associated_point)::REAL AS latitude,
-    COALESCE(s.metadata || l.metadata, s.metadata, l.metadata)::JSONB AS metadata_jsonb
+    s.longitude,
+    s.latitude,
+    s.owning_entity_id,
+    s.metadata_jsonb
 FROM loc.sources_mv AS s
-    INNER JOIN loc.geometries AS l USING (geometry_uuid)
 WHERE
-    l.geometry_uuid = $1
+    s.geometry_uuid = $1
     AND s.source_type_id = $2
     AND s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP;
 
@@ -161,33 +191,29 @@ ORDER BY valid_from_utc ASC;
 
 -- name: ListSourcesAtTimestamp :many
 /* ListSourcesAtTimestamp returns all sources that match the given filters.
- * It uses left joins to include geometries even if there are no associated policies, to allow the
- * caller to not include permission-based filtering.
  */
 WITH unfiltered_sources AS (
     SELECT
-        u.oauth_id,
-        lp.permission_id,
         ls.source_type_id,
         ls.geometry_uuid,
         ls.capacity_watts,
         ls.capacity_limit_sip,
-        l.geometry_name,
-        l.geometry_type_id,
-        ST_X(l.associated_point)::REAL AS longitude,
-        ST_Y(l.associated_point)::REAL AS latitude,
-        COALESCE(l.metadata || ls.metadata, l.metadata, ls.metadata)::JSONB AS metadata_jsonb
+        ls.geometry_name,
+        ls.geometry_type_id,
+        ls.owning_entity_id,
+        ls.longitude,
+        ls.latitude,
+        ls.metadata_jsonb
     FROM loc.sources_mv AS ls
-        INNER JOIN loc.geometries AS l USING (geometry_uuid)
-        LEFT OUTER JOIN iam.location_policies AS lp USING (geometry_uuid, source_type_id)
-        LEFT OUTER JOIN iam.org_location_policy_groups USING (location_policy_group_uuid)
-        LEFT OUTER JOIN iam.users AS u USING (org_uuid)
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
 )
 SELECT *
 FROM unfiltered_sources AS us
 WHERE
-    (sqlc.narg(source_type_id)::SMALLINT IS NULL OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT)
+    (
+        sqlc.narg(source_type_id)::SMALLINT IS NULL
+        OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT
+    )
     AND (
         ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID [], 1) IS NULL
         OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
@@ -196,112 +222,121 @@ WHERE
         ARRAY_LENGTH(sqlc.arg(geometry_names)::TEXT [], 1) IS NULL
         OR us.geometry_name = ANY(sqlc.arg(geometry_names)::TEXT [])
     )
-    AND (sqlc.narg(geometry_type_id)::SMALLINT IS NULL OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT)
-    AND (sqlc.narg(oauth_id)::TEXT IS NULL OR us.oauth_id = sqlc.arg(oauth_id)::TEXT)
-    AND (sqlc.narg(permission_id)::SMALLINT IS NULL OR us.permission_id = sqlc.narg(permission_id)::SMALLINT);
+    AND (
+        sqlc.narg(geometry_type_id)::SMALLINT IS NULL
+        OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT
+    )
+    AND (
+        sqlc.narg(owning_entity_external_id)::TEXT IS NULL
+        OR us.owning_entity_id = (
+            SELECT entity_id
+            FROM loc.entities
+            WHERE external_id = sqlc.narg(owning_entity_external_id)::TEXT
+        )
+    );
 
 -- name: ListSourcesAtTimestampWithin :many
 /* ListSourcesAtTimestampWithin returns all sources that match the given filters
  * and are within a given geometry.
- * This has to be seperated from the ListSourcesAtTimestamp query due to the spatial join.
  */
-WITH contained_geometries AS (
-    SELECT
-        l.geometry_uuid,
-        l.geometry_name,
-        l.geometry_type_id,
-        l.geom,
-        l.associated_point,
-        l.metadata
-    FROM loc.geometries AS l
-        INNER JOIN
-            loc.geometries AS l_outer ON ST_WITHIN(
-                l.geom,
-                l_outer.geom
-            ) AND l_outer.geometry_uuid = sqlc.arg(outer_geometry_uuid)::UUID
-            AND l.geometry_uuid <> sqlc.arg(outer_geometry_uuid)::UUID
+WITH target_outer AS (
+    SELECT geom
+    FROM loc.geometries
+    WHERE geometry_uuid = sqlc.arg(outer_geometry_uuid)::UUID
 ),
 unfiltered_sources AS (
     SELECT
-        u.oauth_id,
-        lp.permission_id,
         ls.source_type_id,
         ls.geometry_uuid,
         ls.capacity_watts,
         ls.capacity_limit_sip,
-        l.geometry_name,
-        l.geometry_type_id,
-        ST_X(l.associated_point)::REAL AS longitude,
-        ST_Y(l.associated_point)::REAL AS latitude,
-        COALESCE(l.metadata || ls.metadata, l.metadata, ls.metadata)::JSONB AS metadata_jsonb
+        ls.geometry_name,
+        ls.geometry_type_id,
+        ls.longitude,
+        ls.latitude,
+        ls.owning_entity_id,
+        ls.metadata_jsonb
     FROM loc.sources_mv AS ls
-        INNER JOIN contained_geometries AS l USING (geometry_uuid)
-        LEFT OUTER JOIN iam.location_policies AS lp USING (geometry_uuid, source_type_id)
-        LEFT OUTER JOIN iam.org_location_policy_groups USING (location_policy_group_uuid)
-        LEFT OUTER JOIN iam.users AS u USING (org_uuid)
+        INNER JOIN loc.geometries AS l USING (geometry_uuid)
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
+        AND ls.geometry_uuid <> sqlc.arg(outer_geometry_uuid)::UUID
+        AND ST_WITHIN(l.geom, (SELECT geom FROM target_outer))
 )
 SELECT *
 FROM unfiltered_sources AS us
 WHERE
-    (sqlc.narg(source_type_id)::SMALLINT IS NULL OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT)
+    (
+        sqlc.narg(source_type_id)::SMALLINT IS NULL
+        OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT
+    )
     AND (
         ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID [], 1) IS NULL
         OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
     )
-    AND (sqlc.narg(geometry_type_id)::SMALLINT IS NULL OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT)
-    AND (sqlc.narg(oauth_id)::TEXT IS NULL OR us.oauth_id = sqlc.arg(oauth_id)::TEXT)
-    AND (sqlc.narg(permission_id)::SMALLINT IS NULL OR us.permission_id = sqlc.narg(permission_id)::SMALLINT);
+    AND (
+        ARRAY_LENGTH(sqlc.arg(geometry_names)::TEXT [], 1) IS NULL
+        OR us.geometry_name = ANY(sqlc.arg(geometry_names)::TEXT [])
+    )
+    AND (
+        sqlc.narg(geometry_type_id)::SMALLINT IS NULL
+        OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT
+    )
+    AND (
+        sqlc.narg(owning_entity_external_id)::TEXT IS NULL
+        OR us.owning_entity_id = (
+            SELECT entity_id
+            FROM loc.entities
+            WHERE external_id = sqlc.narg(owning_entity_external_id)::TEXT
+        )
+    );
 
 -- name: ListSourcesAtTimestampWithout :many
 /* ListSourcesAtTimestampWithout returns all sources that match the given filters
- * and contain a given geometry.
- * This has to be seperated from the ListSourcesAtTimestamp query due to the spatial join.
+ * and contain a given geometry's associated point.
  */
-WITH containing_geometries AS (
-    SELECT
-        l.geometry_uuid,
-        l.geometry_name,
-        l.geometry_type_id,
-        l.geom,
-        l.associated_point,
-        l.metadata
-    FROM loc.geometries AS l
-        INNER JOIN
-            loc.geometries AS l_inner ON ST_WITHIN(
-                l_inner.associated_point,
-                l.geom
-            ) AND l_inner.geometry_uuid = sqlc.arg(inner_geometry_uuid)::UUID
-            AND l.geometry_uuid <> sqlc.arg(inner_geometry_uuid)::UUID
+WITH target_inner AS (
+    SELECT associated_point
+    FROM loc.geometries
+    WHERE geometry_uuid = sqlc.arg(inner_geometry_uuid)::UUID
 ),
 unfiltered_sources AS (
     SELECT
-        u.oauth_id,
-        lp.permission_id,
         ls.source_type_id,
         ls.geometry_uuid,
         ls.capacity_watts,
         ls.capacity_limit_sip,
-        l.geometry_name,
-        l.geometry_type_id,
-        ST_X(l.associated_point)::REAL AS longitude,
-        ST_Y(l.associated_point)::REAL AS latitude,
-        COALESCE(l.metadata || ls.metadata, l.metadata, ls.metadata)::JSONB AS metadata_jsonb
+        ls.geometry_name,
+        ls.geometry_type_id,
+        ls.longitude,
+        ls.latitude,
+        ls.owning_entity_id,
+        ls.metadata_jsonb
     FROM loc.sources_mv AS ls
-        INNER JOIN containing_geometries AS l USING (geometry_uuid)
-        LEFT OUTER JOIN iam.location_policies AS lp USING (geometry_uuid, source_type_id)
-        LEFT OUTER JOIN iam.org_location_policy_groups USING (location_policy_group_uuid)
-        LEFT OUTER JOIN iam.users AS u USING (org_uuid)
+        INNER JOIN loc.geometries AS l USING (geometry_uuid)
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
+        AND ls.geometry_uuid <> sqlc.arg(inner_geometry_uuid)::UUID
+        AND ST_CONTAINS(l.geom, (SELECT associated_point FROM target_inner))
 )
 SELECT *
 FROM unfiltered_sources AS us
 WHERE
-    (sqlc.narg(source_type_id)::SMALLINT IS NULL OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT)
+    (
+        sqlc.narg(source_type_id)::SMALLINT IS NULL
+        OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT
+    )
     AND (
         ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID [], 1) IS NULL
         OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
     )
-    AND (sqlc.narg(geometry_type_id)::SMALLINT IS NULL OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT)
-    AND (sqlc.narg(oauth_id)::TEXT IS NULL OR us.oauth_id = sqlc.arg(oauth_id)::TEXT)
-    AND (sqlc.narg(permission_id)::SMALLINT IS NULL OR us.permission_id = sqlc.narg(permission_id)::SMALLINT);
+    AND (
+        sqlc.narg(geometry_type_id)::SMALLINT IS NULL
+        OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT
+    )
+    AND (
+        sqlc.narg(owning_entity_external_id)::TEXT IS NULL
+        OR us.owning_entity_id = (
+            SELECT entity_id
+            FROM loc.entities
+            WHERE external_id = sqlc.narg(owning_entity_external_id)::TEXT
+        )
+    );

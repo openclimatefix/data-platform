@@ -314,6 +314,17 @@ func (d *DataPlatformDataServiceServerImpl) UpdateLocation(
 	}, nil
 }
 
+// UpdateLocationOwner implements [dp.DataPlatformDataServiceServer].
+func (d *DataPlatformDataServiceServerImpl) UpdateLocationOwner(
+	ctx context.Context,
+	req *pb.UpdateLocationOwnerRequest,
+) (*pb.UpdateLocationOwnerResponse, error) {
+	return &pb.UpdateLocationOwnerResponse{
+		LocationUuid:   uuid.New().String(),
+		OrganisationId: req.NewOrganisationId,
+	}, nil
+}
+
 // CreateObservations implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) CreateObservations(
 	ctx context.Context,

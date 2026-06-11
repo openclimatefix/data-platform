@@ -56,9 +56,8 @@ func main() {
 	databaseUrl := strings.Trim(conf.GetString("dburl"), "\"")
 
 	var (
-		dataServerImpl  pb.DataPlatformDataServiceServer
-		adminServerImpl pb.DataPlatformAdministrationServiceServer
-		s               *grpc.Server
+		dataServerImpl pb.DataPlatformDataServiceServer
+		s              *grpc.Server
 	)
 
 	// Create a validator to use with protovalidate interceptor
@@ -71,7 +70,6 @@ func main() {
 		log.Warn().Msg("running in test mode with fake data. Not for production use")
 
 		dataServerImpl = dbdy.NewDataPlatformDataServerImpl()
-		adminServerImpl = dbdy.NewDataPlatformAdministrationServiceServerImpl()
 
 		// For a dummy-backed server, just validate requests
 		s = grpc.NewServer(
@@ -85,7 +83,6 @@ func main() {
 		logInterceptor := ix.NewLoggingInterceptor()
 		txInterceptor := ix.NewTransactionInterceptor(databaseUrl, dbpg.Migrations)
 		dataServerImpl = dbpg.NewDataPlatformDataServiceServerImpl()
-		adminServerImpl = dbpg.NewDataPlatformAdministrationServiceServerImpl()
 
 		// For a postgres-backed server, validate requests and manage database transactions
 		s = grpc.NewServer(
@@ -109,7 +106,6 @@ func main() {
 	// Create the GRPC server
 	// * Add an interceptor for request validation
 	pb.RegisterDataPlatformDataServiceServer(s, dataServerImpl)
-	pb.RegisterDataPlatformAdministrationServiceServer(s, adminServerImpl)
 	grpc_health_v1.RegisterHealthServer(s, health.NewServer())
 	reflection.Register(s)
 

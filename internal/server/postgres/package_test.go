@@ -26,7 +26,6 @@ import (
 
 var (
 	// Global gRPC clients for use in tests.
-	ac           pb.DataPlatformAdministrationServiceClient
 	dc           pb.DataPlatformDataServiceClient
 	pgConnString string
 )
@@ -131,10 +130,8 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 	defer lis.Close()
 
 	dataServerImpl := NewDataPlatformDataServiceServerImpl()
-	adminServerImpl := NewDataPlatformAdministrationServiceServerImpl()
 
 	pb.RegisterDataPlatformDataServiceServer(s, dataServerImpl)
-	pb.RegisterDataPlatformAdministrationServiceServer(s, adminServerImpl)
 
 	go func() {
 		if err := s.Serve(lis); err != nil {
@@ -160,7 +157,6 @@ func setupTestMain(ctx context.Context, m *testing.M) (code int, err error) {
 	defer cc.Close()
 
 	dc = pb.NewDataPlatformDataServiceClient(cc)
-	ac = pb.NewDataPlatformAdministrationServiceClient(cc)
 
 	// m.Run() executes the regular, user-defined test functions.
 	// Any defer statements that have been made will be run after m.Run()
