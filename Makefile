@@ -283,7 +283,7 @@ gen.proto.docs: ${PROTOC} ${PROTOC_GEN_DOC}
 		-I=proto \
 		-I=$(PROTOC_INCLUDE) \
 		--doc_out=gen/docs \
-		--doc_opt=gen/docs/markdown.tmpl,docs.md:=buf/*,google/*,ocf/dp/dp.rules.proto,ocf/dp/dp-admin.service.proto,ocf/dp/dp-admin.messages.proto
+		--doc_opt=gen/docs/markdown.tmpl,docs.md:=buf/*,google/*,ocf/dp/dp.rules.proto
 	@sed -n '1,/<!-- DOCS START -->/p' README.md > README.tmp
 	@echo "" >> README.tmp
 	@cat gen/docs/docs.md >> README.tmp
