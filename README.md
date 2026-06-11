@@ -574,7 +574,7 @@ Forecaster represents a generative source of predicted values.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| energy_source_filter | [EnergySource](#ocf-dp-EnergySource) | optional | Optional filter to only return locations of a specific energy source. || location_type_filter | [LocationType](#ocf-dp-LocationType) | optional | Optional filter to only return locations of a specific location type. || location_uuids_filter | [string](#string) | repeated | Optional filter to only return locations from a given set. || user_oauth_id_filter | [string](#string) | optional | Optional filter to only return locations belonging to a specific user. || permission_filter | [Permission](#ocf-dp-Permission) | optional | Optional filter to only return locations for which the user has a specific permission. || enclosing_location_uuid_filter | [string](#string) | optional | Optional filter to only return locations enclosed within a specific location. || enclosed_location_uuid_filter | [string](#string) | optional | Optional filter to only return locations that enclose a specific location. || location_names_filter | [string](#string) | repeated | Optional filter to only return locations with a specific name. |
+| energy_source_filter | [EnergySource](#ocf-dp-EnergySource) | optional | Optional filter to only return locations of a specific energy source. || location_type_filter | [LocationType](#ocf-dp-LocationType) | optional | Optional filter to only return locations of a specific location type. || location_uuids_filter | [string](#string) | repeated | Optional filter to only return locations from a given set. || organisation_id_filter | [string](#string) | optional | Optional filter to only return locations belonging to a specific organisation. || enclosing_location_uuid_filter | [string](#string) | optional | Optional filter to only return locations enclosed within a specific location. || enclosed_location_uuid_filter | [string](#string) | optional | Optional filter to only return locations that enclose a specific location. || location_names_filter | [string](#string) | repeated | Optional filter to only return locations with a specific name. |
 </details><a name="ocf-dp-ListLocationsResponse"></a>
 <details><summary>ListLocationsResponse</summary>
 
@@ -645,6 +645,20 @@ Forecaster represents a generative source of predicted values.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | forecaster | [Forecaster](#ocf-dp-Forecaster) |  |  |
+</details><a name="ocf-dp-UpdateLocationOwnerRequest"></a>
+<details><summary>UpdateLocationOwnerRequest</summary>
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| location_uuid | [string](#string) |  |  || new_organisation_id | [string](#string) |  |  |
+</details><a name="ocf-dp-UpdateLocationOwnerResponse"></a>
+<details><summary>UpdateLocationOwnerResponse</summary>
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| location_uuid | [string](#string) |  |  || organisation_id | [string](#string) |  |  |
 </details><a name="ocf-dp-UpdateLocationRequest"></a>
 <details><summary>UpdateLocationRequest</summary>
 
@@ -739,6 +753,14 @@ _[CreateLocationRequest](#ocf-dp-CreateLocationRequest) / [CreateLocationRespons
 UpdateLocation modifies various attributes associated with a given location.
 
 _[UpdateLocationRequest](#ocf-dp-UpdateLocationRequest) / [UpdateLocationResponse](#ocf-dp-UpdateLocationResponse)_
+
+<a name="UpdateLocationOwner"></a>
+
+#### UpdateLocationOwner
+
+UpdateLocationOwner changes the ownership of a location.
+
+_[UpdateLocationOwnerRequest](#ocf-dp-UpdateLocationOwnerRequest) / [UpdateLocationOwnerResponse](#ocf-dp-UpdateLocationOwnerResponse)_
 
 <a name="ListLocations"></a>
 

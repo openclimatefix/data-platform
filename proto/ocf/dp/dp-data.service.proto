@@ -36,6 +36,9 @@ service DataPlatformDataService {
   rpc CreateLocation(CreateLocationRequest) returns (CreateLocationResponse) {}
   /* UpdateLocation modifies various attributes associated with a given location. */
   rpc UpdateLocation(UpdateLocationRequest) returns (UpdateLocationResponse) {}
+  /* UpdateLocationOwner changes the ownership of a location. */
+  rpc UpdateLocationOwner(UpdateLocationOwnerRequest) returns (UpdateLocationOwnerResponse) {}
+  
   /* ListLocations fetches a list of registered locations that match the supplied filters. */
   rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse) {}
   /* CreateForecaster registers a new forecaster. 

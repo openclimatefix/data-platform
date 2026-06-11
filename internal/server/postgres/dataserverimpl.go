@@ -1505,6 +1505,44 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	}, nil
 }
 
+func (s *DataPlatformDataServiceServerImpl) UpdateLocationOwner(
+	ctx context.Context,
+	req *pb.UpdateLocationOwnerRequest,
+) (resp *pb.UpdateLocationOwnerResponse, err error) {
+	l := zerolog.Ctx(ctx)
+
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	params := db.ReownGeometryParams{
+		GeometryUuid:              uuid.MustParse(req.LocationUuid),
+		NewOwningEntityExternalID: req.NewOrganisationId,
+	}
+
+	dbGeom, err := querier.ReownGeometry(ctx, params)
+	if err != nil {
+		l.Err(err).Msgf("querier.ReownGeometry(%+v)", params)
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+	}
+
+	l.Debug().
+		Str("dp.geometry.uuid", dbGeom.GeometryUuid.String()).
+		Str("dp.geometry.new_owner_org_id", req.NewOrganisationId).
+		Msg("updated location owner")
+
+	err = querier.RefreshSourcesMaterializedView(ctx)
+	if err != nil {
+		l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
+		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
+	}
+
+	l.Debug().Msg("refreshed sources materialised view")
+
+	return &pb.UpdateLocationOwnerResponse{
+		LocationUuid:   dbGeom.GeometryUuid.String(),
+		OrganisationId: req.NewOrganisationId,
+	}, nil
+}
+
 func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	ctx context.Context,
 	req *pb.GetLocationsAsGeoJSONRequest,
@@ -1744,12 +1782,6 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 		parsedUuids[i] = uuid.MustParse(id)
 	}
 
-	var permissionId *int16
-	if req.PermissionFilter != nil {
-		pid := int16(req.PermissionFilter.Number())
-		permissionId = &pid
-	}
-
 	var sourceTypeId *int16
 	if req.EnergySourceFilter != nil {
 		stid := int16(req.EnergySourceFilter.Number())
@@ -1766,13 +1798,12 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 
 	if req.EnclosingLocationUuidFilter != nil {
 		llprms := db.ListSourcesAtTimestampWithinParams{
-			OuterGeometryUuid: uuid.MustParse(*req.EnclosingLocationUuidFilter),
-			AtTimestampUtc:    pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
-			OauthID:           req.UserOauthIdFilter,
-			GeometryUuids:     parsedUuids,
-			PermissionID:      permissionId,
-			SourceTypeID:      sourceTypeId,
-			GeometryTypeID:    locationTypeId,
+			OuterGeometryUuid:      uuid.MustParse(*req.EnclosingLocationUuidFilter),
+			AtTimestampUtc:         pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			OwningEntityExternalID: req.OrganisationIdFilter,
+			GeometryUuids:          parsedUuids,
+			SourceTypeID:           sourceTypeId,
+			GeometryTypeID:         locationTypeId,
 		}
 
 		glResp, err := querier.ListSourcesAtTimestampWithin(ctx, llprms)
@@ -1796,13 +1827,12 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 		}
 	} else if req.EnclosedLocationUuidFilter != nil {
 		llprms := db.ListSourcesAtTimestampWithoutParams{
-			InnerGeometryUuid: uuid.MustParse(*req.EnclosedLocationUuidFilter),
-			AtTimestampUtc:    pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
-			OauthID:           req.UserOauthIdFilter,
-			GeometryUuids:     parsedUuids,
-			PermissionID:      permissionId,
-			SourceTypeID:      sourceTypeId,
-			GeometryTypeID:    locationTypeId,
+			InnerGeometryUuid:      uuid.MustParse(*req.EnclosedLocationUuidFilter),
+			AtTimestampUtc:         pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			OwningEntityExternalID: req.OrganisationIdFilter,
+			GeometryUuids:          parsedUuids,
+			SourceTypeID:           sourceTypeId,
+			GeometryTypeID:         locationTypeId,
 		}
 
 		glResp, err := querier.ListSourcesAtTimestampWithout(ctx, llprms)
@@ -1826,13 +1856,12 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 		}
 	} else {
 		lsprms := db.ListSourcesAtTimestampParams{
-			OauthID:        req.UserOauthIdFilter,
-			GeometryUuids:  parsedUuids,
-			AtTimestampUtc: pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
-			PermissionID:   permissionId,
-			SourceTypeID:   sourceTypeId,
-			GeometryTypeID: locationTypeId,
-			GeometryNames:  req.LocationNamesFilter,
+			OwningEntityExternalID: req.OrganisationIdFilter,
+			GeometryUuids:          parsedUuids,
+			AtTimestampUtc:         pgtype.Timestamp{Time: time.Now().UTC(), Valid: true},
+			SourceTypeID:           sourceTypeId,
+			GeometryTypeID:         locationTypeId,
+			GeometryNames:          req.LocationNamesFilter,
 		}
 
 		glResp, err := querier.ListSourcesAtTimestamp(ctx, lsprms)
