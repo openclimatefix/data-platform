@@ -318,6 +318,7 @@ message ListForecastersResponse {
 
 message CreateForecastRequest {
   message ForecastValue {
+    reserved 4;
     uint32 horizon_mins = 1;
     float p50_fraction = 2 [
       (buf.validate.field).float.gte = 0,
@@ -336,7 +337,6 @@ message CreateForecastRequest {
         }
       }
     ];
-    optional google.protobuf.Struct metadata = 4;
   }
 
   Forecaster forecaster = 1 [

@@ -235,7 +235,7 @@ This places the generated code in `gen/python`. See the `Makefile` for more exte
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| horizon_mins | [uint32](#uint32) |  |  || p50_fraction | [float](#float) |  |  || other_statistics_fractions | [CreateForecastRequest.ForecastValue.OtherStatisticsFractionsEntry](#ocf-dp-CreateForecastRequest-ForecastValue-OtherStatisticsFractionsEntry) | repeated | Struct for storing additional statistics like p10, p90, mean etc. || metadata | [google.protobuf.Struct](#google-protobuf-Struct) | optional |  |
+| horizon_mins | [uint32](#uint32) |  |  || p50_fraction | [float](#float) |  |  || other_statistics_fractions | [CreateForecastRequest.ForecastValue.OtherStatisticsFractionsEntry](#ocf-dp-CreateForecastRequest-ForecastValue-OtherStatisticsFractionsEntry) | repeated | Struct for storing additional statistics like p10, p90, mean etc. |
 </details><a name="ocf-dp-CreateForecastRequest-ForecastValue-OtherStatisticsFractionsEntry"></a>
 <details><summary>CreateForecastRequest.ForecastValue.OtherStatisticsFractionsEntry</summary>
 

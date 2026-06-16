@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"math/rand/v2"
 	"strings"
 	"testing"
@@ -589,7 +588,6 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 				"p90": float32(0.6 + float32(i)*0.05),
 				"p10": float32(0.4 + float32(i)*0.05),
 			},
-			Metadata: metadata,
 		}
 	}
 
@@ -1061,7 +1059,6 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				"p10": float32(max(float32(i-1)*float32(100/len(yields))/100.0, 0)),
 				"p90": float32(min(float32(i+1)*float32(100/len(yields))/100.0, 1.1)),
 			},
-			Metadata: metadata,
 		}
 	}
 
@@ -1801,8 +1798,6 @@ func TestCreateObservations(t *testing.T) {
 
 func TestGetWeekAverageDeltas(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
 
 	// Create a site to attach the observations to
 	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
@@ -1862,7 +1857,6 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 				"p10": float32(max(float32(i-1)*float32(100/len(yields))/100.0, 0)),
 				"p90": float32(min(float32(i+1)*float32(100/len(yields))/100.0, 1.1)),
 			},
-			Metadata: metadata,
 		}
 	}
 
@@ -1925,7 +1919,6 @@ func TestCreateForecast(t *testing.T) {
 				"p10": 0.4 + float32(i)*0.05,
 				"p90": 0.6 + float32(i)*0.05,
 			},
-			Metadata: metadata,
 		}
 	}
 
@@ -1935,7 +1928,6 @@ func TestCreateForecast(t *testing.T) {
 			HorizonMins:              uint32(i * 30),
 			P50Fraction:              0.0,
 			OtherStatisticsFractions: map[string]float32{},
-			Metadata:                 &structpb.Struct{},
 		}
 	}
 
@@ -1948,7 +1940,6 @@ func TestCreateForecast(t *testing.T) {
 				"p10": 1.3,
 				"p90": -0.2,
 			},
-			Metadata: metadata,
 		}
 	}
 
@@ -2078,11 +2069,8 @@ func TestCreateForecast(t *testing.T) {
 				})
 				require.NoError(t, err)
 
-				expectedMetadata := tc.req.Values[0].Metadata.AsMap()
-				maps.Copy(expectedMetadata, tc.req.Metadata.AsMap())
-
 				for _, val := range fResp.Values {
-					require.Equal(t, expectedMetadata, val.Metadata.AsMap())
+					require.Equal(t, tc.req.Metadata.AsMap(), val.Metadata.AsMap())
 				}
 			}
 		})
@@ -2130,7 +2118,6 @@ func TestGetLatestForecasts(t *testing.T) {
 				"p10": 0.4 + float32(i)*0.05,
 				"p90": 0.6 + float32(i)*0.05,
 			},
-			Metadata: metadata,
 		}
 	}
 
@@ -2247,7 +2234,6 @@ func TestStreamForecastData(t *testing.T) {
 			OtherStatisticsFractions: map[string]float32{
 				"p90": float32(i)*0.25 + 0.1,
 			},
-			Metadata: metadata,
 		}
 	}
 
@@ -2261,6 +2247,7 @@ func TestStreamForecastData(t *testing.T) {
 			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 			InitTimeUtc:  initTime,
 			Values:       yields,
+			Metadata:     metadata,
 		})
 		require.NoError(t, err)
 
@@ -2270,6 +2257,7 @@ func TestStreamForecastData(t *testing.T) {
 			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 			InitTimeUtc:  initTime,
 			Values:       yields,
+			Metadata:     metadata,
 		})
 		require.NoError(t, err)
 	}

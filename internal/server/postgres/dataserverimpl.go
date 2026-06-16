@@ -183,18 +183,12 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	// Create the forecast data
 	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
 	for i, value := range req.Values {
-		// Since CreatePredictedValues uses COPYFROM, manually coerce empty metadata to nil
-		if value.Metadata != nil && len(value.Metadata.Fields) == 0 {
-			value.Metadata = nil
-		}
-
 		paramsList[i] = db.CreatePredictedValuesParams{
 			HorizonMins:  int16(value.HorizonMins),
 			P10Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p10"),
 			P50Sip:       int16(value.P50Fraction * 30000.0),
 			P90Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p90"),
 			ForecastUuid: dbForecast.ForecastUuid,
-			Metadata:     value.Metadata,
 		}
 	}
 

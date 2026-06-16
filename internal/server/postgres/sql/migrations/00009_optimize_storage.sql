@@ -59,7 +59,7 @@ BEGIN
                 ((other_stats_fractions->>''p90'')::REAL * 30000)::SMALLINT, 
                 forecast_uuid, 
                 NULL, 
-                metadata, 
+                NULL, 
                 NULL 
             FROM pred.%I;
         ', new_part_name, partition_record.table_name);
@@ -81,9 +81,8 @@ DROP PROCEDURE pred.swap_predicted_generation_partitions;
 
 ALTER TABLE pred.predicted_generation_values
     DROP COLUMN target_time_utc,
-    DROP COLUMN other_stats_fractions;
-
-ALTER TABLE pred.predicted_generation_values
+    DROP COLUMN other_stats_fractions,
+    DROP COLUMN metadata,
     ADD PRIMARY KEY (forecast_uuid, horizon_mins);
 
 DROP TABLE IF EXISTS pred.predicted_generation_values_template;
@@ -96,7 +95,6 @@ CREATE TABLE pred.predicted_generation_values_template (
     p10_sip SMALLINT,
     p90_sip SMALLINT,
     forecast_uuid UUID NOT NULL REFERENCES pred.forecasts (forecast_uuid) ON DELETE CASCADE ON UPDATE CASCADE, 
-    metadata JSONB DEFAULT NULL CONSTRAINT metadata_nullifempty CHECK (metadata IS NULL OR metadata != '{}'),
     PRIMARY KEY (forecast_uuid, horizon_mins)
 );
 
@@ -104,12 +102,13 @@ ANALYZE pred.predicted_generation_values;
 
 
 -- +goose Down
-ALTER TABLE pred.predicted_generation_values ADD COLUMN target_time_utc TIMESTAMP;
-ALTER TABLE pred.predicted_generation_values ADD COLUMN other_stats_fractions JSONB DEFAULT NULL;
-
-ALTER TABLE pred.predicted_generation_values 
+ALTER TABLE pred.predicted_generation_values
+    DROP CONSTRAINT predicted_generation_values_pkey CASCADE,
+    ADD COLUMN target_time_utc TIMESTAMP,
+    ADD COLUMN other_stats_fractions JSONB DEFAULT NULL,
     ADD CONSTRAINT other_stats_nullifempty CHECK (other_stats_fractions IS NULL OR other_stats_fractions != '{}'),
-    ADD CONSTRAINT other_stats_valid_fractions_check CHECK (pred.check_all_jsonb_values_are_valid_stat_fractions(other_stats_fractions));
+    ADD CONSTRAINT other_stats_valid_fractions_check CHECK (pred.check_all_jsonb_values_are_valid_stat_fractions(other_stats_fractions)),
+    ADD COLUMN metadata JSONB DEFAULT NULL;
 
 
 -- +goose StatementBegin
@@ -131,7 +130,8 @@ BEGIN
         EXECUTE format('
             UPDATE pred.%I
             SET target_time_utc = UUIDV7_EXTRACT_TIMESTAMP(forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => horizon_mins::INTEGER),
-                other_stats_fractions = CASE WHEN p10_sip IS NOT NULL OR p90_sip IS NOT NULL THEN JSONB_BUILD_OBJECT(''p10'', p10_sip::REAL / 30000, ''p90'', p90_sip::REAL / 30000) ELSE NULL END;
+	    other_stats_fractions = CASE WHEN p10_sip IS NOT NULL OR p90_sip IS NOT NULL THEN jsonb_strip_nulls(jsonb_build_object('p10', p10_sip::REAL / 30000, 'p90', p90_sip::REAL / 30000))
+            ELSE NULL END;
         ', partition_record.table_name);
 
         EXECUTE format('ALTER TABLE pred.%I ALTER COLUMN target_time_utc SET NOT NULL;', partition_record.table_name);
@@ -146,9 +146,10 @@ $$;
 CALL pred.rollback_predicted_generation_partitions();
 DROP PROCEDURE pred.rollback_predicted_generation_partitions;
 
-ALTER TABLE pred.predicted_generation_values ALTER COLUMN target_time_utc SET NOT NULL;
-ALTER TABLE pred.predicted_generation_values ADD PRIMARY KEY (forecast_uuid, target_time_utc);
-ALTER TABLE pred.predicted_generation_values DROP COLUMN p10_sip, DROP COLUMN p90_sip;
+ALTER TABLE pred.predicted_generation_values
+    ALTER COLUMN target_time_utc SET NOT NULL,
+    ADD PRIMARY KEY (forecast_uuid, target_time_utc),
+    DROP COLUMN p10_sip, DROP COLUMN p90_sip;
 
 DROP TABLE IF EXISTS pred.predicted_generation_values_template;
 CREATE TABLE pred.predicted_generation_values_template (

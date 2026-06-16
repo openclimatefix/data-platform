@@ -123,9 +123,9 @@ WHERE forecast_uuid IN (SELECT forecast_uuid FROM forecasts_to_delete);
  * with 0 representing 0% and 30000 representing 100% of capacity.
  */
 INSERT INTO pred.predicted_generation_values (
-    horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid, metadata
+    horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5
 );
 
 -- name: ListPredictionsForForecasts :many
@@ -157,11 +157,11 @@ SELECT
     pg.p50_sip,
     pg.p90_sip,
     sv.capacity_watts,
+    f.metadata,
     UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
     (
         UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)
-    )::TIMESTAMP AS target_time_utc,
-    COALESCE(pg.metadata || f.metadata, pg.metadata, f.metadata) AS metadata
+    )::TIMESTAMP AS target_time_utc
 FROM pred.forecasts AS f
     INNER JOIN matched_forecasters AS mf USING (forecaster_id)
     INNER JOIN pred.predicted_generation_values AS pg
@@ -273,10 +273,10 @@ winning_predictions AS (
         pg.p10_sip,
         pg.p50_sip,
         pg.p90_sip,
+        fow.metadata,
         (
             UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)
-        )::TIMESTAMP AS target_time_utc,
-        COALESCE(pg.metadata || fow.metadata, pg.metadata, fow.metadata) AS metadata
+        )::TIMESTAMP AS target_time_utc
     FROM allowed_forecasts_overlapping_window AS fow
         INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     WHERE (
@@ -367,8 +367,8 @@ SELECT
     sv.latitude,
     sv.longitude,
     sv.geometry_name,
-    sqlc.arg(target_timestamp_utc)::TIMESTAMP AS target_time_utc,
-    COALESCE(pg.metadata || laf.metadata, pg.metadata, laf.metadata) AS metadata
+    laf.metadata,
+    sqlc.arg(target_timestamp_utc)::TIMESTAMP AS target_time_utc
 FROM latest_allowed_forecast_per_location AS laf
     INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
