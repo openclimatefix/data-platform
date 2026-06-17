@@ -15,9 +15,9 @@
  * partition-wise and then replacing the partitions, we keep the process light on CPU.
  */ 
 
-DROP INDEX loc.idx_sources_mv_gist_sys_period;
+DROP INDEX IF EXISTS loc.idx_sources_mv_gist_sys_period;
 
-CREATE INDEX idx_sources_mv_composite_lookup 
+CREATE INDEX IF NOT EXISTS idx_sources_mv_composite_lookup 
 ON loc.sources_mv USING gist (geometry_uuid, source_type_id, sys_period);
 
 ALTER TABLE pred.predicted_generation_values 
@@ -130,7 +130,7 @@ BEGIN
         EXECUTE format('
             UPDATE pred.%I
             SET target_time_utc = UUIDV7_EXTRACT_TIMESTAMP(forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => horizon_mins::INTEGER),
-	    other_stats_fractions = CASE WHEN p10_sip IS NOT NULL OR p90_sip IS NOT NULL THEN jsonb_strip_nulls(jsonb_build_object('p10', p10_sip::REAL / 30000, 'p90', p90_sip::REAL / 30000))
+	    other_stats_fractions = CASE WHEN p10_sip IS NOT NULL OR p90_sip IS NOT NULL THEN jsonb_strip_nulls(jsonb_build_object(''p10'', p10_sip::REAL / 30000, ''p90'', p90_sip::REAL / 30000))
             ELSE NULL END;
         ', partition_record.table_name);
 
