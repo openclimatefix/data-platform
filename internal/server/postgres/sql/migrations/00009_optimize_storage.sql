@@ -20,10 +20,29 @@ DROP INDEX IF EXISTS loc.idx_sources_mv_gist_sys_period;
 CREATE INDEX IF NOT EXISTS idx_sources_mv_composite_lookup 
 ON loc.sources_mv USING gist (geometry_uuid, source_type_id, sys_period);
 
+-- +goose StatementBegin
+DO $$
+DECLARE
+    pk_name TEXT;
+BEGIN
+    SELECT conname INTO pk_name
+    FROM pg_constraint
+    WHERE conrelid = 'pred.predicted_generation_values'::regclass
+      AND contype = 'p';
+
+    IF pk_name IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE pred.predicted_generation_values DROP CONSTRAINT %I CASCADE;', pk_name);
+    END IF;
+END $$;
+-- +goose StatementEnd
+
 ALTER TABLE pred.predicted_generation_values 
-    ADD COLUMN p10_sip SMALLINT, 
-    ADD COLUMN p90_sip SMALLINT,
-    DROP CONSTRAINT predicted_generation_values_pkey CASCADE,
+    ADD COLUMN IF NOT EXISTS p10_sip SMALLINT, 
+    DROP CONSTRAINT IF EXISTS p10_sip_nonnegative_check,
+    ADD CONSTRAINT p10_sip_nonnegative_check CHECK (p10_sip >= 0),
+    ADD COLUMN IF NOT EXISTS p90_sip SMALLINT,
+    DROP CONSTRAINT IF EXISTS p90_sip_nonnegative_check,
+    ADD CONSTRAINT p90_sip_nonnegative_check CHECK (p90_sip >= 0),
     ALTER COLUMN target_time_utc DROP NOT NULL;
 
 -- +goose StatementBegin
@@ -34,6 +53,7 @@ DECLARE
     partition_record RECORD;
     new_part_name TEXT;
     part_bound TEXT;
+    is_migrated BOOLEAN;
 BEGIN
     FOR partition_record IN
         SELECT child.relname AS table_name,
@@ -45,6 +65,25 @@ BEGIN
         WHERE parent.relname = 'predicted_generation_values'
           AND nmsp_parent.nspname = 'pred'
     LOOP
+	EXECUTE format('
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_index
+                JOIN pg_class ON pg_index.indrelid = pg_class.oid
+                JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+                WHERE pg_namespace.nspname = ''pred''
+                  AND pg_class.relname = %L
+                  AND pg_index.indisprimary
+            )', partition_record.table_name)
+        INTO is_migrated;
+
+	IF is_migrated THEN
+            RAISE NOTICE 'Skipping partition (already migrated): %', partition_record.table_name;
+            CONTINUE;
+        END IF;
+	
+	RAISE NOTICE 'Migrating partition: %', partition_record.table_name;
+
         new_part_name := partition_record.table_name || '_v2';
         part_bound := partition_record.bounds;
 
@@ -55,8 +94,14 @@ BEGIN
             SELECT 
                 horizon_mins, 
                 p50_sip, 
-                ((other_stats_fractions->>''p10'')::REAL * 30000)::SMALLINT, 
-                ((other_stats_fractions->>''p90'')::REAL * 30000)::SMALLINT, 
+                CASE 
+                    WHEN other_stats_fractions IS NULL THEN p10_sip
+                    ELSE LEAST(((other_stats_fractions->>''p10'')::REAL * 30000), 32767)::SMALLINT
+                END, 
+                CASE 
+                    WHEN other_stats_fractions IS NULL THEN p90_sip
+                    ELSE LEAST(((other_stats_fractions->>''p90'')::REAL * 30000), 32767)::SMALLINT
+                END, 
                 forecast_uuid, 
                 NULL, 
                 NULL, 
