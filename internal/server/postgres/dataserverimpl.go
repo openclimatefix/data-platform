@@ -527,9 +527,9 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 						&row.P50Sip,
 						&row.P90Sip,
 						&row.CapacityWatts,
+						&row.Metadata,
 						&row.InitTimeUtc,
 						&row.TargetTimeUtc,
-						&row.Metadata,
 					)
 					if err != nil {
 						l.Err(err).Msg("rows.Scan failed")
