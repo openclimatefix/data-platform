@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
@@ -116,12 +115,6 @@ var yields = func() []*pb.CreateForecastRequest_ForecastValue {
 				"p90": 0.3,
 			},
 			HorizonMins: uint32(i * 30),
-			Metadata: func() *structpb.Struct {
-				s, _ := structpb.NewStruct(map[string]any{
-					"example_key": fmt.Sprintf("example_value_%d", i),
-				})
-				return s
-			}(),
 		})
 	}
 

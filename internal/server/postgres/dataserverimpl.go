@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,7 +20,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
@@ -62,6 +60,19 @@ func timeptrToPgTimestamp(t *timestamppb.Timestamp) pgtype.Timestamp {
 	}
 
 	return pgtype.Timestamp{Time: t.AsTime().UTC(), Valid: true}
+}
+
+// extractSIPStatPtrFromMap gets a key's value from a map as a pointer, and converts it
+// to a smallint percentage. If it doesn't exist, it returns nil.
+func extractSIPStatPtrFromMap(m map[string]float32, key string) *int16 {
+	val, exists := m[key]
+	if !exists {
+		return nil
+	}
+
+	sip_val := int16(val * 30000.0)
+
+	return &sip_val
 }
 
 // --- Server Implementation ----------------------------------------------------------------------
@@ -172,48 +183,12 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	// Create the forecast data
 	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
 	for i, value := range req.Values {
-		// Since the database wants each numeric value to have 4 significant figures,
-		// the float32 values need to be rounded accordingly.
-		roundedStats := make(map[string]any)
-		for k, val32 := range value.OtherStatisticsFractions {
-			val64 := float64(val32)
-
-			var roundedVal float64
-			if val64 < 1 {
-				roundedVal = math.Round(val64*10000) / 10000
-			} else {
-				roundedVal = math.Round(val64*1000) / 1000
-			}
-
-			roundedStats[k] = roundedVal
-		}
-
-		// Since CreatePredictedValues uses COPYFROM, manually coerce empty metadata to nil
-		if value.Metadata != nil && len(value.Metadata.Fields) == 0 {
-			value.Metadata = nil
-		}
-
-		var otherStats *structpb.Struct
-
-		if len(roundedStats) > 0 {
-			otherStats, err = structpb.NewStruct(roundedStats)
-			if err != nil {
-				l.Err(err).Msgf("structpb.NewStruct(%+v)", roundedStats)
-			}
-		}
-
 		paramsList[i] = db.CreatePredictedValuesParams{
 			HorizonMins:  int16(value.HorizonMins),
+			P10Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p10"),
 			P50Sip:       int16(value.P50Fraction * 30000.0),
+			P90Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p90"),
 			ForecastUuid: dbForecast.ForecastUuid,
-			TargetTimeUtc: pgtype.Timestamp{
-				Time: req.InitTimeUtc.AsTime().Add(
-					time.Duration(value.HorizonMins) * time.Minute,
-				),
-				Valid: true,
-			},
-			OtherStatsFractions: otherStats,
-			Metadata:            value.Metadata,
 		}
 	}
 
@@ -548,11 +523,13 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 						&row.ForecasterVersion,
 						&row.CreatedAtUtc,
 						&row.HorizonMins,
+						&row.P10Sip,
 						&row.P50Sip,
-						&row.OtherStatsFractions,
+						&row.P90Sip,
 						&row.CapacityWatts,
-						&row.InitTimeUtc,
 						&row.Metadata,
+						&row.InitTimeUtc,
+						&row.TargetTimeUtc,
 					)
 					if err != nil {
 						l.Err(err).Msg("rows.Scan failed")
@@ -560,10 +537,12 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					}
 
 					otherStatistics := make(map[string]float32)
-					if row.OtherStatsFractions != nil {
-						for k, v := range row.OtherStatsFractions.AsMap() {
-							otherStatistics[k] = float32(v.(float64))
-						}
+					if row.P10Sip != nil {
+						otherStatistics["p10"] = float32(*row.P10Sip) / 30000.0
+					}
+
+					if row.P90Sip != nil {
+						otherStatistics["p90"] = float32(*row.P90Sip) / 30000.0
 					}
 
 					metadata := make(map[string]string)
@@ -1639,14 +1618,12 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		out := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbPreds))
 		for i, pred := range dbPreds {
 			otherStats := make(map[string]float32)
-			for k, v := range pred.OtherStatsFractions.AsMap() {
-				floatVal, ok := v.(float64)
-				if !ok {
-					l.Warn().Str("key", k).Interface("value", v).Msg("skipping non-float statistic")
-					continue
-				}
+			if pred.P10Sip != nil {
+				otherStats["p10"] = float32(*pred.P10Sip) / 30000.0
+			}
 
-				otherStats[k] = float32(floatVal)
+			if pred.P90Sip != nil {
+				otherStats["p90"] = float32(*pred.P90Sip) / 30000.0
 			}
 
 			out[i] = &pb.GetForecastAsTimeseriesResponse_Value{
@@ -1741,14 +1718,12 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	values := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbValues))
 	for i, value := range dbValues {
 		otherStats := make(map[string]float32)
-		for k, v := range value.OtherStatsFractions.AsMap() {
-			floatVal, ok := v.(float64)
-			if !ok {
-				l.Warn().Str("key", k).Interface("value", v).Msg("skipping non-float statistic")
-				continue
-			}
+		if value.P10Sip != nil {
+			otherStats["p10"] = float32(*value.P10Sip) / 30000.0
+		}
 
-			otherStats[k] = float32(floatVal)
+		if value.P90Sip != nil {
+			otherStats["p90"] = float32(*value.P90Sip) / 30000.0
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{

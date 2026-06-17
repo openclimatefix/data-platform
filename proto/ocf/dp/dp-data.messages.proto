@@ -318,6 +318,7 @@ message ListForecastersResponse {
 
 message CreateForecastRequest {
   message ForecastValue {
+    reserved 4;
     uint32 horizon_mins = 1;
     float p50_fraction = 2 [
       (buf.validate.field).float.gte = 0,
@@ -328,6 +329,9 @@ message CreateForecastRequest {
     map<string, float> other_statistics_fractions = 3 [
       (buf.validate.field).map.min_pairs = 0,
       (buf.validate.field).map.max_pairs = 20,
+      (buf.validate.field).map.keys = {
+           string: {in: ["p10", "p90"]}
+      },
       (buf.validate.field).map.values = {
         float: {
           gte: 0.0,
@@ -336,7 +340,6 @@ message CreateForecastRequest {
         }
       }
     ];
-    optional google.protobuf.Struct metadata = 4;
   }
 
   Forecaster forecaster = 1 [

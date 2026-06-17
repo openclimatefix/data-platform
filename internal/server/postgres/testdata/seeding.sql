@@ -65,22 +65,23 @@ BEGIN
             TSRANGE(init_time_utc, init_time_utc + (forecast_len_mins * INTERVAL '1 minute'))
         FROM generated_data
         RETURNING forecast_uuid, init_time_utc
-    ),
-    static_json AS (
-        SELECT '{"source": "benchmark"}'::jsonb AS meta, '{"p10": 0.1, "p90": 0.9}'::jsonb AS stats
     )
     INSERT INTO pred.predicted_generation_values 
-        (horizon_mins, p50_sip, forecast_uuid, target_time_utc, metadata, other_stats_fractions)
-    SELECT gs.h, (random() * 30000)::SMALLINT, inf.forecast_uuid, 
-           inf.init_time_utc + (gs.h * INTERVAL '1 minute'), sj.meta, sj.stats
+        (horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid)
+    SELECT 
+        gs.h, 
+        (random() * 30000)::SMALLINT,
+        3000::SMALLINT,
+        27000::SMALLINT,
+        inf.forecast_uuid
     FROM inserted_forecasts inf
-    CROSS JOIN static_json sj
     CROSS JOIN LATERAL generate_series(0, forecast_len_mins - pgv_res_mins, pgv_res_mins) AS gs(h)
     ORDER BY inf.init_time_utc ASC;
 
     -- Spoof the table size so Postgres uses indexes rather than seq scan in testing
     UPDATE pg_class SET reltuples = 346000000, relpages = 5000000 WHERE relname = 'predicted_generation_values';
-    UPDATE pg_class SET reltuples = 346000000, relpages = 5000000 WHERE relname = 'predicted_generation_values_forecast_uuid_idx';
+    UPDATE pg_class SET reltuples = 346000000, relpages = 5000000 WHERE relname = 'predicted_generation_values_pkey';
+    
     REFRESH MATERIALIZED VIEW loc.sources_mv;
     
     RETURN QUERY SELECT target_locations * (history_window_mins / forecast_freq_mins) * (forecast_len_mins / pgv_res_mins), geo_list;

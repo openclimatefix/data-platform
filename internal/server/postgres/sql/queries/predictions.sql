@@ -123,9 +123,9 @@ WHERE forecast_uuid IN (SELECT forecast_uuid FROM forecasts_to_delete);
  * with 0 representing 0% and 30000 representing 100% of capacity.
  */
 INSERT INTO pred.predicted_generation_values (
-    horizon_mins, p50_sip, forecast_uuid, target_time_utc, other_stats_fractions, metadata
+    horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5
 );
 
 -- name: ListPredictionsForForecasts :many
@@ -153,11 +153,15 @@ SELECT
     mf.forecaster_version,
     f.created_at_utc,
     pg.horizon_mins,
+    pg.p10_sip,
     pg.p50_sip,
-    pg.other_stats_fractions,
+    pg.p90_sip,
     sv.capacity_watts,
+    f.metadata,
     UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
-    COALESCE(pg.metadata || f.metadata, pg.metadata, f.metadata) AS metadata
+    (
+        UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)
+    )::TIMESTAMP AS target_time_utc
 FROM pred.forecasts AS f
     INNER JOIN matched_forecasters AS mf USING (forecaster_id)
     INNER JOIN pred.predicted_generation_values AS pg
@@ -169,7 +173,8 @@ FROM pred.forecasts AS f
         FROM loc.sources_mv AS s
         WHERE s.geometry_uuid = f.geometry_uuid
             AND s.source_type_id = f.source_type_id
-            AND s.sys_period @> pg.target_time_utc
+            AND s.sys_period
+            @> (UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER))
         LIMIT 1
     ) AS sv ON TRUE
 WHERE f.geometry_uuid = sqlc.arg(geometry_uuid)::UUID
@@ -256,29 +261,39 @@ WITH allowed_forecasts_overlapping_window AS (
         )
 ),
 winning_predictions AS (
-    SELECT DISTINCT ON (pg.target_time_utc)
-        pg.target_time_utc,
+    SELECT DISTINCT ON (
+        UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)
+    )
         fow.forecast_uuid,
         fow.init_time_utc,
         fow.created_at_utc,
         fow.geometry_uuid,
         fow.source_type_id,
         pg.horizon_mins,
+        pg.p10_sip,
         pg.p50_sip,
-        pg.other_stats_fractions,
-        COALESCE(pg.metadata || fow.metadata, pg.metadata, fow.metadata) AS metadata
+        pg.p90_sip,
+        fow.metadata,
+        (
+            UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)
+        )::TIMESTAMP AS target_time_utc
     FROM allowed_forecasts_overlapping_window AS fow
         INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
-    WHERE pg.target_time_utc BETWEEN sqlc.arg(start_timestamp_utc)::TIMESTAMP AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
-        AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
+    WHERE (
+        UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)
+    ) BETWEEN sqlc.arg(start_timestamp_utc)::TIMESTAMP AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
+    AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
     -- Sorting by decreasing init time ensures the DISTINCT captures the lowest allowed horizon
-    ORDER BY pg.target_time_utc ASC, fow.init_time_utc DESC
+    ORDER BY
+        (UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)) ASC,
+        fow.init_time_utc DESC
 )
 SELECT
     wp.horizon_mins,
+    wp.p10_sip,
     wp.p50_sip,
+    wp.p90_sip,
     wp.target_time_utc,
-    wp.other_stats_fractions,
     wp.metadata,
     wp.init_time_utc,
     wp.created_at_utc,
@@ -343,22 +358,24 @@ SELECT
     laf.geometry_uuid,
     laf.source_type_id,
     pg.horizon_mins,
+    pg.p10_sip,
     pg.p50_sip,
-    pg.target_time_utc,
+    pg.p90_sip,
     laf.created_at_utc,
     laf.init_time_utc,
-    pg.other_stats_fractions,
     sv.capacity_watts,
     sv.latitude,
     sv.longitude,
     sv.geometry_name,
-    COALESCE(pg.metadata || laf.metadata, pg.metadata, laf.metadata) AS metadata
+    laf.metadata,
+    sqlc.arg(target_timestamp_utc)::TIMESTAMP AS target_time_utc
 FROM latest_allowed_forecast_per_location AS laf
     INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
 WHERE
-    pg.target_time_utc = sqlc.arg(target_timestamp_utc)::TIMESTAMP
-    AND sv.sys_period @> pg.target_time_utc;
+    (UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER))
+    = sqlc.arg(target_timestamp_utc)::TIMESTAMP
+    AND sv.sys_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP;
 
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed generation values
@@ -385,9 +402,11 @@ relevant_predicted_values AS MATERIALIZED (
     SELECT
         rf.geometry_uuid,
         rf.source_type_id,
-        pg.target_time_utc,
         pg.horizon_mins,
-        pg.p50_sip
+        pg.p50_sip,
+        (
+            UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)
+        )::TIMESTAMP AS target_time_utc
     FROM relevant_forecasts AS rf
         INNER JOIN pred.predicted_generation_values AS pg USING (forecast_uuid)
     WHERE pg.forecast_uuid >= UUIDV7_BOUNDARY(sqlc.arg(pivot_timestamp)::TIMESTAMP - INTERVAL '8 days')
