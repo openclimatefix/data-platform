@@ -329,6 +329,9 @@ message CreateForecastRequest {
     map<string, float> other_statistics_fractions = 3 [
       (buf.validate.field).map.min_pairs = 0,
       (buf.validate.field).map.max_pairs = 20,
+      (buf.validate.field).map.keys = {
+           string: {in: ["p10", "p90"]}
+      },
       (buf.validate.field).map.values = {
         float: {
           gte: 0.0,
