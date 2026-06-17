@@ -65,22 +65,16 @@ BEGIN
             TSRANGE(init_time_utc, init_time_utc + (forecast_len_mins * INTERVAL '1 minute'))
         FROM generated_data
         RETURNING forecast_uuid, init_time_utc
-    ),
-    static_json AS (
-        -- Removed the stats JSON payload entirely to mirror the dropped column
-        SELECT '{"source": "benchmark"}'::jsonb AS meta
     )
     INSERT INTO pred.predicted_generation_values 
-        (horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid, metadata)
+        (horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid)
     SELECT 
         gs.h, 
         (random() * 30000)::SMALLINT,
         3000::SMALLINT,
         27000::SMALLINT,
-        inf.forecast_uuid, 
-        sj.meta
+        inf.forecast_uuid
     FROM inserted_forecasts inf
-    CROSS JOIN static_json sj
     CROSS JOIN LATERAL generate_series(0, forecast_len_mins - pgv_res_mins, pgv_res_mins) AS gs(h)
     ORDER BY inf.init_time_utc ASC;
 
