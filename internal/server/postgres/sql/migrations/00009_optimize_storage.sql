@@ -38,7 +38,11 @@ END $$;
 
 ALTER TABLE pred.predicted_generation_values 
     ADD COLUMN IF NOT EXISTS p10_sip SMALLINT, 
+    DROP CONSTRAINT IF EXISTS p10_sip_nonnegative_check,
+    ADD CONSTRAINT p10_sip_nonnegative_check CHECK (p10_sip >= 0),
     ADD COLUMN IF NOT EXISTS p90_sip SMALLINT,
+    DROP CONSTRAINT IF EXISTS p90_sip_nonnegative_check,
+    ADD CONSTRAINT p90_sip_nonnegative_check CHECK (p90_sip >= 0),
     ALTER COLUMN target_time_utc DROP NOT NULL;
 
 -- +goose StatementBegin
