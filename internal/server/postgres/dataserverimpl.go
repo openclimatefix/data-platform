@@ -185,9 +185,13 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	for i, value := range req.Values {
 		paramsList[i] = db.CreatePredictedValuesParams{
 			HorizonMins:  int16(value.HorizonMins),
+			P02Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p02"),
 			P10Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p10"),
+			P25Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p25"),
 			P50Sip:       int16(value.P50Fraction * 30000.0),
+			P75Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p75"),
 			P90Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p90"),
+			P98Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p98"),
 			ForecastUuid: dbForecast.ForecastUuid,
 		}
 	}
@@ -523,9 +527,13 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 						&row.ForecasterVersion,
 						&row.CreatedAtUtc,
 						&row.HorizonMins,
+						&row.P02Sip,
 						&row.P10Sip,
+						&row.P25Sip,
 						&row.P50Sip,
+						&row.P75Sip,
 						&row.P90Sip,
+						&row.P98Sip,
 						&row.CapacityWatts,
 						&row.Metadata,
 						&row.InitTimeUtc,
@@ -537,12 +545,28 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					}
 
 					otherStatistics := make(map[string]float32)
+					if row.P02Sip != nil {
+						otherStatistics["p02"] = float32(*row.P02Sip) / 30000.0
+					}
+
 					if row.P10Sip != nil {
 						otherStatistics["p10"] = float32(*row.P10Sip) / 30000.0
 					}
 
+					if row.P25Sip != nil {
+						otherStatistics["p25"] = float32(*row.P25Sip) / 30000.0
+					}
+
+					if row.P75Sip != nil {
+						otherStatistics["p75"] = float32(*row.P75Sip) / 30000.0
+					}
+
 					if row.P90Sip != nil {
 						otherStatistics["p90"] = float32(*row.P90Sip) / 30000.0
+					}
+
+					if row.P98Sip != nil {
+						otherStatistics["p98"] = float32(*row.P98Sip) / 30000.0
 					}
 
 					metadata := make(map[string]string)
@@ -1057,6 +1081,31 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	values := make([]*pb.GetForecastAtTimestampResponse_Value, len(dbPredictions))
 	for i, value := range dbPredictions {
+		otherStats := make(map[string]float32)
+		if value.P02Sip != nil {
+			otherStats["p02"] = float32(*value.P02Sip) / 30000.0
+		}
+
+		if value.P10Sip != nil {
+			otherStats["p10"] = float32(*value.P10Sip) / 30000.0
+		}
+
+		if value.P25Sip != nil {
+			otherStats["p25"] = float32(*value.P25Sip) / 30000.0
+		}
+
+		if value.P75Sip != nil {
+			otherStats["p75"] = float32(*value.P75Sip) / 30000.0
+		}
+
+		if value.P90Sip != nil {
+			otherStats["p90"] = float32(*value.P90Sip) / 30000.0
+		}
+
+		if value.P98Sip != nil {
+			otherStats["p98"] = float32(*value.P98Sip) / 30000.0
+		}
+
 		values[i] = &pb.GetForecastAtTimestampResponse_Value{
 			ValueFraction:          float32(value.P50Sip) / 30000.0,
 			EffectiveCapacityWatts: uint64(value.CapacityWatts),
@@ -1069,6 +1118,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 			Metadata:                   value.Metadata,
 			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
+			OtherStatisticsFractions:   otherStats,
 		}
 	}
 
@@ -1378,7 +1428,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	lsprms := db.GetSourceAtTimestampParams{
 		GeometryUuid:   uuid.MustParse(req.LocationUuid),
 		SourceTypeID:   int16(req.EnergySource.Number()),
-		AtTimestampUtc: pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
+		AtTimestampUtc: pgtype.Timestamp{Time: validFrom, Valid: true},
 	}
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, lsprms)
@@ -1618,12 +1668,28 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 		out := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbPreds))
 		for i, pred := range dbPreds {
 			otherStats := make(map[string]float32)
+			if pred.P02Sip != nil {
+				otherStats["p02"] = float32(*pred.P02Sip) / 30000.0
+			}
+
 			if pred.P10Sip != nil {
 				otherStats["p10"] = float32(*pred.P10Sip) / 30000.0
 			}
 
+			if pred.P25Sip != nil {
+				otherStats["p25"] = float32(*pred.P25Sip) / 30000.0
+			}
+
+			if pred.P75Sip != nil {
+				otherStats["p75"] = float32(*pred.P75Sip) / 30000.0
+			}
+
 			if pred.P90Sip != nil {
 				otherStats["p90"] = float32(*pred.P90Sip) / 30000.0
+			}
+
+			if pred.P98Sip != nil {
+				otherStats["p98"] = float32(*pred.P98Sip) / 30000.0
 			}
 
 			out[i] = &pb.GetForecastAsTimeseriesResponse_Value{
@@ -1718,12 +1784,28 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	values := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbValues))
 	for i, value := range dbValues {
 		otherStats := make(map[string]float32)
+		if value.P02Sip != nil {
+			otherStats["p02"] = float32(*value.P02Sip) / 30000.0
+		}
+
 		if value.P10Sip != nil {
 			otherStats["p10"] = float32(*value.P10Sip) / 30000.0
 		}
 
+		if value.P25Sip != nil {
+			otherStats["p25"] = float32(*value.P25Sip) / 30000.0
+		}
+
+		if value.P75Sip != nil {
+			otherStats["p75"] = float32(*value.P75Sip) / 30000.0
+		}
+
 		if value.P90Sip != nil {
 			otherStats["p90"] = float32(*value.P90Sip) / 30000.0
+		}
+
+		if value.P98Sip != nil {
+			otherStats["p98"] = float32(*value.P98Sip) / 30000.0
 		}
 
 		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{

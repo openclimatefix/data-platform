@@ -18,14 +18,104 @@ import (
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
-func TestCreateLocation(t *testing.T) {
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
+func ptr[T any](v T) *T {
+	return &v
+}
+
+func createTestMetadata(t *testing.T, m map[string]any) *structpb.Struct {
+	t.Helper()
+	md, err := structpb.NewStruct(m)
 	require.NoError(t, err)
+	return md
+}
+
+func createTestLocation(
+	t *testing.T,
+	name, wkt string,
+	capacity uint64,
+	ts time.Time,
+	metadata *structpb.Struct,
+) *pb.CreateLocationResponse {
+	t.Helper()
+	resp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           name,
+		GeometryWkt:            wkt,
+		EffectiveCapacityWatts: capacity,
+		Metadata:               metadata,
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
+		ValidFromUtc:           timestamppb.New(ts),
+	})
+	require.NoError(t, err)
+
+	return resp
+}
+
+func createTestForecaster(t *testing.T, name, version string) *pb.Forecaster {
+	t.Helper()
+	resp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
+		Name:    name,
+		Version: version,
+	})
+	require.NoError(t, err)
+
+	return resp.Forecaster
+}
+
+// generateTestForecastValues creates a slice of ForecastValues with predictable plevels.
+func generateTestForecastValues(
+	numHorizons int,
+	intervalMins uint32,
+) []*pb.CreateForecastRequest_ForecastValue {
+	values := make([]*pb.CreateForecastRequest_ForecastValue, numHorizons)
+	for i := range values {
+		values[i] = &pb.CreateForecastRequest_ForecastValue{
+			HorizonMins: uint32(i) * intervalMins,
+			P50Fraction: float32(0.5 + float64(i)*0.001),
+			OtherStatisticsFractions: map[string]float32{
+				"p98": float32(0.98 + float32(i)*0.001),
+				"p90": float32(0.9 + float32(i)*0.001),
+				"p75": float32(0.75 + float32(i)*0.001),
+				"p25": float32(0.25 + float32(i)*0.001),
+				"p10": float32(0.1 + float32(i)*0.001),
+				"p02": float32(0.02 + float32(i)*0.001),
+			},
+		}
+	}
+
+	return values
+}
+
+func createTestForecast(
+	t *testing.T,
+	locationUuid string,
+	forecaster *pb.Forecaster,
+	initTime time.Time,
+	values []*pb.CreateForecastRequest_ForecastValue,
+	createdTime time.Time,
+) {
+	t.Helper()
+	req := &pb.CreateForecastRequest{
+		LocationUuid:        locationUuid,
+		Forecaster:          forecaster,
+		EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		InitTimeUtc:         timestamppb.New(initTime),
+		Values:              values,
+		Metadata:            createTestMetadata(t, map[string]any{"source": "test"}),
+		CreatedTimestampUtc: timestamppb.New(createdTime),
+	}
+	_, err := dc.CreateForecast(t.Context(), req)
+	require.NoError(t, err)
+}
+
+func TestCreateLocation(t *testing.T) {
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
 
 	testcases := []struct {
 		name           string
 		req            *pb.CreateLocationRequest
 		expectedLatLng *pb.LatLng
+		shouldErr      bool
 	}{
 		{
 			name: "Should create solar location",
@@ -41,6 +131,7 @@ func TestCreateLocation(t *testing.T) {
 				Latitude:  51.5,
 				Longitude: 0.0,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Shouldn't create unknown energy source",
@@ -52,6 +143,7 @@ func TestCreateLocation(t *testing.T) {
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 				Metadata:               metadata,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Should create wind location",
@@ -67,6 +159,7 @@ func TestCreateLocation(t *testing.T) {
 				Latitude:  51.5,
 				Longitude: 0.0,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Shouldn't create unknown location type",
@@ -78,6 +171,7 @@ func TestCreateLocation(t *testing.T) {
 				LocationType:           pb.LocationType_LOCATION_TYPE_UNSPECIFIED,
 				Metadata:               metadata,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't create location with empty name",
@@ -89,6 +183,7 @@ func TestCreateLocation(t *testing.T) {
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 				Metadata:               metadata,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Should create location with pipe in the name",
@@ -104,6 +199,7 @@ func TestCreateLocation(t *testing.T) {
 				Latitude:  51.5,
 				Longitude: 0.0,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Should create location with large capacity",
@@ -119,6 +215,7 @@ func TestCreateLocation(t *testing.T) {
 				Latitude:  51.75,
 				Longitude: 0.5,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Shouldn't create location with non-closed POLYGON geometry",
@@ -130,6 +227,7 @@ func TestCreateLocation(t *testing.T) {
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
 				Metadata:               metadata,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Should create location with closed MULTIPOLYGON geometry",
@@ -145,6 +243,7 @@ func TestCreateLocation(t *testing.T) {
 				Latitude:  51.75,
 				Longitude: 1.5,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Shouldn't create location with non-closed MULTIPOLYGON geometry",
@@ -156,6 +255,7 @@ func TestCreateLocation(t *testing.T) {
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
 				Metadata:               metadata,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't create location with non WSG84 geometry",
@@ -167,6 +267,7 @@ func TestCreateLocation(t *testing.T) {
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 				Metadata:               metadata,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Should create location with associated lat long",
@@ -186,6 +287,7 @@ func TestCreateLocation(t *testing.T) {
 				Latitude:  51.5074,
 				Longitude: -0.1278,
 			},
+			shouldErr: false,
 		},
 	}
 
@@ -193,7 +295,7 @@ func TestCreateLocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.CreateLocation(t.Context(), tc.req)
 
-			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
+			if tc.shouldErr {
 				require.Error(t, err, "Expected not to be able to create the location")
 			} else {
 				// Try fetching the created location and check it's the same
@@ -227,25 +329,20 @@ func TestCreateLocation(t *testing.T) {
 }
 
 func TestUpdateLocation(t *testing.T) {
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
 
 	pivotTime := time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)
 
-	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_update_location_site",
-		GeometryWkt:            "POINT(-0.1 51.5)",
-		EffectiveCapacityWatts: 1234e6,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-10 * time.Hour)),
-	})
+	createResp := createTestLocation(
+		t,
+		"test_update_location_site",
+		"POINT(-0.1 51.5)",
+		1234e6,
+		pivotTime.Add(-10*time.Hour),
+		metadata,
+	)
 
-	require.NoError(t, err)
-
-	newMetadata, err := structpb.NewStruct(map[string]any{"source": "test", "updated": true})
-	require.NoError(t, err)
+	newMetadata := createTestMetadata(t, map[string]any{"source": "test", "updated": true})
 
 	testcases := []struct {
 		name                  string
@@ -253,30 +350,33 @@ func TestUpdateLocation(t *testing.T) {
 		expectedName          string
 		expectedCapacityWatts uint64
 		expectedMetadata      map[string]any
+		shouldErr             bool
 	}{
 		{
 			name: "Should return the same when the update doesn't change anything",
 			req: &pb.UpdateLocationRequest{
 				LocationUuid:              createResp.LocationUuid,
-				NewEffectiveCapacityWatts: func() *uint64 { v := uint64(1234e6); return &v }(),
+				NewEffectiveCapacityWatts: ptr(uint64(1234e6)),
 				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				ValidFromUtc:              timestamppb.New(pivotTime.Add(-4 * time.Hour)),
 			},
 			expectedName:          "test_update_location_site",
 			expectedCapacityWatts: 1234e6,
 			expectedMetadata:      map[string]any{"source": "test"},
+			shouldErr:             false,
 		},
 		{
 			name: "Should update capacity to higher value",
 			req: &pb.UpdateLocationRequest{
 				LocationUuid:              createResp.LocationUuid,
 				EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				NewEffectiveCapacityWatts: func() *uint64 { v := uint64(1235e6); return &v }(),
+				NewEffectiveCapacityWatts: ptr(uint64(1235e6)),
 				ValidFromUtc:              timestamppb.New(pivotTime.Add(-5 * time.Hour)),
 			},
 			expectedName:          "test_update_location_site",
 			expectedCapacityWatts: 1235e6,
 			expectedMetadata:      map[string]any{"source": "test"},
+			shouldErr:             false,
 		},
 		{
 			name: "Shouldn't update anything when nothing is set",
@@ -285,19 +385,21 @@ func TestUpdateLocation(t *testing.T) {
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				ValidFromUtc: timestamppb.New(pivotTime.Add(-4 * time.Hour)),
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Should update name and metadata",
 			req: &pb.UpdateLocationRequest{
 				LocationUuid:    createResp.LocationUuid,
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				NewLocationName: func() *string { s := "test_updated_location_site"; return &s }(),
+				NewLocationName: ptr("test_updated_location_site"),
 				NewMetadata:     newMetadata,
 				ValidFromUtc:    timestamppb.New(pivotTime.Add(-3 * time.Hour)),
 			},
 			expectedName:          "test_updated_location_site",
 			expectedCapacityWatts: 1235e6,
 			expectedMetadata:      map[string]any{"source": "test", "updated": true},
+			shouldErr:             false,
 		},
 	}
 
@@ -305,7 +407,7 @@ func TestUpdateLocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.UpdateLocation(t.Context(), tc.req)
 
-			if strings.Split(tc.name, " ")[0] == "Shouldn't" {
+			if tc.shouldErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
@@ -332,54 +434,49 @@ func TestUpdateLocation(t *testing.T) {
 }
 
 func TestUpdateLocationOwner(t *testing.T) {
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_update_location_owner_site",
-		GeometryWkt:            "POINT(-0.1 51.5)",
-		EffectiveCapacityWatts: 1234e6,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)),
-	})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
+	createResp := createTestLocation(
+		t,
+		"test_update_location_owner_site",
+		"POINT(-0.1 51.5)",
+		1234e6,
+		time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC),
+		metadata,
+	)
 
-	createResp, err = dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_update_location_owner_site_2",
-		GeometryWkt:            "POINT(-0.2 51.6)",
-		EffectiveCapacityWatts: 1000e6,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)),
-	})
-	require.NoError(t, err)
+	createResp = createTestLocation(
+		t,
+		"test_update_location_owner_site_2",
+		"POINT(-0.2 51.6)",
+		1000e6,
+		time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC),
+		metadata,
+	)
 
 	testcases := []struct {
-		name        string
-		newOwner    string
-		shouldError bool
+		name      string
+		newOwner  string
+		shouldErr bool
 	}{
 		{
-			name:        "Should update owner to a new value",
-			newOwner:    "first_owner",
-			shouldError: false,
+			name:      "Should update owner to a new value",
+			newOwner:  "first_owner",
+			shouldErr: false,
 		},
 		{
-			name:        "Should update owner to the same value",
-			newOwner:    "first_owner",
-			shouldError: false,
+			name:      "Should update owner to the same value",
+			newOwner:  "first_owner",
+			shouldErr: false,
 		},
 		{
-			name:        "Should update owner to a different value",
-			newOwner:    "second_owner",
-			shouldError: false,
+			name:      "Should update owner to a different value",
+			newOwner:  "second_owner",
+			shouldErr: false,
 		},
 		{
-			name:        "Should remove owner with empty string",
-			newOwner:    "",
-			shouldError: false,
+			name:      "Should remove owner with empty string",
+			newOwner:  "",
+			shouldErr: false,
 		},
 	}
 
@@ -389,7 +486,7 @@ func TestUpdateLocationOwner(t *testing.T) {
 				LocationUuid:      createResp.LocationUuid,
 				NewOrganisationId: tc.newOwner,
 			})
-			if tc.shouldError {
+			if tc.shouldErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
@@ -414,6 +511,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 		name      string
 		createReq *pb.CreateForecasterRequest
 		updateReq *pb.UpdateForecasterRequest
+		shouldErr bool
 	}{
 		{
 			name: "Should create forecaster",
@@ -421,6 +519,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 				Name:    "test_forecaster_1",
 				Version: "v1",
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Should update existing forecaster",
@@ -428,6 +527,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 				Name:       "test_forecaster_1",
 				NewVersion: "v2",
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Shouldn't update with non-unique version",
@@ -435,6 +535,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 				Name:       "test_forecaster_1",
 				NewVersion: "v2",
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't update non-existent forecaster",
@@ -442,6 +543,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 				Name:       "non_existent_forecaster",
 				NewVersion: "v1",
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't create existing forecaster",
@@ -449,6 +551,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 				Name:    "test_forecaster_1",
 				Version: "v2",
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't create forecaster with invalid name",
@@ -456,6 +559,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 				Name:    "",
 				Version: "v1",
 			},
+			shouldErr: true,
 		},
 	}
 
@@ -469,7 +573,7 @@ func TestCreateUpdateForecaster(t *testing.T) {
 			_, err = dc.UpdateForecaster(t.Context(), tc.updateReq)
 		}
 
-		if strings.Split(tc.name, " ")[0] == "Shouldn't" {
+		if tc.shouldErr {
 			require.Error(t, err)
 		} else {
 			require.NoError(t, err)
@@ -482,11 +586,7 @@ func TestListForecasters(t *testing.T) {
 		"test_list_forecaster_1",
 		"test_list_forecaster_2",
 	} {
-		_, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-			Name:    name,
-			Version: "v0",
-		})
-		require.NoError(t, err)
+		_ = createTestForecaster(t, name, "v0")
 
 		for i := range 4 {
 			_, err := dc.UpdateForecaster(t.Context(), &pb.UpdateForecasterRequest{
@@ -501,6 +601,7 @@ func TestListForecasters(t *testing.T) {
 		name          string
 		req           *pb.ListForecastersRequest
 		expectedCount int
+		shouldErr     bool
 	}{
 		{
 			name: "Should return all forecasters",
@@ -511,6 +612,7 @@ func TestListForecasters(t *testing.T) {
 				},
 			},
 			expectedCount: 2 * 5,
+			shouldErr:     false,
 		},
 		{
 			name: "Should list only forecasters with filtered names",
@@ -518,6 +620,7 @@ func TestListForecasters(t *testing.T) {
 				ForecasterNamesFilter: []string{"test_list_forecaster_1"},
 			},
 			expectedCount: 5,
+			shouldErr:     false,
 		},
 		{
 			name: "Should list only the latest versions when asked",
@@ -529,13 +632,14 @@ func TestListForecasters(t *testing.T) {
 				LatestVersionsOnly: true,
 			},
 			expectedCount: 2,
+			shouldErr:     false,
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.ListForecasters(t.Context(), tc.req)
-			if strings.Contains(tc.name, "Shouldn't") {
+			if tc.shouldErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
@@ -549,94 +653,129 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 	pivotTime := time.Date(2025, 4, 5, 12, 0, 0, 0, time.UTC)
 	// --- Create a forecast --- //
 	// Create two sites to attach the forecasts to
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_forecast_at_timestamp_site",
-		GeometryWkt:            "POINT(-0.6 51.8)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
-	})
-	require.NoError(t, err)
-	siteResp2, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_forecast_at_timestamp_site_2",
-		GeometryWkt:            "POINT(-0.5 58.6)",
-		EffectiveCapacityWatts: 2000000,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
-	})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
+	siteResp := createTestLocation(
+		t,
+		"test_get_forecast_at_timestamp_site",
+		"POINT(-0.6 51.8)",
+		1000000,
+		pivotTime.Add(-time.Hour*1),
+		metadata,
+	)
+	siteResp2 := createTestLocation(
+		t,
+		"test_get_forecast_at_timestamp_site_2",
+		"POINT(-0.5 58.6)",
+		2000000,
+		pivotTime.Add(-time.Hour*1),
+		metadata,
+	)
 
 	// Create a forecaster
-	forecasterResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-		Name:    "test_get_forecast_at_timestamp_forecaster",
-		Version: "v1",
-	})
-	require.NoError(t, err)
+	fc := createTestForecaster(t, "test_get_forecast_at_timestamp_forecaster", "v1")
 
-	yields := make([]*pb.CreateForecastRequest_ForecastValue, 10)
-	for i := range yields {
-		yields[i] = &pb.CreateForecastRequest_ForecastValue{
-			HorizonMins: uint32(i * 30),
-			P50Fraction: float32(0.5 + float64(i)*0.05),
-			OtherStatisticsFractions: map[string]float32{
-				"p90": float32(0.6 + float32(i)*0.05),
-				"p10": float32(0.4 + float32(i)*0.05),
-			},
-		}
-	}
-
-	for _, locationUuid := range [2]string{siteResp.LocationUuid, siteResp2.LocationUuid} {
-		req := &pb.CreateForecastRequest{
-			LocationUuid: locationUuid,
-			Forecaster:   forecasterResp.Forecaster,
-			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			InitTimeUtc:  timestamppb.New(pivotTime),
-			Values:       yields,
-		}
-		_, err = dc.CreateForecast(t.Context(), req)
-		require.NoError(t, err)
-	}
+	yields := generateTestForecastValues(10, 30)
+	createTestForecast(t, siteResp.LocationUuid, fc, pivotTime, yields, pivotTime)
+	createTestForecast(t, siteResp2.LocationUuid, fc, pivotTime, yields, pivotTime)
 
 	testcases := []struct {
-		name         string
-		timestamp    time.Time
-		expectedp50s []float32
+		name          string
+		timestamp     time.Time
+		expectedStats []map[string]float32
+		shouldErr     bool
 	}{
 		{
-			name:         "Should get forecast at init time",
-			timestamp:    pivotTime,
-			expectedp50s: []float32{0.5, 0.5},
+			name:      "Should get forecast at init time",
+			timestamp: pivotTime,
+			expectedStats: []map[string]float32{
+				{
+					"p50": 0.5,
+					"p98": 0.98,
+					"p90": 0.9,
+					"p75": 0.75,
+					"p25": 0.25,
+					"p10": 0.1,
+					"p02": 0.02,
+				},
+				{
+					"p50": 0.5,
+					"p98": 0.98,
+					"p90": 0.9,
+					"p75": 0.75,
+					"p25": 0.25,
+					"p10": 0.1,
+					"p02": 0.02,
+				},
+			},
+			shouldErr: false,
 		},
 		{
-			name:         "Should get forecast at first horizon",
-			timestamp:    pivotTime.Add(30 * time.Minute),
-			expectedp50s: []float32{0.55, 0.55},
+			name:      "Should get forecast at first horizon",
+			timestamp: pivotTime.Add(30 * time.Minute),
+			expectedStats: []map[string]float32{
+				{
+					"p50": 0.501,
+					"p98": 0.981,
+					"p90": 0.901,
+					"p75": 0.751,
+					"p25": 0.251,
+					"p10": 0.101,
+					"p02": 0.021,
+				},
+				{
+					"p50": 0.501,
+					"p98": 0.981,
+					"p90": 0.901,
+					"p75": 0.751,
+					"p25": 0.251,
+					"p10": 0.101,
+					"p02": 0.021,
+				},
+			},
+			shouldErr: false,
 		},
 		{
-			name:         "Should return no values where no predicted values exist",
-			timestamp:    pivotTime.Add(45 * time.Minute),
-			expectedp50s: []float32{},
+			name:          "Should return no values where no predicted values exist",
+			timestamp:     pivotTime.Add(45 * time.Minute),
+			expectedStats: []map[string]float32{},
+			shouldErr:     false,
 		},
 		{
-			name:         "Should get forecast at last horizon",
-			timestamp:    pivotTime.Add(270 * time.Minute),
-			expectedp50s: []float32{0.95, 0.95},
+			name:      "Should get forecast at last horizon",
+			timestamp: pivotTime.Add(270 * time.Minute),
+			expectedStats: []map[string]float32{
+				{
+					"p50": 0.509,
+					"p98": 0.989,
+					"p90": 0.909,
+					"p75": 0.759,
+					"p25": 0.259,
+					"p10": 0.109,
+					"p02": 0.029,
+				},
+				{
+					"p50": 0.509,
+					"p98": 0.989,
+					"p90": 0.909,
+					"p75": 0.759,
+					"p25": 0.259,
+					"p10": 0.109,
+					"p02": 0.029,
+				},
+			},
+			shouldErr: false,
 		},
 		{
-			name:         "Should return no values before init time",
-			timestamp:    pivotTime.Add(-15 * time.Minute),
-			expectedp50s: []float32{},
+			name:          "Should return no values before init time",
+			timestamp:     pivotTime.Add(-15 * time.Minute),
+			expectedStats: []map[string]float32{},
+			shouldErr:     false,
 		},
 		{
-			name:         "Should return no values after last horizon",
-			timestamp:    pivotTime.Add(300 * time.Minute),
-			expectedp50s: []float32{},
+			name:          "Should return no values after last horizon",
+			timestamp:     pivotTime.Add(300 * time.Minute),
+			expectedStats: []map[string]float32{},
+			shouldErr:     false,
 		},
 	}
 
@@ -647,19 +786,31 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 					siteResp.LocationUuid,
 					siteResp2.LocationUuid,
 				},
-				Forecaster:   forecasterResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				TimestampUtc: timestamppb.New(tc.timestamp),
 			})
-			if strings.Contains(tc.name, "Shouldn't") {
+			if tc.shouldErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				require.Len(t, resp.Values, len(tc.expectedp50s))
+				require.Len(t, resp.Values, len(tc.expectedStats))
 
 				for i, forecast := range resp.Values {
-					require.Equal(t, tc.expectedp50s[i], forecast.ValueFraction)
+					for stat, expected := range tc.expectedStats[i] {
+						if stat == "p50" {
+							require.InDelta(t, expected, forecast.ValueFraction, 0.0001)
+						} else {
+							require.InDelta(
+								t,
+								expected,
+								forecast.OtherStatisticsFractions[stat],
+								0.0001,
+							)
+						}
+					}
+
 					require.NotNil(t, forecast.InitializationTimestampUtc)
 					require.NotNil(t, forecast.CreatedTimestampUtc)
 				}
@@ -670,32 +821,23 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 
 func TestGetObservationsAtTimestamp(t *testing.T) {
 	pivotTime := time.Date(2025, 2, 26, 12, 0, 0, 0, time.UTC)
-	// Create an observer
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
 	observerResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
 		Name: "test_get_observations_at_timestamp_observer",
 	})
-	require.NoError(t, err)
-	// Create a few sites to attach the observations to
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
 	require.NoError(t, err)
 
 	siteUuids := make([]string, 3)
 	for i := range siteUuids {
 		capacity := uint64(1000000 + i*100000)
-		siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-			LocationName: fmt.Sprintf("test_get_observations_at_timestamp_site_%d", i),
-			GeometryWkt: fmt.Sprintf(
-				"POINT(%f %f)",
-				-0.1+float32(i)*0.01,
-				51.5+float32(i)*0.01,
-			),
-			EffectiveCapacityWatts: capacity,
-			Metadata:               metadata,
-			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-			ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 1)),
-		})
-		require.NoError(t, err)
+		siteResp := createTestLocation(
+			t,
+			fmt.Sprintf("test_get_observations_at_timestamp_site_%d", i),
+			fmt.Sprintf("POINT(%f %f)", -0.1+float32(i)*0.01, 51.5+float32(i)*0.01),
+			capacity,
+			pivotTime.Add(-time.Hour*1),
+			metadata,
+		)
 		siteUuids[i] = siteResp.LocationUuid
 
 		req := &pb.CreateObservationsRequest{
@@ -717,6 +859,7 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 		name              string
 		req               *pb.GetObservationsAtTimestampRequest
 		expectedFractions []float32
+		shouldErr         bool
 	}{
 		{
 			name: "Should get observation at exact timestamp for single location",
@@ -727,6 +870,7 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 				TimestampUtc:  timestamppb.New(pivotTime),
 			},
 			expectedFractions: []float32{0.1},
+			shouldErr:         false,
 		},
 		{
 			name: "Should get observation at exact timestamp for multiple locations",
@@ -737,6 +881,7 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 				TimestampUtc:  timestamppb.New(pivotTime),
 			},
 			expectedFractions: []float32{0.1, 0.1, 0.1},
+			shouldErr:         false,
 		},
 		{
 			name: "Should return no observations where no values exist at timestamp",
@@ -746,6 +891,7 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				TimestampUtc:  timestamppb.New(pivotTime.Add(5 * time.Minute)),
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Should return no observations for non-existent location",
@@ -755,6 +901,7 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				TimestampUtc:  timestamppb.New(pivotTime),
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Shouldn't return observations for non-existent observer",
@@ -764,13 +911,14 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				TimestampUtc:  timestamppb.New(pivotTime),
 			},
+			shouldErr: true,
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.GetObservationsAtTimestamp(t.Context(), tc.req)
-			if strings.Contains(tc.name, "Shouldn't") {
+			if tc.shouldErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
@@ -786,23 +934,20 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 }
 
 func TestGetLocation(t *testing.T) {
-	// Create a location to fetch
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-	createResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_location_site",
-		GeometryWkt:            "POLYGON((0 0,0 1,1 1,1 0,0 0))",
-		EffectiveCapacityWatts: 12e6,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
-		ValidFromUtc:           timestamppb.New(time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)),
-	})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
+	createResp := createTestLocation(
+		t,
+		"test_get_location_site",
+		"POLYGON((0 0,0 1,1 1,1 0,0 0))",
+		12e6,
+		time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+		metadata,
+	)
 
 	testCases := []struct {
-		name string
-		req  *pb.GetLocationRequest
+		name      string
+		req       *pb.GetLocationRequest
+		shouldErr bool
 	}{
 		{
 			name: "Should get location without geometry",
@@ -811,6 +956,7 @@ func TestGetLocation(t *testing.T) {
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				IncludeGeometry: false,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Should get location with geometry",
@@ -819,23 +965,28 @@ func TestGetLocation(t *testing.T) {
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				IncludeGeometry: true,
 			},
+			shouldErr: false,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.GetLocation(t.Context(), tc.req)
-			require.NoError(t, err)
-			require.Equal(t, createResp.LocationUuid, resp.LocationUuid)
-			require.Equal(t, "test_get_location_site", resp.LocationName)
-			require.Equal(t, uint64(12e6), resp.EffectiveCapacityWatts)
-
-			if tc.req.IncludeGeometry {
-				expected, err := hex.DecodeString(
-					"01030000000100000005000000000000000000000000000000000000000000000000000000000000000000f03f000000000000f03f000000000000f03f000000000000f03f000000000000000000000000000000000000000000000000",
-				)
+			if tc.shouldErr {
+				require.Error(t, err)
+			} else {
 				require.NoError(t, err)
-				require.Equal(t, expected, resp.GeometryWkb)
+				require.Equal(t, createResp.LocationUuid, resp.LocationUuid)
+				require.Equal(t, "test_get_location_site", resp.LocationName)
+				require.Equal(t, uint64(12e6), resp.EffectiveCapacityWatts)
+
+				if tc.req.IncludeGeometry {
+					expected, err := hex.DecodeString(
+						"01030000000100000005000000000000000000000000000000000000000000000000000000000000000000f03f000000000000f03f000000000000f03f000000000000f03f000000000000000000000000000000000000000000000000",
+					)
+					require.NoError(t, err)
+					require.Equal(t, expected, resp.GeometryWkb)
+				}
 			}
 		})
 	}
@@ -844,40 +995,35 @@ func TestGetLocation(t *testing.T) {
 func TestGetLocationAsTimeseries(t *testing.T) {
 	pivotTime := time.Date(2026, 1, 4, 12, 0, 0, 0, time.UTC)
 
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test_initial"})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test_initial"})
 
 	// Site is valid from 48 hours before pivot
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_location_as_timeseries_site",
-		GeometryWkt:            "POINT(-60.25 57.5)",
-		EffectiveCapacityWatts: 1000000, // 1 MW
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 48)),
-	})
-	require.NoError(t, err)
+	siteResp := createTestLocation(
+		t,
+		"test_get_location_as_timeseries_site",
+		"POINT(-60.25 57.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*48),
+		metadata,
+	)
 
 	// Update the metadata and capacity at 24 hours before pivot
-	updatedMetadata, err := structpb.NewStruct(map[string]any{"source": "test_update_1"})
-	require.NoError(t, err)
-	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
+	updatedMetadata := createTestMetadata(t, map[string]any{"source": "test_update_1"})
+	_, err := dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
 		LocationUuid:              siteResp.LocationUuid,
 		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		NewEffectiveCapacityWatts: func() *uint64 { v := uint64(1500000); return &v }(), // 1.5 MW
+		NewEffectiveCapacityWatts: ptr(uint64(1500000)),
 		NewMetadata:               updatedMetadata,
 		ValidFromUtc:              timestamppb.New(pivotTime.Add(-time.Hour * 24)),
 	})
 	require.NoError(t, err)
 
 	// Update the metadata and capacity again at pivot
-	finalMetadata, err := structpb.NewStruct(map[string]any{"source": "test_update_2"})
-	require.NoError(t, err)
+	finalMetadata := createTestMetadata(t, map[string]any{"source": "test_update_2"})
 	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
 		LocationUuid:              siteResp.LocationUuid,
 		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		NewEffectiveCapacityWatts: func() *uint64 { v := uint64(2000000); return &v }(), // 2.0 MW
+		NewEffectiveCapacityWatts: ptr(uint64(2000000)),
 		NewMetadata:               finalMetadata,
 		ValidFromUtc:              timestamppb.New(pivotTime),
 	})
@@ -893,7 +1039,7 @@ func TestGetLocationAsTimeseries(t *testing.T) {
 		req                *pb.GetLocationAsTimeseriesRequest
 		expectedCapacities []uint64
 		expectedSources    []string
-		expectErr          bool
+		shouldErr          bool
 	}{
 		{
 			name: "Should return full history of capacity changes when window covers everything",
@@ -904,7 +1050,7 @@ func TestGetLocationAsTimeseries(t *testing.T) {
 			},
 			expectedCapacities: []uint64{1000000, 1500000, 2000000},
 			expectedSources:    []string{"test_initial", "test_update_1", "test_update_2"},
-			expectErr:          false,
+			shouldErr:          false,
 		},
 		{
 			name: "Should return only changes covered by time window and exclude others",
@@ -918,7 +1064,7 @@ func TestGetLocationAsTimeseries(t *testing.T) {
 			},
 			expectedCapacities: []uint64{1500000, 2000000},
 			expectedSources:    []string{"test_update_1", "test_update_2"},
-			expectErr:          false,
+			shouldErr:          false,
 		},
 		{
 			name: "Should return no values if time window is before the location existed",
@@ -932,7 +1078,7 @@ func TestGetLocationAsTimeseries(t *testing.T) {
 			},
 			expectedCapacities: []uint64{},
 			expectedSources:    []string{},
-			expectErr:          false,
+			shouldErr:          false,
 		},
 		{
 			name: "Shouldn't work with an invalid UUID",
@@ -941,7 +1087,7 @@ func TestGetLocationAsTimeseries(t *testing.T) {
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				TimeWindow:   defaultTimeWindow,
 			},
-			expectErr: true,
+			shouldErr: true,
 		},
 	}
 
@@ -949,7 +1095,7 @@ func TestGetLocationAsTimeseries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.GetLocationAsTimeseries(t.Context(), tc.req)
 
-			if tc.expectErr {
+			if tc.shouldErr {
 				require.Error(t, err)
 				return
 			}
@@ -983,20 +1129,14 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 	// Create some locations
 	siteUuids := make([]string, 3)
 	for i := range siteUuids {
-		resp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-			LocationName: fmt.Sprintf("testsite%02d", i),
-			GeometryWkt: fmt.Sprintf(
-				"POINT(%f %f)",
-				-0.1+float32(i)*0.01,
-				51.5+float32(i)*0.01,
-			),
-			EffectiveCapacityWatts: uint64(1000000 + i*100),
-			EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			Metadata:               &structpb.Struct{},
-			LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		})
-		require.NoError(t, err)
-
+		resp := createTestLocation(
+			t,
+			fmt.Sprintf("testsite%02d", i),
+			fmt.Sprintf("POINT(%f %f)", -0.1+float32(i)*0.01, 51.5+float32(i)*0.01),
+			uint64(1000000+i*100),
+			time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+			&structpb.Struct{},
+		)
 		siteUuids[i] = resp.LocationUuid
 	}
 
@@ -1018,60 +1158,41 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 	pivotTime := time.Date(2025, 2, 5, 12, 0, 0, 0, time.UTC)
 
 	// Create a site to attach the forecasts to
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_forecast_as_timeseries_site",
-		GeometryWkt:            "POINT(-60.25 57.5)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 49)),
-	})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
+	siteResp := createTestLocation(
+		t,
+		"test_get_forecast_as_timeseries_site",
+		"POINT(-60.25 57.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*49),
+		metadata,
+	)
 
 	// Update the capacity of the site to check it is reflected in the values
-	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
+	_, err := dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
 		LocationUuid:              siteResp.LocationUuid,
 		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		NewEffectiveCapacityWatts: func() *uint64 { v := uint64(1500000); return &v }(),
+		NewEffectiveCapacityWatts: ptr(uint64(1500000)),
 		ValidFromUtc:              timestamppb.New(pivotTime.Add(-time.Hour * 1)),
 	})
 	require.NoError(t, err)
 
 	// Create a forecaster to make the forecasts
-	forecasterResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-		Name:    "test_get_forecast_as_timeseries_forecaster",
-		Version: "v1",
-	})
-	require.NoError(t, err)
+	fc := createTestForecaster(t, "test_get_forecast_as_timeseries_forecaster", "v1")
 
 	// Create 4, hour-long forecasts, each 30 minutes apart, with a resolution of 5 minutes.
-	// The forecast values increase linearly from 0% to 100% of capacity over each forecast.
 	// The last forecast begins at the pivot time.
-	yields := make([]*pb.CreateForecastRequest_ForecastValue, 60/5)
-	for i := range yields {
-		yields[i] = &pb.CreateForecastRequest_ForecastValue{
-			HorizonMins: uint32(i * 5),
-			P50Fraction: float32(i) * float32(100/len(yields)) / 100.0,
-			OtherStatisticsFractions: map[string]float32{
-				"p10": float32(max(float32(i-1)*float32(100/len(yields))/100.0, 0)),
-				"p90": float32(min(float32(i+1)*float32(100/len(yields))/100.0, 1.1)),
-			},
-		}
-	}
+	yields := generateTestForecastValues(12, 5)
 
 	for i := 3; i >= 0; i-- {
-		req := &pb.CreateForecastRequest{
-			LocationUuid: siteResp.LocationUuid,
-			Forecaster:   forecasterResp.Forecaster,
-			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(-i*30) * time.Minute)),
-			Values:       yields,
-		}
-		_, err = dc.CreateForecast(t.Context(), req)
-		require.NoError(t, err)
+		createTestForecast(
+			t,
+			siteResp.LocationUuid,
+			fc,
+			pivotTime.Add(time.Duration(-i*30)*time.Minute),
+			yields,
+			pivotTime,
+		)
 	}
 
 	defaultTimeWindow := &pb.TimeWindow{
@@ -1083,13 +1204,13 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		name           string
 		req            *pb.GetForecastAsTimeseriesRequest
 		expectedValues []float32
-		expectErr      bool
+		shouldErr      bool
 	}{
 		{
 			name: "Should return expected values for horizon 0 mins",
 			req: &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   forecasterResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				HorizonMins:  0,
 				TimeWindow:   defaultTimeWindow,
@@ -1099,25 +1220,27 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			// for each target time.
 			// Since the predicted values are every 5 minutes, and the forecasts are every 30,
 			// we should get 6 values from each forecast, until the latest where we get all 12.
-			// The forecast values are seeded increasing from 0% to 100% in regular intervals,
-			// and there are 12 values per forecast - 100 // 12 = 8, so
-			// this means the values we are fetching should be
-			// 0, 8, 16, 24, 32, 40 (horizons 0 to 25 minutes from forecast 3)
-			// Then the same from forecast 2, as it's horizon is smaller - likewise then forecast 1
-			// 0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88 (horizons 0 to 55 minutes from forecast 0)
+			// The forecast values are equal to the plevel fraction + (0.001*step),
+			// where step is the index of the value in the forecast.
+			// This means the values we are fetching should be:
+			// - horizons 0 to 25 minutes from forecast 3
+			// - horizons 0 to 25 minutes from forecast 2
+			// - horizons 0 to 25 minutes from forecast 1
+			// - all horizons for forecast 0
+			// - horizons 0 to 55 minutes from forecast 0
 			expectedValues: []float32{
-				0.00, 0.08, 0.16, 0.24, 0.32, 0.40,
-				0.00, 0.08, 0.16, 0.24, 0.32, 0.40,
-				0.00, 0.08, 0.16, 0.24, 0.32, 0.40,
-				0.00, 0.08, 0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
+				0.5, 0.501, 0.502, 0.503, 0.504, 0.505,
+				0.5, 0.501, 0.502, 0.503, 0.504, 0.505,
+				0.5, 0.501, 0.502, 0.503, 0.504, 0.505,
+				0.5, 0.501, 0.502, 0.503, 0.504, 0.505, 0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
 			},
-			expectErr: false,
+			shouldErr: false,
 		},
 		{
 			name: "Should return expected values for horizon 14 mins",
 			req: &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   forecasterResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				HorizonMins:  14,
 				TimeWindow:   defaultTimeWindow,
@@ -1125,47 +1248,49 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			// For horizon of 14 minutes, anything with a lesser horizon should not be included.
 			// So the value for 0, 5, and 10 minutes should not be included.
 			expectedValues: []float32{
-				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
-				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
-				0.24, 0.32, 0.40, 0.48, 0.56, 0.64,
-				0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
+				0.503, 0.504, 0.505, 0.506, 0.507, 0.508,
+				0.503, 0.504, 0.505, 0.506, 0.507, 0.508,
+				0.503, 0.504, 0.505, 0.506, 0.507, 0.508,
+				0.503, 0.504, 0.505, 0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
 			},
-			expectErr: false,
+			shouldErr: false,
 		},
 		{
 			name: "Should return expected values for horizon 30 mins",
 			req: &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   forecasterResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				HorizonMins:  30,
 				TimeWindow:   defaultTimeWindow,
 			},
+			// For horizon of 30 minutes, the values for 0, 5, 10, 15, 20,
+			// and 25 minutes should not be included.
 			expectedValues: []float32{
-				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
-				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
-				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
-				0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
+				0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
+				0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
+				0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
+				0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
 			},
-			expectErr: false,
+			shouldErr: false,
 		},
 		{
 			name: "Should return no values for horizon 60 mins",
 			req: &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   forecasterResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				HorizonMins:  60,
 				TimeWindow:   defaultTimeWindow,
 			},
 			expectedValues: []float32{},
-			expectErr:      false,
+			shouldErr:      false,
 		},
 		{
 			name: "Should return no values for a time window outside of the forecasted values",
 			req: &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   forecasterResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				HorizonMins:  0,
 				TimeWindow: &pb.TimeWindow{
@@ -1174,22 +1299,22 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				},
 			},
 			expectedValues: []float32{},
-			expectErr:      false,
+			shouldErr:      false,
 		},
 		{
 			name: "Should return all predictions for a specific initialization time",
 			req: &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid:               siteResp.LocationUuid,
-				Forecaster:                 forecasterResp.Forecaster,
+				Forecaster:                 fc,
 				EnergySource:               pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				HorizonMins:                0,
 				TimeWindow:                 defaultTimeWindow,
 				InitializationTimestampUtc: timestamppb.New(pivotTime.Add(-30 * time.Minute)),
 			},
 			expectedValues: []float32{
-				0.00, 0.08, 0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64, 0.72, 0.80, 0.88,
+				0.5, 0.501, 0.502, 0.503, 0.504, 0.505, 0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
 			},
-			expectErr: false,
+			shouldErr: false,
 		},
 	}
 
@@ -1197,7 +1322,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.GetForecastAsTimeseries(t.Context(), tc.req)
 
-			if tc.expectErr {
+			if tc.shouldErr {
 				require.Error(t, err)
 				return
 			}
@@ -1223,15 +1348,15 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 			}
 
 			require.IsIncreasing(t, targetTimes)
-			require.Equal(t, tc.expectedValues, actualValues)
+			require.Equal(t, len(tc.expectedValues), len(actualValues))
+			require.InDeltaSlice(t, tc.expectedValues, actualValues, 0.0001)
 		})
 	}
 }
 
 func TestListLocationsLocationFilters(t *testing.T) {
 	pivotTime := time.Now().Truncate(time.Minute)
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
 
 	// Create a bunch of locations
 	var locationUuids []string
@@ -1347,7 +1472,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 			name: "Should return nothing for non-matching filters",
 			req: &pb.ListLocationsRequest{
 				EnergySourceFilter:  sourceFilter,
-				LocationTypeFilter:  func() *pb.LocationType { t := pb.LocationType_LOCATION_TYPE_DNO; return &t }(),
+				LocationTypeFilter:  ptr(pb.LocationType_LOCATION_TYPE_DNO),
 				LocationUuidsFilter: locationUuids,
 			},
 		},
@@ -1406,7 +1531,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 		{
 			name: "Should return nothing for enclosing geometry containing nothing",
 			req: &pb.ListLocationsRequest{
-				EnclosingLocationUuidFilter: func() *string { s := uuid.New().String(); return &s }(),
+				EnclosingLocationUuidFilter: ptr(uuid.New().String()),
 				LocationUuidsFilter:         locationUuids,
 			},
 			expectedCount: 0,
@@ -1434,16 +1559,14 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 	pivotTime := time.Now().Truncate(time.Minute)
 
 	// Create a site to attach the observations to
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_observations_as_timeseries_site",
-		GeometryWkt:            "POINT(-20.25 57.5)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               &structpb.Struct{},
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 64)),
-	})
-	require.NoError(t, err)
+	siteResp := createTestLocation(
+		t,
+		"test_get_observations_as_timeseries_site",
+		"POINT(-20.25 57.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*64),
+		&structpb.Struct{},
+	)
 
 	// Create an observer to make the observations
 	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
@@ -1508,16 +1631,14 @@ func TestGetLatestObservations(t *testing.T) {
 	pivotTime := time.Now().Truncate(time.Minute)
 
 	// Create a site to attach the observations to
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_latest_observations_site_1",
-		GeometryWkt:            "POINT(-20.25 57.5)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               &structpb.Struct{},
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
-	})
-	require.NoError(t, err)
+	siteResp := createTestLocation(
+		t,
+		"test_get_latest_observations_site",
+		"POINT(-20.25 57.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*4),
+		&structpb.Struct{},
+	)
 
 	// Create an observer to make the observations
 	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
@@ -1690,22 +1811,20 @@ func TestCreateListObservers(t *testing.T) {
 func TestCreateObservations(t *testing.T) {
 	pivotTime := time.Date(2020, 7, 7, 12, 0, 0, 0, time.UTC)
 	// Create a site to attach the observations to
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_create_observations_site",
-		GeometryWkt:            "POINT(-0.1 51.5)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               &structpb.Struct{},
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
-	})
-	require.NoError(t, err)
+	siteResp := createTestLocation(
+		t,
+		"test_create_observations_site",
+		"POINT(-0.1 51.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*4),
+		&structpb.Struct{},
+	)
 
 	// Update the capacity
 	updateResp, err := dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
 		LocationUuid:              siteResp.LocationUuid,
 		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		NewEffectiveCapacityWatts: func() *uint64 { v := uint64(2000000); return &v }(),
+		NewEffectiveCapacityWatts: ptr(uint64(2000000)),
 		ValidFromUtc:              timestamppb.New(pivotTime.Add(time.Hour * 1)),
 	})
 	require.NoError(t, err)
@@ -1799,17 +1918,14 @@ func TestCreateObservations(t *testing.T) {
 func TestGetWeekAverageDeltas(t *testing.T) {
 	pivotTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	// Create a site to attach the observations to
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_week_average_deltas_site",
-		GeometryWkt:            "POINT(-20.25 59.5)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               &structpb.Struct{},
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 12 * 24)),
-	})
-	require.NoError(t, err)
+	siteResp := createTestLocation(
+		t,
+		"test_get_week_average_deltas_site",
+		"POINT(-20.25 59.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*12*24),
+		&structpb.Struct{},
+	)
 
 	// Create an observer to make the observations
 	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
@@ -1839,43 +1955,28 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a forecaster to make the forecasts
-	forecasterResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-		Name:    "test_get_week_average_deltas_forecaster",
-		Version: "v1",
-	})
-	require.NoError(t, err)
+	fc := createTestForecaster(t, "test_get_week_average_deltas_forecaster", "v1")
 
 	// Create 8, 8 hour-long forecasts, each one day apart, with a resolution of 30 minutes.
 	// The forecast values increase linearly from 0% to 100% of capacity over each forecast.
 	// The last forecast begins at the pivot time.
-	yields := make([]*pb.CreateForecastRequest_ForecastValue, 8*60/30)
-	for i := range yields {
-		yields[i] = &pb.CreateForecastRequest_ForecastValue{
-			HorizonMins: uint32(i * 5),
-			P50Fraction: float32(i) * float32(100/len(yields)) / 100.0,
-			OtherStatisticsFractions: map[string]float32{
-				"p10": float32(max(float32(i-1)*float32(100/len(yields))/100.0, 0)),
-				"p90": float32(min(float32(i+1)*float32(100/len(yields))/100.0, 1.1)),
-			},
-		}
-	}
+	yields := generateTestForecastValues(16, 30)
 
 	for i := 7; i >= 0; i-- {
-		req := &pb.CreateForecastRequest{
-			LocationUuid: siteResp.LocationUuid,
-			Forecaster:   forecasterResp.Forecaster,
-			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(-i*24) * time.Hour)),
-			Values:       yields,
-		}
-		_, err = dc.CreateForecast(t.Context(), req)
-		require.NoError(t, err)
+		createTestForecast(
+			t,
+			siteResp.LocationUuid,
+			fc,
+			pivotTime.Add(time.Duration(-i*24)*time.Hour),
+			yields,
+			pivotTime,
+		)
 	}
 
 	deltaResp, err := dc.GetWeekAverageDeltas(t.Context(), &pb.GetWeekAverageDeltasRequest{
 		LocationUuid:      siteResp.LocationUuid,
 		EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		Forecaster:        forecasterResp.Forecaster,
+		Forecaster:        fc,
 		ObserverName:      obsResp.ObserverName,
 		PivotTimestampUtc: timestamppb.New(pivotTime),
 	})
@@ -1886,41 +1987,23 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 
 func TestCreateForecast(t *testing.T) {
 	pivotTime := time.Date(2024, 5, 5, 0, 30, 0, 0, time.UTC)
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
-	metadata2, err := structpb.NewStruct(map[string]any{"source": "test", "extra": "value"})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
+	metadata2 := createTestMetadata(t, map[string]any{"source": "test", "extra": "value"})
 
 	// Create a site to attach the forecast to
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_create_forecast_site",
-		GeometryWkt:            "POINT(-0.1 51.5)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 24)),
-	})
-	require.NoError(t, err)
+	siteResp := createTestLocation(
+		t,
+		"test_create_forecast_site",
+		"POINT(-0.1 51.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*24),
+		metadata,
+	)
 
 	// Create a forecaster
-	fcResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-		Name:    "test_create_forecast_forecaster",
-		Version: "v1",
-	})
-	require.NoError(t, err)
+	fc := createTestForecaster(t, "test_create_forecast_forecaster", "v1")
 
-	yieldsPopulated := make([]*pb.CreateForecastRequest_ForecastValue, 10)
-	for i := range yieldsPopulated {
-		yieldsPopulated[i] = &pb.CreateForecastRequest_ForecastValue{
-			HorizonMins: uint32(i * 30),
-			P50Fraction: 0.5 + float32(i)*0.05,
-			OtherStatisticsFractions: map[string]float32{
-				"p10": 0.4 + float32(i)*0.05,
-				"p90": 0.6 + float32(i)*0.05,
-			},
-		}
-	}
+	yields := generateTestForecastValues(10, 30)
 
 	yieldsZeros := make([]*pb.CreateForecastRequest_ForecastValue, 10)
 	for i := range yieldsZeros {
@@ -1937,55 +2020,64 @@ func TestCreateForecast(t *testing.T) {
 			HorizonMins: uint32(i * 30),
 			P50Fraction: 1.2,
 			OtherStatisticsFractions: map[string]float32{
+				"p02": 1.5,
 				"p10": 1.3,
+				"p25": 1.1,
+				"p75": 0.9,
 				"p90": -0.2,
+				"p98": -0.1,
 			},
 		}
 	}
 
 	testcases := []struct {
-		name string
-		req  *pb.CreateForecastRequest
+		name      string
+		req       *pb.CreateForecastRequest
+		shouldErr bool
 	}{
 		{
 			name: "Should create forecast with populated values",
 			req: &pb.CreateForecastRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   fcResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
-				Values:       yieldsPopulated,
+				Values:       yields,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Should create forecast with zeroed values and metadata",
 			req: &pb.CreateForecastRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   fcResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsZeros,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Shouldn't create forecast with no values",
 			req: &pb.CreateForecastRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   fcResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       []*pb.CreateForecastRequest_ForecastValue{},
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't create forecast for non-existent location source",
 			req: &pb.CreateForecastRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   fcResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_WIND,
 				InitTimeUtc:  timestamppb.New(pivotTime),
-				Values:       yieldsPopulated,
+				Values:       yields,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't create forecast for non-existent forecaster",
@@ -1997,8 +2089,9 @@ func TestCreateForecast(t *testing.T) {
 				},
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
-				Values:       yieldsPopulated,
+				Values:       yields,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't create forecast for non-existent forecaster version",
@@ -2010,36 +2103,39 @@ func TestCreateForecast(t *testing.T) {
 				},
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
-				Values:       yieldsPopulated,
+				Values:       yields,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Shouldn't create forecast with invalid value fractions",
 			req: &pb.CreateForecastRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   fcResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
 				Values:       yieldsInvalid,
 			},
+			shouldErr: true,
 		},
 		{
 			name: "Should create forecast with extra metadata",
 			req: &pb.CreateForecastRequest{
 				LocationUuid: siteResp.LocationUuid,
-				Forecaster:   fcResp.Forecaster,
+				Forecaster:   fc,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				InitTimeUtc:  timestamppb.New(pivotTime),
-				Values:       yieldsPopulated,
+				Values:       yields,
 				Metadata:     metadata2,
 			},
+			shouldErr: false,
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := dc.CreateForecast(t.Context(), tc.req)
-			if strings.Contains(tc.name, "Shouldn't") {
+			if tc.shouldErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
@@ -2056,13 +2152,13 @@ func TestCreateForecast(t *testing.T) {
 								tc.req.InitTimeUtc.AsTime().Add(5 * time.Hour),
 							),
 						},
-						Forecaster: fcResp.Forecaster,
+						Forecaster: fc,
 					},
 				)
 				require.NoError(t, err)
 				require.Equal(t, len(tc.req.Values), len(fResp.Values))
 				_, err = dc.DeleteForecast(t.Context(), &pb.DeleteForecastRequest{
-					Forecaster:   fcResp.Forecaster,
+					Forecaster:   fc,
 					LocationUuid: siteResp.LocationUuid,
 					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 					InitTimeUtc:  tc.req.InitTimeUtc,
@@ -2079,71 +2175,47 @@ func TestCreateForecast(t *testing.T) {
 
 func TestGetLatestForecasts(t *testing.T) {
 	pivotTime := time.Date(2022, 1, 5, 12, 0, 0, 0, time.UTC)
-	metadata, err := structpb.NewStruct(map[string]any{"source": "test"})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
 
 	// Create a site to attach the forecasts to
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_get_latest_forecasts_site",
-		GeometryWkt:            "POINT(-0.6 51.8)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 24)),
-	})
-	require.NoError(t, err)
+	siteResp := createTestLocation(
+		t,
+		"test_get_latest_forecasts_site",
+		"POINT(-0.6 51.8)",
+		1000000,
+		pivotTime.Add(-time.Hour*24),
+		metadata,
+	)
+	fc := createTestForecaster(t, "test_get_latest_forecasts_forecaster", "v1")
 
-	// Create forecaster
-	forecasterResp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-		Name:    "test_get_latest_forecasts_forecaster",
-		Version: "v1",
-	})
-	require.NoError(t, err)
 	// Update the forecaster a couple of times
 	for i := range 2 {
-		_, err = dc.UpdateForecaster(t.Context(), &pb.UpdateForecasterRequest{
-			Name:       forecasterResp.Forecaster.ForecasterName,
+		_, err := dc.UpdateForecaster(t.Context(), &pb.UpdateForecasterRequest{
+			Name:       fc.ForecasterName,
 			NewVersion: fmt.Sprintf("v%d", i+2),
 		})
 		require.NoError(t, err)
 	}
 
-	yields := make([]*pb.CreateForecastRequest_ForecastValue, 10)
-	for i := range yields {
-		yields[i] = &pb.CreateForecastRequest_ForecastValue{
-			HorizonMins: uint32(i * 30),
-			P50Fraction: 0.5 + float32(i)*0.05,
-			OtherStatisticsFractions: map[string]float32{
-				"p10": 0.4 + float32(i)*0.05,
-				"p90": 0.6 + float32(i)*0.05,
-			},
-		}
-	}
+	yields := generateTestForecastValues(10, 30)
 
-	// Make a forecast at differring times for each forecaster
+	// Make a forecast at diferring times for each forecaster
 	for i := range 3 {
-		req := &pb.CreateForecastRequest{
-			LocationUuid: siteResp.LocationUuid,
-			Forecaster: &pb.Forecaster{
-				ForecasterName:    forecasterResp.Forecaster.ForecasterName,
-				ForecasterVersion: fmt.Sprintf("v%d", i+1),
-			},
-			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(-i) * time.Hour)),
-			Values:       yields,
-			CreatedTimestampUtc: timestamppb.New(
-				pivotTime.Add(time.Duration(-i)*time.Hour + time.Minute),
-			),
-		}
-		_, err = dc.CreateForecast(t.Context(), req)
-		require.NoError(t, err)
+		createTestForecast(
+			t,
+			siteResp.LocationUuid,
+			fc,
+			pivotTime.Add(time.Duration(-i)*time.Hour),
+			yields,
+			pivotTime.Add(time.Duration(-i)*time.Hour+time.Minute),
+		)
 	}
 
 	testcases := []struct {
 		name              string
 		req               *pb.GetLatestForecastsRequest
 		expectedInitTimes []time.Time
+		shouldErr         bool
 	}{
 		{
 			name: "Should return latest forecasts for each forecaster name",
@@ -2155,6 +2227,7 @@ func TestGetLatestForecasts(t *testing.T) {
 			expectedInitTimes: []time.Time{
 				pivotTime,
 			},
+			shouldErr: false,
 		},
 		{
 			name: "Should return older forecasts for earlier pivot time",
@@ -2166,13 +2239,14 @@ func TestGetLatestForecasts(t *testing.T) {
 			expectedInitTimes: []time.Time{
 				pivotTime.Add(-time.Hour * 1),
 			},
+			shouldErr: false,
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.GetLatestForecasts(t.Context(), tc.req)
-			if strings.Contains(tc.name, "Shouldn't") {
+			if tc.shouldErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
@@ -2199,67 +2273,42 @@ func TestStreamForecastData(t *testing.T) {
 	pivotTime := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 
 	// Create a site to attach the forecasts to
-	metadata, err := structpb.NewStruct(map[string]any{"stream_test": "true"})
-	require.NoError(t, err)
-	siteResp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
-		LocationName:           "test_stream_forecast_data_site",
-		GeometryWkt:            "POINT(-60.25 57.5)",
-		EffectiveCapacityWatts: 1000000,
-		Metadata:               metadata,
-		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-		ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 48)),
-	})
-	require.NoError(t, err)
+	metadata := createTestMetadata(t, map[string]any{"stream_test": "true"})
+	siteResp := createTestLocation(
+		t,
+		"test_stream_forecast_data_site",
+		"POINT(-60.25 57.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*48),
+		metadata,
+	)
 
 	// Create two forecasters
-	fc1Resp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-		Name:    "stream_forecaster_alpha",
-		Version: "v1",
-	})
-	require.NoError(t, err)
-
-	fc2Resp, err := dc.CreateForecaster(t.Context(), &pb.CreateForecasterRequest{
-		Name:    "stream_forecaster_beta",
-		Version: "v2",
-	})
-	require.NoError(t, err)
+	fc1 := createTestForecaster(t, "stream_forecaster_alpha", "v1")
+	fc2 := createTestForecaster(t, "stream_forecaster_beta", "v2")
 
 	// Generate 3 forecasts for each forecaster, each with 4 horizon values (0, 5, 10, 15)
-	yields := make([]*pb.CreateForecastRequest_ForecastValue, 4)
-	for i := range yields {
-		yields[i] = &pb.CreateForecastRequest_ForecastValue{
-			HorizonMins: uint32(i * 5),
-			P50Fraction: float32(i) * 0.25,
-			OtherStatisticsFractions: map[string]float32{
-				"p90": float32(i)*0.25 + 0.1,
-			},
-		}
-	}
+	yields := generateTestForecastValues(4, 5)
 
 	// Seed forecasts for both forecasters spanning backwards from pivot time
 	for i := 2; i >= 0; i-- {
 		initTime := timestamppb.New(pivotTime.Add(time.Duration(-i*60) * time.Minute))
-
-		_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
-			LocationUuid: siteResp.LocationUuid,
-			Forecaster:   fc1Resp.Forecaster,
-			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			InitTimeUtc:  initTime,
-			Values:       yields,
-			Metadata:     metadata,
-		})
-		require.NoError(t, err)
-
-		_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
-			LocationUuid: siteResp.LocationUuid,
-			Forecaster:   fc2Resp.Forecaster,
-			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			InitTimeUtc:  initTime,
-			Values:       yields,
-			Metadata:     metadata,
-		})
-		require.NoError(t, err)
+		createTestForecast(
+			t,
+			siteResp.LocationUuid,
+			fc1,
+			initTime.AsTime(),
+			yields,
+			initTime.AsTime(),
+		)
+		createTestForecast(
+			t,
+			siteResp.LocationUuid,
+			fc2,
+			initTime.AsTime(),
+			yields,
+			initTime.AsTime(),
+		)
 	}
 
 	defaultTimeWindow := &pb.TimeWindow{
@@ -2271,7 +2320,7 @@ func TestStreamForecastData(t *testing.T) {
 		name              string
 		req               *pb.StreamForecastDataRequest
 		expectedRowsCount int
-		expectErr         bool
+		shouldErr         bool
 		checkMetadata     bool
 	}{
 		{
@@ -2279,33 +2328,33 @@ func TestStreamForecastData(t *testing.T) {
 			req: &pb.StreamForecastDataRequest{
 				LocationUuids:   []string{siteResp.LocationUuid},
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster},
+				Forecasters:     []*pb.Forecaster{fc1},
 				TimeWindow:      defaultTimeWindow,
 				IncludeMetadata: false,
 			},
 			// 3 forecasts * 4 values = 12 rows
 			expectedRowsCount: 12,
-			expectErr:         false,
+			shouldErr:         false,
 		},
 		{
 			name: "Should successfully stream forecasts for multiple forecasters",
 			req: &pb.StreamForecastDataRequest{
 				LocationUuids:   []string{siteResp.LocationUuid},
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster, fc2Resp.Forecaster},
+				Forecasters:     []*pb.Forecaster{fc1, fc2},
 				TimeWindow:      defaultTimeWindow,
 				IncludeMetadata: false,
 			},
 			// (3 forecasts * 4 values) * 2 forecasters = 24 rows
 			expectedRowsCount: 24,
-			expectErr:         false,
+			shouldErr:         false,
 		},
 		{
 			name: "Should only return forecasts whos init times respect the time window boundaries",
 			req: &pb.StreamForecastDataRequest{
 				LocationUuids: []string{siteResp.LocationUuid},
 				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				Forecasters:   []*pb.Forecaster{fc1Resp.Forecaster},
+				Forecasters:   []*pb.Forecaster{fc1},
 				TimeWindow: &pb.TimeWindow{
 					// Constrain the window to only capture the most recent forecast
 					StartTimestampUtc: timestamppb.New(pivotTime.Add(-time.Minute * 10)),
@@ -2314,19 +2363,19 @@ func TestStreamForecastData(t *testing.T) {
 				IncludeMetadata: false,
 			},
 			expectedRowsCount: 4,
-			expectErr:         false,
+			shouldErr:         false,
 		},
 		{
 			name: "Should include metadata when asked",
 			req: &pb.StreamForecastDataRequest{
 				LocationUuids:   []string{siteResp.LocationUuid},
 				EnergySource:    pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				Forecasters:     []*pb.Forecaster{fc1Resp.Forecaster},
+				Forecasters:     []*pb.Forecaster{fc1},
 				TimeWindow:      defaultTimeWindow,
 				IncludeMetadata: true,
 			},
 			expectedRowsCount: 12,
-			expectErr:         false,
+			shouldErr:         false,
 			checkMetadata:     true,
 		},
 		{
@@ -2334,10 +2383,10 @@ func TestStreamForecastData(t *testing.T) {
 			req: &pb.StreamForecastDataRequest{
 				LocationUuids: []string{"not-a-valid-uuid"},
 				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				Forecasters:   []*pb.Forecaster{fc1Resp.Forecaster},
+				Forecasters:   []*pb.Forecaster{fc1},
 				TimeWindow:    defaultTimeWindow,
 			},
-			expectErr: true,
+			shouldErr: true,
 		},
 	}
 
@@ -2345,7 +2394,7 @@ func TestStreamForecastData(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			stream, err := dc.StreamForecastData(t.Context(), tc.req)
 			if err != nil {
-				if tc.expectErr {
+				if tc.shouldErr {
 					return
 				}
 
@@ -2359,7 +2408,7 @@ func TestStreamForecastData(t *testing.T) {
 					break
 				}
 
-				if tc.expectErr {
+				if tc.shouldErr {
 					require.Error(t, err)
 					return
 				}
@@ -2372,18 +2421,19 @@ func TestStreamForecastData(t *testing.T) {
 
 					if tc.checkMetadata {
 						require.NotNil(t, pt.Metadata)
-						require.Equal(t, "true", pt.Metadata["stream_test"])
+						require.Equal(t, "test", pt.Metadata["source"])
 					} else {
 						require.Empty(t, pt.Metadata)
 					}
 
 					require.NotZero(t, pt.EffectiveCapacityWatts)
 					require.NotNil(t, pt.OtherStatisticsFractions)
-					require.Contains(t, pt.OtherStatisticsFractions, "p90")
+					require.Contains(t, pt.OtherStatisticsFractions, "p90", "p02")
+					require.NotContains(t, pt.OtherStatisticsFractions, "p50", "p25", "p75", "p98")
 				}
 			}
 
-			if !tc.expectErr {
+			if !tc.shouldErr {
 				require.Equal(t, tc.expectedRowsCount, actualRowsCount)
 			}
 		})

@@ -123,9 +123,9 @@ WHERE forecast_uuid IN (SELECT forecast_uuid FROM forecasts_to_delete);
  * with 0 representing 0% and 30000 representing 100% of capacity.
  */
 INSERT INTO pred.predicted_generation_values (
-    horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid
+    horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid, p02_sip, p98_sip, p25_sip, p75_sip
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 );
 
 -- name: ListPredictionsForForecasts :many
@@ -153,9 +153,13 @@ SELECT
     mf.forecaster_version,
     f.created_at_utc,
     pg.horizon_mins,
+    pg.p02_sip,
     pg.p10_sip,
+    pg.p25_sip,
     pg.p50_sip,
+    pg.p75_sip,
     pg.p90_sip,
+    pg.p98_sip,
     sv.capacity_watts,
     f.metadata,
     UUIDV7_EXTRACT_TIMESTAMP(f.forecast_uuid)::TIMESTAMP AS init_time_utc,
@@ -270,9 +274,13 @@ winning_predictions AS (
         fow.geometry_uuid,
         fow.source_type_id,
         pg.horizon_mins,
+        pg.p02_sip,
+        pg.p25_sip,
         pg.p10_sip,
         pg.p50_sip,
+        pg.p75_sip,
         pg.p90_sip,
+        pg.p98_sip,
         fow.metadata,
         (
             UUIDV7_EXTRACT_TIMESTAMP(pg.forecast_uuid)::TIMESTAMP + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER)
@@ -290,9 +298,13 @@ winning_predictions AS (
 )
 SELECT
     wp.horizon_mins,
+    wp.p02_sip,
+    wp.p25_sip,
     wp.p10_sip,
     wp.p50_sip,
+    wp.p75_sip,
     wp.p90_sip,
+    wp.p98_sip,
     wp.target_time_utc,
     wp.metadata,
     wp.init_time_utc,
@@ -358,9 +370,13 @@ SELECT
     laf.geometry_uuid,
     laf.source_type_id,
     pg.horizon_mins,
+    pg.p02_sip,
     pg.p10_sip,
+    pg.p25_sip,
     pg.p50_sip,
+    pg.p75_sip,
     pg.p90_sip,
+    pg.p98_sip,
     laf.created_at_utc,
     laf.init_time_utc,
     sv.capacity_watts,
