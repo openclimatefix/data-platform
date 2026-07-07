@@ -399,7 +399,14 @@ Forecaster represents a generative source of predicted values.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| location_uuid | [string](#string) |  |  || location_name | [string](#string) |  |  || value_fraction | [float](#float) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || latlng | [LatLng](#ocf-dp-LatLng) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  || initialization_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || created_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  |
+| location_uuid | [string](#string) |  |  || location_name | [string](#string) |  |  || value_fraction | [float](#float) |  |  || effective_capacity_watts | [uint64](#uint64) |  |  || latlng | [LatLng](#ocf-dp-LatLng) |  |  || metadata | [google.protobuf.Struct](#google-protobuf-Struct) |  |  || initialization_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || created_timestamp_utc | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  |  || other_statistics_fractions | [GetForecastAtTimestampResponse.Value.OtherStatisticsFractionsEntry](#ocf-dp-GetForecastAtTimestampResponse-Value-OtherStatisticsFractionsEntry) | repeated |  |
+</details><a name="ocf-dp-GetForecastAtTimestampResponse-Value-OtherStatisticsFractionsEntry"></a>
+<details><summary>GetForecastAtTimestampResponse.Value.OtherStatisticsFractionsEntry</summary>
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  || value | [float](#float) |  |  |
 </details><a name="ocf-dp-GetLatestForecastsRequest"></a>
 <details><summary>GetLatestForecastsRequest</summary>
 
