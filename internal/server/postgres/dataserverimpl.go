@@ -107,13 +107,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, gsprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", gsprms)
-
-		return nil, status.Error(
-			codes.NotFound, "No location found."+
-				"Ensure the location exists, and has a registered capacity value "+
-				"for the given energy type valid for before the forecast init time.",
-		)
+		return nil, fmt.Errorf("no location found: %w", err)
 	}
 
 	l.Debug().Str("dp.geometry.uuid", dbSource.GeometryUuid.String()).
@@ -142,12 +136,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 	dbForecaster, err := querier.GetForecasterElseLatest(ctx, pctprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", pctprms)
-
-		return nil, status.Error(
-			codes.NotFound, "No such forecaster. "+
-				"Create the forecaster before submitting a forecast.",
-		)
+		return nil, fmt.Errorf("no such forecaster: %w", err)
 	}
 
 	l.Debug().
@@ -172,12 +161,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 	dbForecast, err := querier.CreateForecast(ctx, cfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateForecast(%+v)", cfprms)
-
-		return nil, status.Error(
-			codes.InvalidArgument, "Invalid forecast. Ensure the forecast has a valid init_time "+
-				"and horizon values.",
-		)
+		return nil, fmt.Errorf("invalid forecast: %w", err)
 	}
 
 	// Create the forecast data
@@ -198,12 +182,11 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 	count, err := querier.CreatePredictedValues(ctx, paramsList)
 	if err != nil || count < int64(len(req.Values)) {
-		l.Err(err).Msgf("querier.CreatePredictedValues(%+v)", paramsList)
+		if err == nil {
+			err = errors.New("inserted count less than requested")
+		}
 
-		return nil, status.Error(
-			codes.InvalidArgument, "Invalid predicted generation values. "+
-				"Ensure the values are positive and correspond to less than 110% of capacity.",
-		)
+		return nil, fmt.Errorf("invalid predicted generation values: %w", err)
 	}
 
 	l.Debug().
@@ -226,8 +209,6 @@ func (s *DataPlatformDataServiceServerImpl) DeleteForecast(
 	ctx context.Context,
 	req *pb.DeleteForecastRequest,
 ) (*pb.DeleteForecastResponse, error) {
-	l := zerolog.Ctx(ctx)
-
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Check the forecaster exists
@@ -238,12 +219,7 @@ func (s *DataPlatformDataServiceServerImpl) DeleteForecast(
 
 	dbForecaster, err := querier.GetForecasterElseLatest(ctx, pctprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", pctprms)
-
-		return nil, status.Error(
-			codes.NotFound, "No such forecaster. "+
-				"Create the forecaster before submitting a forecast.",
-		)
+		return nil, fmt.Errorf("no such forecaster: %w", err)
 	}
 
 	// Delete the forecast
@@ -256,12 +232,7 @@ func (s *DataPlatformDataServiceServerImpl) DeleteForecast(
 
 	err = querier.DeleteForecast(ctx, dfcprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.DeleteForecast(%+v)", dfcprms)
-
-		return nil, status.Error(
-			codes.Internal,
-			"Could not delete forecast. Ensure the forecast exists.",
-		)
+		return nil, fmt.Errorf("could not delete forecast: %w", err)
 	}
 
 	return &pb.DeleteForecastResponse{}, nil
@@ -286,12 +257,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 
 	dbListForecasts, err := querier.GetLatestForecastsAtHorizonSincePivot(ctx, glfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetLatestForecastsAtHorizonSincePivot(%+v)", glfprms)
-
-		return nil, status.Error(
-			codes.NotFound,
-			"No forecasts found. Ensure location exists and forecasts have been created for it.",
-		)
+		return nil, fmt.Errorf("no forecasts found: %w", err)
 	}
 
 	l.Debug().Str("dp.geometry.uuid", req.LocationUuid).
@@ -335,8 +301,8 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 	dbExistingForecaster, err := querier.GetForecasterElseLatest(ctx, gpprms)
 	if err == nil {
 		return nil, status.Errorf(
-			codes.InvalidArgument,
-			"Forecaster with already exists (at version '%s'). "+
+			codes.AlreadyExists,
+			"Forecaster already exists (at version '%s'). "+
 				"Use the update method to add a new version, or create a new forecaster.",
 			dbExistingForecaster.ForecasterVersion,
 		)
@@ -347,12 +313,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 
 	dbForecaster, err := querier.CreateForecaster(ctx, cfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateForecaster(%+v)", cfprms)
-
-		return nil, status.Errorf(
-			codes.InvalidArgument,
-			"Invalid forecaster. Ensure name and version are not empty and are lowercase",
-		)
+		return nil, fmt.Errorf("invalid forecaster: %w", err)
 	}
 
 	l.Debug().Int32("dp.forecaster.id", dbForecaster.ForecasterID).
@@ -380,10 +341,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 
 	dbExistingForecaster, err := querier.GetForecasterElseLatest(ctx, gpprms)
 	if err != nil {
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"No such forecaster. Use the create method to add it.",
-		)
+		return nil, fmt.Errorf("no such forecaster: %w", err)
 	}
 
 	// Update the forecaster
@@ -394,13 +352,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 
 	dbForecaster, err := querier.CreateForecaster(ctx, cfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateForecaster(%+v)", cfprms)
-
-		return nil, status.Errorf(
-			codes.InvalidArgument,
-			"Invalid forecaster. Ensure name and version are not empty and are lowercase, "+
-				"and name is unique.",
-		)
+		return nil, fmt.Errorf("invalid forecaster: %w", err)
 	}
 
 	l.Debug().Int32("dp.forecaster.id", dbForecaster.ForecasterID).
@@ -418,7 +370,6 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 	ctx context.Context,
 	req *pb.ListForecastersRequest,
 ) (*pb.ListForecastersResponse, error) {
-	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	lfprms := db.GetForecastersByFiltersParams{
@@ -428,12 +379,7 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 
 	dbListForecasters, err := querier.GetForecastersByFilters(ctx, lfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetForecastersByFilters(%+v)", lfprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No forecasters found with the specified filters",
-		)
+		return nil, fmt.Errorf("no forecasters found with the specified filters: %w", err)
 	}
 
 	forecasters := make([]*pb.Forecaster, len(dbListForecasters))
@@ -487,7 +433,6 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 
 				locationUuid, err := uuid.Parse(locStr)
 				if err != nil {
-					l.Err(err).Msgf("uuid.Parse(%s)", locStr)
 					return status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 				}
 
@@ -512,8 +457,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 					fVersions,
 				)
 				if err != nil {
-					l.Err(err).Msg("tx.Query(ListPredictionsForForecasts) failed")
-					return status.Errorf(codes.Internal, "Failed to stream predictions")
+					return fmt.Errorf("failed to stream predictions: %w", err)
 				}
 				defer rows.Close()
 
@@ -540,8 +484,11 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 						&row.TargetTimeUtc,
 					)
 					if err != nil {
-						l.Err(err).Msg("rows.Scan failed")
-						return status.Errorf(codes.Internal, "Error reading prediction stream")
+						return status.Errorf(
+							codes.Internal,
+							"Error reading prediction stream: %v",
+							err,
+						)
 					}
 
 					otherStatistics := make(map[string]float32)
@@ -655,14 +602,11 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	ctx context.Context,
 	req *pb.GetWeekAverageDeltasRequest,
 ) (*pb.GetWeekAverageDeltasResponse, error) {
-	l := zerolog.Ctx(ctx)
-
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 	}
 
@@ -674,11 +618,11 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, gstprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", gstprms)
-
-		return nil, status.Errorf(
-			codes.NotFound, "No location source found for name '%s' with source type '%s'.",
-			req.LocationUuid, req.EnergySource,
+		return nil, fmt.Errorf(
+			"no location source found for name '%s' with source type '%s': %w",
+			req.LocationUuid,
+			req.EnergySource,
+			err,
 		)
 	}
 
@@ -690,11 +634,11 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	dbExistingForecaster, err := querier.GetForecasterElseLatest(ctx, pctprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", pctprms)
-
-		return nil, status.Errorf(
-			codes.NotFound, "No forecaster found for name '%s' and version '%s'.",
-			req.Forecaster.ForecasterName, req.Forecaster.ForecasterVersion,
+		return nil, fmt.Errorf(
+			"no forecaster found for name '%s' and version '%s': %w",
+			req.Forecaster.ForecasterName,
+			req.Forecaster.ForecasterVersion,
+			err,
 		)
 	}
 
@@ -703,12 +647,10 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	dbObserver, err := querier.GetObserverByName(ctx, obprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No observer of name '%s' found. Choose an existing observer or create a new one.",
+		return nil, fmt.Errorf(
+			"no observer of name '%s' found: %w",
 			req.ObserverName,
+			err,
 		)
 	}
 
@@ -723,14 +665,12 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 
 	dbDeltas, err := querier.GetWeekAverageDeltasForLocations(ctx, avgprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetWeekAverageDeltasForLocations(%+v)", avgprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No deltas found for location '%s' with source type '%s' and observer ID '%s'",
+		return nil, fmt.Errorf(
+			"no deltas found for location '%s' with source type '%s' and observer ID '%s': %w",
 			req.LocationUuid,
 			req.EnergySource,
 			dbObserver.ObserverUuid.String(),
+			err,
 		)
 	}
 
@@ -756,8 +696,6 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 	ctx context.Context,
 	req *pb.GetObservationsAsTimeseriesRequest,
 ) (*pb.GetObservationsAsTimeseriesResponse, error) {
-	l := zerolog.Ctx(ctx)
-
 	querier := db.New(ix.GetTxFromContext(ctx))
 	locationUuid := uuid.MustParse(req.LocationUuid)
 
@@ -766,18 +704,15 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 	observerResp, err := querier.GetObserverByName(ctx, obprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No observer of name '%s' found. Choose an existing observer or create a new one.",
+		return nil, fmt.Errorf(
+			"no observer of name '%s' found: %w",
 			req.ObserverName,
+			err,
 		)
 	}
 
 	start, end, err := timeWindowToPgWindow(req.TimeWindow)
 	if err != nil {
-		l.Err(err).Msgf("timeWindowToPgWindow(%+v)", req.TimeWindow)
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid time window: %v", err)
 	}
 
@@ -791,12 +726,10 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 	dbObs, err := querier.GetObservationsBetween(ctx, goprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObservationsBetween(%+v)", goprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No observations found for location '%s'",
+		return nil, fmt.Errorf(
+			"no observations found for location '%s': %w",
 			req.LocationUuid,
+			err,
 		)
 	}
 
@@ -826,7 +759,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	// Get the location and source
 	locationUuid, err := uuid.Parse(req.LocationUuid)
 	if err != nil {
-		l.Err(err).Msgf("uuid.Parse(%s)", req.LocationUuid)
 		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 	}
 
@@ -838,11 +770,11 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, cfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetUserSourceAtTimestamp(%+v)", cfprms)
-
-		return nil, status.Errorf(
-			codes.NotFound, "No location found for name '%s' with source type '%s'.",
-			req.LocationUuid, req.EnergySource,
+		return nil, fmt.Errorf(
+			"no location found for name '%s' with source type '%s': %w",
+			req.LocationUuid,
+			req.EnergySource,
+			err,
 		)
 	}
 
@@ -851,12 +783,10 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 
 	dbObserver, err := querier.GetObserverByName(ctx, obprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No observer of name '%s', found. Choose an existing observer or create a new one.",
+		return nil, fmt.Errorf(
+			"no observer of name '%s' found: %w",
 			req.ObserverName,
+			err,
 		)
 	}
 
@@ -879,12 +809,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 
 	err = batch.Close()
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateObservationsBatch(%+v)", coprms)
-
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid observation values. Ensure the values are positive, and less than 110% of capacity.",
-		)
+		return nil, fmt.Errorf("invalid observation values: %w", err)
 	}
 
 	l.Debug().Int16("dp.source.type_id", dbSource.SourceTypeID).
@@ -928,12 +853,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestObservations(
 
 	dbObs, err := querier.GetLatestObservations(ctx, goprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetLatestObservation(%+v)", goprms)
-
-		return nil, status.Error(
-			codes.Internal,
-			"Backend communication error. See logs for details.",
-		)
+		return nil, fmt.Errorf("backend communication error: %w", err)
 	}
 
 	observations := make([]*pb.GetLatestObservationsResponse_Observation, len(dbObs))
@@ -961,20 +881,13 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 	ctx context.Context,
 	req *pb.CreateObserverRequest,
 ) (*pb.CreateObserverResponse, error) {
-	l := zerolog.Ctx(ctx)
-
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	obprms := db.CreateObserverParams{ObserverName: req.Name}
 
 	dbObserver, err := querier.CreateObserver(ctx, obprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateObserver(%+v)", obprms)
-
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid observer name. Ensure it is not empty, unique, and lowercase",
-		)
+		return nil, fmt.Errorf("invalid observer name: %w", err)
 	}
 
 	return &pb.CreateObserverResponse{
@@ -996,12 +909,7 @@ func (s *DataPlatformDataServiceServerImpl) ListObservers(
 
 	dbListObservers, err := querier.GetObserversByFilters(ctx, loPrms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserversByFilters(%+v)", loPrms)
-
-		return nil, status.Errorf(
-			codes.Internal,
-			"Backend communication error. See logs for details.",
-		)
+		return nil, fmt.Errorf("backend communication error: %w", err)
 	}
 
 	l.Debug().
@@ -1042,11 +950,11 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	dbForecaster, err := querier.GetForecasterElseLatest(ctx, cfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", cfprms)
-
-		return nil, status.Errorf(
-			codes.NotFound, "No forecaster found for name '%s' and version '%s'.",
-			req.Forecaster.ForecasterName, req.Forecaster.ForecasterVersion,
+		return nil, fmt.Errorf(
+			"no forecaster found for name '%s' and version '%s': %w",
+			req.Forecaster.ForecasterName,
+			req.Forecaster.ForecasterVersion,
+			err,
 		)
 	}
 
@@ -1071,11 +979,9 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	dbPredictions, err := querier.ListPredictionsAtTimeForLocations(ctx, lpprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.ListPredictionsAtTimeForLocations(%+v)", lpprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No predicted values found for the specified locations at the given time.",
+		return nil, fmt.Errorf(
+			"no predicted values found for the specified locations at the given time.,: %w",
+			err,
 		)
 	}
 
@@ -1132,8 +1038,6 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
 	ctx context.Context,
 	req *pb.GetObservationsAtTimestampRequest,
 ) (*pb.GetObservationsAtTimestampResponse, error) {
-	l := zerolog.Ctx(ctx)
-
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Set default timestamp to now if not provided
@@ -1151,12 +1055,10 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
 
 	dbObserver, err := querier.GetObserverByName(ctx, obprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetObserverByName(%+v)", obprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No observer of name '%s' found. Choose an existing observer or create a new one.",
+		return nil, fmt.Errorf(
+			"no observer of name '%s' found: %w",
 			req.ObserverName,
+			err,
 		)
 	}
 
@@ -1169,12 +1071,9 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
 
 	dbObs, err := querier.ListObservationsAtTimeForLocations(ctx, loprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.ListObservationsAtTimeForLocations(%+v)", loprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No observations found for the specified locations at the given time. "+
-				"Ensure the observer exists, and that the location is operational.",
+		return nil, fmt.Errorf(
+			"no observations found for the specified locations at the given time: %w",
+			err,
 		)
 	}
 
@@ -1218,12 +1117,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, cfprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", cfprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No such location. Ensure the location exists and is currently operational.",
-		)
+		return nil, fmt.Errorf("no such location: %w", err)
 	}
 
 	l.Debug().
@@ -1241,12 +1135,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 
 		dbGeometry, err := querier.GetGeometryWKB(ctx, gwkbprms)
 		if err != nil {
-			l.Err(err).Msgf("querier.GetGeometryWKB(%+v)", gwkbprms)
-
-			return nil, status.Errorf(
-				codes.Internal,
-				"Failed to retrieve geometry for location. See logs for details.",
-			)
+			return nil, fmt.Errorf("failed to retrieve geometry for location: %w", err)
 		}
 
 		geometry = dbGeometry.GeomWkb
@@ -1269,8 +1158,6 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationAsTimeseries(
 	ctx context.Context,
 	req *pb.GetLocationAsTimeseriesRequest,
 ) (*pb.GetLocationAsTimeseriesResponse, error) {
-	l := zerolog.Ctx(ctx)
-
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	locationUuid := uuid.MustParse(req.LocationUuid)
@@ -1290,12 +1177,9 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationAsTimeseries(
 
 	dbValues, err := querier.GetSourceHistory(ctx, gprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceHistory(%+v)", gprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"No such location or no history for location in the specified time window. "+
-				"Ensure the location exists and has source entries in the given time window.",
+		return nil, fmt.Errorf(
+			"no such location or no history for location in the specified time window: %w",
+			err,
 		)
 	}
 
@@ -1340,12 +1224,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	dbLocation, err := querier.CreateGeometry(ctx, cgprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateLocation(%+v)", cgprms)
-
-		return nil, status.Error(
-			codes.InvalidArgument, "Invalid location. Ensure name is not empty, "+
-				"and that geometry is valid, closed, unique WGS84.",
-		)
+		return nil, fmt.Errorf("invalid location: %w", err)
 	}
 
 	l.Debug().
@@ -1372,12 +1251,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	dbSource, err := querier.CreateSourceEntry(ctx, csprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.CreateSourceEntry(%+v)", csprms)
-
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid location. Ensure metadata is NULL or a non-empty JSON object.",
-		)
+		return nil, fmt.Errorf("invalid location: %w", err)
 	}
 
 	l.Debug().
@@ -1389,8 +1263,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	err = querier.RefreshSourcesMaterializedView(ctx)
 	if err != nil {
-		l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
-		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
+		return nil, fmt.Errorf("failed to update sources materialised view: %w", err)
 	}
 
 	l.Debug().Msg("refreshed sources materialised view")
@@ -1433,12 +1306,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, lsprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", lsprms)
-
-		return nil, status.Errorf(
-			codes.NotFound,
-			"Location does not exist. Create the location before attempting to update capacity.",
-		)
+		return nil, fmt.Errorf("location does not exist: %w", err)
 	}
 
 	l.Debug().
@@ -1468,12 +1336,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 
 		_, err = querier.RenameGeometry(ctx, rgprms)
 		if err != nil {
-			l.Err(err).Msgf("querier.RenameGeometry(%+v)", rgprms)
-
-			return nil, status.Error(
-				codes.InvalidArgument,
-				"Invalid location name. Ensure new name is not empty and unique.",
-			)
+			return nil, fmt.Errorf("invalid location name: %w", err)
 		}
 	}
 
@@ -1502,12 +1365,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 		}
 
 	default:
-		l.Err(err).Msgf("querier.CreateSourceEntry(%+v)", csprms)
-
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"Invalid location source. Ensure metadata is NULL or a non-empty JSON object.",
-		)
+		return nil, fmt.Errorf("invalid location source: %w", err)
 	}
 
 	l.Debug().
@@ -1520,8 +1378,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	if refreshIsRequired {
 		err = querier.RefreshSourcesMaterializedView(ctx)
 		if err != nil {
-			l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
-			return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
+			return nil, fmt.Errorf("failed to update sources materialised view: %w", err)
 		}
 
 		l.Debug().Msg("refreshed sources materialised view")
@@ -1549,8 +1406,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationOwner(
 
 	dbGeom, err := querier.ReownGeometry(ctx, params)
 	if err != nil {
-		l.Err(err).Msgf("querier.ReownGeometry(%+v)", params)
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
+		return nil, fmt.Errorf("invalid location UUID: %w", err)
 	}
 
 	l.Debug().
@@ -1560,8 +1416,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationOwner(
 
 	err = querier.RefreshSourcesMaterializedView(ctx)
 	if err != nil {
-		l.Err(err).Msg("querier.RefreshSourcesMaterializedView()")
-		return nil, status.Error(codes.Internal, "Failed to update sources materialised view")
+		return nil, fmt.Errorf("failed to update sources materialised view: %w", err)
 	}
 
 	l.Debug().Msg("refreshed sources materialised view")
@@ -1576,8 +1431,6 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	ctx context.Context,
 	req *pb.GetLocationsAsGeoJSONRequest,
 ) (resp *pb.GetLocationsAsGeoJSONResponse, err error) {
-	l := zerolog.Ctx(ctx)
-
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the locations as GeoJSON
@@ -1592,7 +1445,6 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	for i, id := range req.LocationUuids {
 		locationUuids[i], err = uuid.Parse(id)
 		if err != nil {
-			l.Err(err).Msgf("uuid.Parse(%s)", id)
 			return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
 		}
 	}
@@ -1604,8 +1456,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 
 	geojson, err := querier.GetGeometryGeoJSON(ctx, ggprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetLocationGeoJSONByIds(%+v)", ggprms)
-		return nil, status.Error(codes.InvalidArgument, "No locations found for input IDs")
+		return nil, fmt.Errorf("no locations found for input IDs: %w", err)
 	}
 
 	return &pb.GetLocationsAsGeoJSONResponse{Geojson: string(geojson)}, nil
@@ -1630,12 +1481,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, gsprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetSourceAtTimestamp(%+v)", gsprms)
-
-		return nil, status.Error(
-			codes.NotFound, "No such location. Ensure the location exists, "+
-				"and is operational at the start of the requested time window.",
-		)
+		return nil, fmt.Errorf("no such location: %w", err)
 	}
 
 	// If in init time has been requested, only return the values for that single forecast.
@@ -1657,12 +1503,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 		dbPreds, err := querier.ListPredictionsForForecasts(ctx, llprms)
 		if err != nil {
-			l.Err(err).Msgf("querier.ListPredictionsForForecasts(%+v)", llprms)
-
-			return nil, status.Error(
-				codes.InvalidArgument,
-				"No forecasts found for the given parameters.",
-			)
+			return nil, fmt.Errorf("no forecasts found for the given parameters: %w", err)
 		}
 
 		out := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbPreds))
@@ -1721,18 +1562,13 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 	dbExistingForecaster, err := querier.GetForecasterElseLatest(ctx, gpprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.GetForecasterElseLatest(%+v)", gpprms)
-
-		return nil, status.Error(
-			codes.NotFound, "No such forecaster.",
-		)
+		return nil, fmt.Errorf("no such forecaster: %w", err)
 	}
 
 	// Get the predictions for the given location source
 	start, end, err := timeWindowToPgWindow(req.TimeWindow)
 	if err != nil {
-		l.Err(err).Msgf("timeWindowToPgWindow(%+v)", req.TimeWindow)
-		return nil, status.Error(codes.InvalidArgument, "Invalid time window.")
+		return nil, status.Errorf(codes.InvalidArgument, "Invalid time window: %v", err)
 	}
 
 	pivotTime := pgtype.Timestamp{Valid: false}
@@ -1752,12 +1588,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 	dbValues, err := querier.ListPredictionsForLocation(ctx, lpprms)
 	if err != nil {
-		l.Err(err).Msgf("querier.ListPredictionsForLocation(%+v)", lpprms)
-
-		return nil, status.Error(
-			codes.Internal,
-			"Error communicating with backend.",
-		)
+		return nil, fmt.Errorf("error communicating with backend: %w", err)
 	}
 
 	if len(dbValues) == 0 {
@@ -1865,22 +1696,22 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 
 		glResp, err := querier.ListSourcesAtTimestampWithin(ctx, llprms)
 		if err != nil {
-			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithin(%+v)", llprms)
-		} else {
-			for _, loc := range glResp {
-				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
-					LocationUuid: loc.GeometryUuid.String(),
-					LocationName: loc.GeometryName,
-					Latlng: &pb.LatLng{
-						Latitude:  loc.Latitude,
-						Longitude: loc.Longitude,
-					},
-					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-					EnergySource:           pb.EnergySource(loc.SourceTypeID),
-					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               loc.MetadataJsonb,
-				})
-			}
+			return nil, fmt.Errorf("failed to list enclosed locations: %w", err)
+		}
+
+		for _, loc := range glResp {
+			locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
+				LocationUuid: loc.GeometryUuid.String(),
+				LocationName: loc.GeometryName,
+				Latlng: &pb.LatLng{
+					Latitude:  loc.Latitude,
+					Longitude: loc.Longitude,
+				},
+				EffectiveCapacityWatts: uint64(loc.CapacityWatts),
+				EnergySource:           pb.EnergySource(loc.SourceTypeID),
+				LocationType:           pb.LocationType(loc.GeometryTypeID),
+				Metadata:               loc.MetadataJsonb,
+			})
 		}
 	} else if req.EnclosedLocationUuidFilter != nil {
 		llprms := db.ListSourcesAtTimestampWithoutParams{
@@ -1894,22 +1725,22 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 
 		glResp, err := querier.ListSourcesAtTimestampWithout(ctx, llprms)
 		if err != nil {
-			l.Err(err).Msgf("querier.ListSourcesAtTimestampWithout(%+v)", llprms)
-		} else {
-			for _, loc := range glResp {
-				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
-					LocationUuid: loc.GeometryUuid.String(),
-					LocationName: loc.GeometryName,
-					Latlng: &pb.LatLng{
-						Latitude:  loc.Latitude,
-						Longitude: loc.Longitude,
-					},
-					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-					EnergySource:           pb.EnergySource(loc.SourceTypeID),
-					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               loc.MetadataJsonb,
-				})
-			}
+			return nil, fmt.Errorf("failed to list enclosing locations: %w", err)
+		}
+
+		for _, loc := range glResp {
+			locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
+				LocationUuid: loc.GeometryUuid.String(),
+				LocationName: loc.GeometryName,
+				Latlng: &pb.LatLng{
+					Latitude:  loc.Latitude,
+					Longitude: loc.Longitude,
+				},
+				EffectiveCapacityWatts: uint64(loc.CapacityWatts),
+				EnergySource:           pb.EnergySource(loc.SourceTypeID),
+				LocationType:           pb.LocationType(loc.GeometryTypeID),
+				Metadata:               loc.MetadataJsonb,
+			})
 		}
 	} else {
 		lsprms := db.ListSourcesAtTimestampParams{
@@ -1923,22 +1754,22 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 
 		glResp, err := querier.ListSourcesAtTimestamp(ctx, lsprms)
 		if err != nil {
-			l.Err(err).Msgf("querier.ListSourcesAtTimestamp(%+v)", lsprms)
-		} else {
-			for _, loc := range glResp {
-				locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
-					LocationUuid: loc.GeometryUuid.String(),
-					LocationName: loc.GeometryName,
-					Latlng: &pb.LatLng{
-						Latitude:  loc.Latitude,
-						Longitude: loc.Longitude,
-					},
-					EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-					EnergySource:           pb.EnergySource(loc.SourceTypeID),
-					LocationType:           pb.LocationType(loc.GeometryTypeID),
-					Metadata:               loc.MetadataJsonb,
-				})
-			}
+			return nil, fmt.Errorf("failed to list locations: %w", err)
+		}
+
+		for _, loc := range glResp {
+			locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
+				LocationUuid: loc.GeometryUuid.String(),
+				LocationName: loc.GeometryName,
+				Latlng: &pb.LatLng{
+					Latitude:  loc.Latitude,
+					Longitude: loc.Longitude,
+				},
+				EffectiveCapacityWatts: uint64(loc.CapacityWatts),
+				EnergySource:           pb.EnergySource(loc.SourceTypeID),
+				LocationType:           pb.LocationType(loc.GeometryTypeID),
+				Metadata:               loc.MetadataJsonb,
+			})
 		}
 	}
 
