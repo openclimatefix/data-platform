@@ -107,7 +107,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, gsprms)
 	if err != nil {
-		return nil, fmt.Errorf("No location found: %w", err)
+		return nil, fmt.Errorf("no location found: %w", err)
 	}
 
 	l.Debug().Str("dp.geometry.uuid", dbSource.GeometryUuid.String()).
@@ -136,7 +136,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 	dbForecaster, err := querier.GetForecasterElseLatest(ctx, pctprms)
 	if err != nil {
-		return nil, fmt.Errorf("No such forecaster: %w", err)
+		return nil, fmt.Errorf("no such forecaster: %w", err)
 	}
 
 	l.Debug().
@@ -161,7 +161,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 
 	dbForecast, err := querier.CreateForecast(ctx, cfprms)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid forecast: %w", err)
+		return nil, fmt.Errorf("invalid forecast: %w", err)
 	}
 
 	// Create the forecast data
@@ -186,7 +186,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 			err = errors.New("inserted count less than requested")
 		}
 
-		return nil, fmt.Errorf("Invalid predicted generation values: %w", err)
+		return nil, fmt.Errorf("invalid predicted generation values: %w", err)
 	}
 
 	l.Debug().
@@ -219,7 +219,7 @@ func (s *DataPlatformDataServiceServerImpl) DeleteForecast(
 
 	dbForecaster, err := querier.GetForecasterElseLatest(ctx, pctprms)
 	if err != nil {
-		return nil, fmt.Errorf("No such forecaster: %w", err)
+		return nil, fmt.Errorf("no such forecaster: %w", err)
 	}
 
 	// Delete the forecast
@@ -257,7 +257,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 
 	dbListForecasts, err := querier.GetLatestForecastsAtHorizonSincePivot(ctx, glfprms)
 	if err != nil {
-		return nil, fmt.Errorf("No forecasts found: %w", err)
+		return nil, fmt.Errorf("no forecasts found: %w", err)
 	}
 
 	l.Debug().Str("dp.geometry.uuid", req.LocationUuid).
@@ -302,7 +302,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 	if err == nil {
 		return nil, status.Errorf(
 			codes.AlreadyExists,
-			"Forecaster with already exists (at version '%s'). "+
+			"Forecaster already exists (at version '%s'). "+
 				"Use the update method to add a new version, or create a new forecaster.",
 			dbExistingForecaster.ForecasterVersion,
 		)
@@ -313,7 +313,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecaster(
 
 	dbForecaster, err := querier.CreateForecaster(ctx, cfprms)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid forecaster: %w", err)
+		return nil, fmt.Errorf("invalid forecaster: %w", err)
 	}
 
 	l.Debug().Int32("dp.forecaster.id", dbForecaster.ForecasterID).
@@ -352,7 +352,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateForecaster(
 
 	dbForecaster, err := querier.CreateForecaster(ctx, cfprms)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid forecaster: %w", err)
+		return nil, fmt.Errorf("invalid forecaster: %w", err)
 	}
 
 	l.Debug().Int32("dp.forecaster.id", dbForecaster.ForecasterID).
@@ -809,7 +809,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 
 	err = batch.Close()
 	if err != nil {
-		return nil, fmt.Errorf("Invalid observation values: %w", err)
+		return nil, fmt.Errorf("invalid observation values: %w", err)
 	}
 
 	l.Debug().Int16("dp.source.type_id", dbSource.SourceTypeID).
@@ -887,7 +887,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObserver(
 
 	dbObserver, err := querier.CreateObserver(ctx, obprms)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid observer name: %w", err)
+		return nil, fmt.Errorf("invalid observer name: %w", err)
 	}
 
 	return &pb.CreateObserverResponse{
@@ -979,7 +979,10 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 
 	dbPredictions, err := querier.ListPredictionsAtTimeForLocations(ctx, lpprms)
 	if err != nil {
-		return nil, fmt.Errorf("No predicted values found for the specified locations at the given time.,: %w", err)
+		return nil, fmt.Errorf(
+			"no predicted values found for the specified locations at the given time.,: %w",
+			err,
+		)
 	}
 
 	values := make([]*pb.GetForecastAtTimestampResponse_Value, len(dbPredictions))
@@ -1068,7 +1071,10 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
 
 	dbObs, err := querier.ListObservationsAtTimeForLocations(ctx, loprms)
 	if err != nil {
-		return nil, fmt.Errorf("No observations found for the specified locations at the given time: %w", err)
+		return nil, fmt.Errorf(
+			"no observations found for the specified locations at the given time: %w",
+			err,
+		)
 	}
 
 	observations := make([]*pb.GetObservationsAtTimestampResponse_Value, len(dbObs))
@@ -1111,7 +1117,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, cfprms)
 	if err != nil {
-		return nil, fmt.Errorf("No such location: %w", err)
+		return nil, fmt.Errorf("no such location: %w", err)
 	}
 
 	l.Debug().
@@ -1171,7 +1177,10 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationAsTimeseries(
 
 	dbValues, err := querier.GetSourceHistory(ctx, gprms)
 	if err != nil {
-		return nil, fmt.Errorf("No such location or no history for location in the specified time window: %w", err)
+		return nil, fmt.Errorf(
+			"no such location or no history for location in the specified time window: %w",
+			err,
+		)
 	}
 
 	values := make([]*pb.GetLocationAsTimeseriesResponse_LocationSnapshot, len(dbValues))
@@ -1215,7 +1224,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	dbLocation, err := querier.CreateGeometry(ctx, cgprms)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid location: %w", err)
+		return nil, fmt.Errorf("invalid location: %w", err)
 	}
 
 	l.Debug().
@@ -1242,7 +1251,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 
 	dbSource, err := querier.CreateSourceEntry(ctx, csprms)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid location: %w", err)
+		return nil, fmt.Errorf("invalid location: %w", err)
 	}
 
 	l.Debug().
@@ -1297,7 +1306,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, lsprms)
 	if err != nil {
-		return nil, fmt.Errorf("Location does not exist: %w", err)
+		return nil, fmt.Errorf("location does not exist: %w", err)
 	}
 
 	l.Debug().
@@ -1327,7 +1336,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 
 		_, err = querier.RenameGeometry(ctx, rgprms)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid location name: %w", err)
+			return nil, fmt.Errorf("invalid location name: %w", err)
 		}
 	}
 
@@ -1356,7 +1365,7 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 		}
 
 	default:
-		return nil, fmt.Errorf("Invalid location source: %w", err)
+		return nil, fmt.Errorf("invalid location source: %w", err)
 	}
 
 	l.Debug().
@@ -1472,7 +1481,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 
 	dbSource, err := querier.GetSourceAtTimestamp(ctx, gsprms)
 	if err != nil {
-		return nil, fmt.Errorf("No such location: %w", err)
+		return nil, fmt.Errorf("no such location: %w", err)
 	}
 
 	// If in init time has been requested, only return the values for that single forecast.

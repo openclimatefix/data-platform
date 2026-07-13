@@ -95,13 +95,12 @@ func NewTransactionInterceptor(
 	return &transactionInterceptorBuilder{pool: pool}
 }
 
-
 // mapErrorToGRPC maps database errors to appropriate gRPC status codes.
 func mapErrorToGRPC(err error) error {
 	if err == nil {
 		return nil
 	}
-	
+
 	// Pass through existing gRPC status errors explicitly
 	if _, ok := status.FromError(err); ok {
 		return err
@@ -118,7 +117,9 @@ func mapErrorToGRPC(err error) error {
 			return status.Error(codes.AlreadyExists, err.Error())
 		case "23503": // foreign_key_violation
 			return status.Error(codes.FailedPrecondition, err.Error())
-		case "23514", "23502", "22P02": // check_violation, not_null_violation, invalid_text_representation
+		case "23514",
+			"23502",
+			"22P02": // check_violation, not_null_violation, invalid_text_representation
 			return status.Error(codes.InvalidArgument, err.Error())
 		}
 	}
