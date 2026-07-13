@@ -4,7 +4,9 @@ package interceptors
 import (
 	"context"
 	"embed"
+	"errors"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/jackc/pgx/v5"
@@ -93,6 +95,37 @@ func NewTransactionInterceptor(
 	return &transactionInterceptorBuilder{pool: pool}
 }
 
+
+// mapErrorToGRPC maps database errors to appropriate gRPC status codes.
+func mapErrorToGRPC(err error) error {
+	if err == nil {
+		return nil
+	}
+	
+	// Pass through existing gRPC status errors explicitly
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return status.Error(codes.NotFound, err.Error())
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505": // unique_violation
+			return status.Error(codes.AlreadyExists, err.Error())
+		case "23503": // foreign_key_violation
+			return status.Error(codes.FailedPrecondition, err.Error())
+		case "23514", "23502", "22P02": // check_violation, not_null_violation, invalid_text_representation
+			return status.Error(codes.InvalidArgument, err.Error())
+		}
+	}
+
+	return status.Error(codes.Internal, err.Error())
+}
+
 // UnaryServerInterceptor is the gRPC interceptor for handling transactions.
 func (ti *transactionInterceptorBuilder) UnaryServerInterceptor(
 	ctx context.Context,
@@ -123,7 +156,7 @@ func (ti *transactionInterceptorBuilder) UnaryServerInterceptor(
 	// Call the original RPC handler with the new context.
 	resp, err := handler(txCtx, req)
 	if err != nil {
-		return nil, err
+		return nil, mapErrorToGRPC(err)
 	}
 
 	return resp, nil
@@ -148,7 +181,7 @@ func (ti *transactionInterceptorBuilder) StreamServerInterceptor(
 	// Wrap the ServerStream to inject our new context.
 	err := handler(srv, &wrappedStream{ServerStream: ss, newCtx: poolCtx})
 	if err != nil {
-		return err
+		return mapErrorToGRPC(err)
 	}
 
 	return nil
