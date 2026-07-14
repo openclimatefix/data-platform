@@ -451,3 +451,18 @@ FROM relevant_predicted_values AS rv
         AND rv.target_time_utc = og.observation_timestamp_utc
 GROUP BY rv.geometry_uuid, rv.horizon_mins
 ORDER BY rv.geometry_uuid, rv.horizon_mins;
+
+-- name: CreateForecastsBatch :copyfrom
+INSERT INTO pred.forecasts (
+    forecast_uuid,
+    geometry_uuid,
+    source_type_id,
+    forecaster_id,
+    init_time_utc,
+    value_resolution_mins,
+    target_period,
+    metadata,
+    created_at_utc
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+);

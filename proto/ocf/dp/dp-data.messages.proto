@@ -854,3 +854,8 @@ message ForecastDatum {
   map<string, string> metadata = 9;
   google.protobuf.Timestamp target_timestamp_utc = 10;
 }
+
+message StreamCreateForecastsResponse {
+  // A list of the UUIDs generated for the successfully created forecasts.
+  repeated string forecast_uuids = 1;
+}

@@ -617,6 +617,13 @@ Forecaster represents a generative source of predicted values.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | observer_uuid | [string](#string) |  |  || observer_name | [string](#string) |  |  |
+</details><a name="ocf-dp-StreamCreateForecastsResponse"></a>
+<details><summary>StreamCreateForecastsResponse</summary>
+
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| forecast_uuids | [string](#string) | repeated | A list of the UUIDs generated for the successfully created forecasts. |
 </details><a name="ocf-dp-StreamForecastDataRequest"></a>
 <details><summary>StreamForecastDataRequest</summary>
 
@@ -885,6 +892,15 @@ StreamForecastData streams forecast data for a given location, forecasters, and 
 Useful for analytics and performance monitoring.
 
 _[StreamForecastDataRequest](#ocf-dp-StreamForecastDataRequest) / [StreamForecastDataResponse](#ocf-dp-StreamForecastDataResponse) stream_
+
+<a name="StreamCreateForecasts"></a>
+
+#### StreamCreateForecasts
+
+StreamCreateForecasts allows for efficient batch creation of multiple forecasts and their values.
+Note: This method is executed in a single transaction. To prevent resource exhaustion, a maximum of 5000 forecasts can be sent per stream. Exceeding this limit will abort the stream and roll back all inserts.
+
+_[CreateForecastRequest](#ocf-dp-CreateForecastRequest) stream / [StreamCreateForecastsResponse](#ocf-dp-StreamCreateForecastsResponse)_
 
 
 

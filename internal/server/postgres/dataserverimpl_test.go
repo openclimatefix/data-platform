@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 
@@ -2435,6 +2438,190 @@ func TestStreamForecastData(t *testing.T) {
 
 			if !tc.shouldErr {
 				require.Equal(t, tc.expectedRowsCount, actualRowsCount)
+			}
+		})
+	}
+}
+
+func TestStreamCreateForecasts(t *testing.T) {
+	pivotTime := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	// Create a site
+	siteResp := createTestLocation(
+		t,
+		"test_stream_create_forecasts_site",
+		"POINT(-0.1 51.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*24),
+		nil,
+	)
+
+	// Create a forecaster
+	fc := createTestForecaster(t, "test_stream_create_forecasts_forecaster", "v1")
+
+	yields := generateTestForecastValues(10, 30)
+
+	testcases := []struct {
+		name               string
+		setupStream        func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error)
+		sendCount          int
+		getReq             func(i int) *pb.CreateForecastRequest
+		shouldErr          bool
+		expectedErrCode    codes.Code
+		expectedUuidsCount int
+	}{
+		{
+			name: "Valid stream under limit",
+			setupStream: func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error) {
+				return dc.StreamCreateForecasts(ctx)
+			},
+			sendCount: 10,
+			getReq: func(i int) *pb.CreateForecastRequest {
+				return &pb.CreateForecastRequest{
+					LocationUuid: siteResp.LocationUuid,
+					Forecaster: &pb.Forecaster{
+						ForecasterName:    fc.ForecasterName,
+						ForecasterVersion: fc.ForecasterVersion,
+					},
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(i) * time.Hour)),
+					Values:       yields,
+				}
+			},
+			shouldErr:          false,
+			expectedUuidsCount: 10,
+		},
+		{
+			name: "Atomicity on Failure (rollback after valid batch)",
+			setupStream: func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error) {
+				return dc.StreamCreateForecasts(ctx)
+			},
+			sendCount: 600, // Should exceed batch size of 500
+			getReq: func(i int) *pb.CreateForecastRequest {
+				// Inject error at the end
+				if i == 599 {
+					return &pb.CreateForecastRequest{
+						LocationUuid: siteResp.LocationUuid,
+						Forecaster: &pb.Forecaster{
+							ForecasterName:    "non_existent",
+							ForecasterVersion: "v1",
+						},
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						InitTimeUtc:  timestamppb.New(pivotTime),
+						Values:       yields,
+					}
+				}
+
+				return &pb.CreateForecastRequest{
+					LocationUuid: siteResp.LocationUuid,
+					Forecaster: &pb.Forecaster{
+						ForecasterName:    fc.ForecasterName,
+						ForecasterVersion: fc.ForecasterVersion,
+					},
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(i) * time.Hour)),
+					Values:       yields,
+				}
+			},
+			shouldErr: true,
+		},
+		{
+			name: "Limit Exceeded",
+			setupStream: func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error) {
+				return dc.StreamCreateForecasts(ctx)
+			},
+			sendCount: 5001,
+			getReq: func(i int) *pb.CreateForecastRequest {
+				return &pb.CreateForecastRequest{
+					LocationUuid: siteResp.LocationUuid,
+					Forecaster: &pb.Forecaster{
+						ForecasterName:    fc.ForecasterName,
+						ForecasterVersion: fc.ForecasterVersion,
+					},
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(i) * time.Hour)),
+					Values:       yields,
+				}
+			},
+			shouldErr:       true,
+			expectedErrCode: codes.InvalidArgument,
+		},
+	}
+
+	for tcIdx, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+
+			// We use a fresh site and forecaster per test case to avoid pollution
+			// when checking atomicity
+			siteRespTC := createTestLocation(
+				t,
+				fmt.Sprintf("test_stream_site_%d", tcIdx),
+				"POINT(-0.1 51.5)",
+				1000000,
+				pivotTime.Add(-time.Hour*24),
+				nil,
+			)
+
+			fcTC := createTestForecaster(t, fmt.Sprintf("test_stream_fc_%d", tcIdx), "v1")
+
+			stream, err := tc.setupStream(ctx)
+			require.NoError(t, err)
+
+			var sendErr error
+			for i := 0; i < tc.sendCount; i++ {
+				req := tc.getReq(i)
+				// Overwrite the location and forecaster with the testcase-specific ones
+				// unless it's the deliberately broken one
+				if req.Forecaster.ForecasterName != "non_existent" {
+					req.LocationUuid = siteRespTC.LocationUuid
+					req.Forecaster.ForecasterName = fcTC.ForecasterName
+					req.Forecaster.ForecasterVersion = fcTC.ForecasterVersion
+				}
+
+				if err := stream.Send(req); err != nil && err != io.EOF {
+					sendErr = err
+					break
+				}
+			}
+
+			var (
+				closeErr error
+				resp     *pb.StreamCreateForecastsResponse
+			)
+
+			if sendErr == nil {
+				resp, closeErr = stream.CloseAndRecv()
+			} else {
+				closeErr = sendErr
+			}
+
+			if tc.shouldErr {
+				require.Error(t, closeErr)
+
+				if tc.expectedErrCode != codes.OK {
+					require.Equal(t, tc.expectedErrCode, status.Code(closeErr))
+				}
+
+				// Assert atomicity: No new forecasts should have been saved
+				postResp, err := dc.GetLatestForecasts(ctx, &pb.GetLatestForecastsRequest{
+					LocationUuid: siteRespTC.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					PivotTimestampUtc: timestamppb.New(
+						pivotTime.Add(time.Duration(100000) * time.Hour),
+					),
+				})
+
+				var postCount int
+				if err == nil && postResp != nil {
+					postCount = len(postResp.Forecasts)
+				}
+
+				require.Equal(t, 0, postCount, "Atomicity failed: Forecasts were partially saved")
+			} else {
+				require.NoError(t, closeErr)
+				require.NotNil(t, resp)
+				require.Len(t, resp.ForecastUuids, tc.expectedUuidsCount)
 			}
 		})
 	}
