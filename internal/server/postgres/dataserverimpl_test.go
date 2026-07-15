@@ -2626,3 +2626,117 @@ func TestStreamCreateForecasts(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareForecastParams(t *testing.T) {
+	geomID := uuid.MustParse("018e6a12-8854-7123-b123-123456789abc")
+	sourceID := int16(2)
+	forecasterID := int32(42)
+
+	testcases := []struct {
+		name                string
+		req                 *pb.CreateForecastRequest
+		expectedInitTime    time.Time
+		expectedCreatedTime time.Time
+		expectDynamicCreate bool
+		expectedTargetLower time.Time
+		expectedTargetUpper time.Time
+		expectedResolution  int16
+		shouldErr           bool
+	}{
+		{
+			name: "Valid request with CreatedTimestampUtc",
+			req: &pb.CreateForecastRequest{
+				InitTimeUtc: timestamppb.New(
+					time.Date(2024, 5, 5, 12, 30, 45, 0, time.UTC),
+				),
+				CreatedTimestampUtc: timestamppb.New(time.Date(2024, 5, 5, 12, 0, 0, 0, time.UTC)),
+				Values: []*pb.CreateForecastRequest_ForecastValue{
+					{HorizonMins: 30},
+					{HorizonMins: 60},
+					{HorizonMins: 90},
+				},
+			},
+			expectedInitTime: time.Date(
+				2024,
+				5,
+				5,
+				12,
+				30,
+				0,
+				0,
+				time.UTC,
+			), // Truncated to minute
+			expectedCreatedTime: time.Date(2024, 5, 5, 12, 0, 0, 0, time.UTC),
+			expectDynamicCreate: false,
+			expectedTargetLower: time.Date(2024, 5, 5, 13, 0, 0, 0, time.UTC), // 12:30 + 30m
+			expectedTargetUpper: time.Date(2024, 5, 5, 14, 0, 0, 0, time.UTC), // 12:30 + 90m
+			expectedResolution:  30,
+		},
+		{
+			name: "Valid request without CreatedTimestampUtc",
+			req: &pb.CreateForecastRequest{
+				InitTimeUtc: timestamppb.New(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
+				Values: []*pb.CreateForecastRequest_ForecastValue{
+					{HorizonMins: 0},
+					{HorizonMins: 15},
+				},
+			},
+			expectedInitTime:    time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			expectDynamicCreate: true, // Will default to current time
+			expectedTargetLower: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			expectedTargetUpper: time.Date(2024, 1, 1, 0, 15, 0, 0, time.UTC),
+			expectedResolution:  15,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			params, err := prepareForecastParams(tc.req, geomID, sourceID, forecasterID)
+			if tc.shouldErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			// Assert straightforward assignments
+			require.Equal(t, geomID, params.GeometryUuid)
+			require.Equal(t, sourceID, params.SourceTypeID)
+			require.Equal(t, forecasterID, params.ForecasterID)
+			require.Equal(t, tc.expectedResolution, params.ValueResolutionMins)
+
+			// Assert InitTime (should be truncated to the minute)
+			require.Equal(t, tc.expectedInitTime, params.InitTimeUtc.Time.UTC())
+
+			// Assert TargetPeriod boundaries
+			require.True(t, params.TargetPeriod.Valid)
+			require.Equal(t, tc.expectedTargetLower, params.TargetPeriod.Lower.Time.UTC())
+			require.Equal(t, tc.expectedTargetUpper, params.TargetPeriod.Upper.Time.UTC())
+
+			// Assert CreatedAt logic (either explicitly set or fallback to current time)
+			if tc.expectDynamicCreate {
+				now := time.Now().UTC().Truncate(time.Minute)
+				require.Equal(t, now, params.CreatedAtUtc.Time.UTC())
+			} else {
+				require.Equal(t, tc.expectedCreatedTime, params.CreatedAtUtc.Time.UTC())
+			}
+
+			// Assert UUIDv7 timestamp encoding
+			uuidBytes := params.ForecastUuid
+			ms := uint64(uuidBytes[0])<<40 |
+				uint64(uuidBytes[1])<<32 |
+				uint64(uuidBytes[2])<<24 |
+				uint64(uuidBytes[3])<<16 |
+				uint64(uuidBytes[4])<<8 |
+				uint64(uuidBytes[5])
+
+			extractedTime := time.UnixMilli(int64(ms)).UTC()
+			require.Equal(
+				t,
+				tc.expectedInitTime,
+				extractedTime,
+				"UUID prefix should encode the truncated InitTimeUtc",
+			)
+		})
+	}
+}

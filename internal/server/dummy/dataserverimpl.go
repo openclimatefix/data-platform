@@ -725,11 +725,12 @@ func (d *DataPlatformDataServiceServerImpl) UpdateForecaster(
 	}, nil
 }
 
-// Compile-time check to ensure the interface is implemented fully.
-var _ pb.DataPlatformDataServiceServer = (*DataPlatformDataServiceServerImpl)(nil)
-
+// StreamCreateForecasts implements dp.DataPlatformDataServiceServer.
 func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 	stream grpc.ClientStreamingServer[pb.CreateForecastRequest, pb.StreamCreateForecastsResponse],
 ) error {
 	return status.Errorf(codes.Unimplemented, "method StreamCreateForecasts not implemented")
 }
+
+// Compile-time check to ensure the interface is implemented fully.
+var _ pb.DataPlatformDataServiceServer = (*DataPlatformDataServiceServerImpl)(nil)
