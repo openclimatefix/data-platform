@@ -18,6 +18,8 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -721,6 +723,13 @@ func (d *DataPlatformDataServiceServerImpl) UpdateForecaster(
 			ForecasterVersion: req.NewVersion,
 		},
 	}, nil
+}
+
+// StreamCreateForecasts implements dp.DataPlatformDataServiceServer.
+func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
+	stream grpc.ClientStreamingServer[pb.CreateForecastRequest, pb.StreamCreateForecastsResponse],
+) error {
+	return status.Errorf(codes.Unimplemented, "method StreamCreateForecasts not implemented")
 }
 
 // Compile-time check to ensure the interface is implemented fully.

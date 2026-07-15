@@ -20,7 +20,6 @@ from google.protobuf.json_format import MessageToDict
 from ocf.dp.dp import common_pb2
 from ocf.dp.dp_data import messages_pb2, service_pb2_grpc
 import pandas as pd
-import xarray as xr
 import datetime as dt
 
 
@@ -77,7 +76,7 @@ async def main() -> None:
         end_time = gfreq_response.values[-1].target_timestamp_utc.ToDatetime(tzinfo=dt.UTC)
         print(f"\tReceived {len(gfreq_response.values)} forecast points from {start_time} to {end_time}")
 
-        print(f":: -> Converting response to a dataframe")
+        print(":: -> Converting response to a dataframe")
         # preserving_proto_field_name prevents conversion to lowerCamelCase.
         # always_print_fields_with_no_presence ensures all fields are present in the dict, even if they have no value in the protobuf.
         df = pd.DataFrame.from_dict([
@@ -95,14 +94,14 @@ async def main() -> None:
         ).drop(["p50_value_fraction", "p10", "p90"], axis=1)
         print(df.head())
 
-        print(f":: Getting 'ground truths' for the same location and time period")
+        print(":: Getting 'ground truths' for the same location and time period")
 
-        print(f":: -> Getting an observer")
+        print(":: -> Getting an observer")
         loresp = await dpc.ListObservers(messages_pb2.ListObserversRequest())
         observer = next(o for o in loresp.observers if "pvlive" in o.observer_name)
         print(f"\t{observer.observer_name=}")
 
-        print(f":: -> Getting the ground truth for the UK national location")
+        print(":: -> Getting the ground truth for the UK national location")
         gtreq = messages_pb2.GetObservationsAsTimeseriesRequest(
             location_uuid=uk_location.location_uuid,
             energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,

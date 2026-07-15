@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 
@@ -2436,6 +2439,304 @@ func TestStreamForecastData(t *testing.T) {
 			if !tc.shouldErr {
 				require.Equal(t, tc.expectedRowsCount, actualRowsCount)
 			}
+		})
+	}
+}
+
+func TestStreamCreateForecasts(t *testing.T) {
+	pivotTime := time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	// Create a site
+	siteResp := createTestLocation(
+		t,
+		"test_stream_create_forecasts_site",
+		"POINT(-0.1 51.5)",
+		1000000,
+		pivotTime.Add(-time.Hour*24),
+		nil,
+	)
+
+	// Create a forecaster
+	fc := createTestForecaster(t, "test_stream_create_forecasts_forecaster", "v1")
+
+	yields := generateTestForecastValues(10, 30)
+
+	testcases := []struct {
+		name               string
+		setupStream        func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error)
+		sendCount          int
+		getReq             func(i int) *pb.CreateForecastRequest
+		shouldErr          bool
+		expectedErrCode    codes.Code
+		expectedUuidsCount int
+	}{
+		{
+			name: "Valid stream under limit",
+			setupStream: func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error) {
+				return dc.StreamCreateForecasts(ctx)
+			},
+			sendCount: 10,
+			getReq: func(i int) *pb.CreateForecastRequest {
+				return &pb.CreateForecastRequest{
+					LocationUuid: siteResp.LocationUuid,
+					Forecaster: &pb.Forecaster{
+						ForecasterName:    fc.ForecasterName,
+						ForecasterVersion: fc.ForecasterVersion,
+					},
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(i) * time.Hour)),
+					Values:       yields,
+				}
+			},
+			shouldErr:          false,
+			expectedUuidsCount: 10,
+		},
+		{
+			name: "Atomicity on Failure (rollback after valid batch)",
+			setupStream: func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error) {
+				return dc.StreamCreateForecasts(ctx)
+			},
+			sendCount: 600, // Should exceed batch size of 500
+			getReq: func(i int) *pb.CreateForecastRequest {
+				// Inject error at the end
+				if i == 599 {
+					return &pb.CreateForecastRequest{
+						LocationUuid: siteResp.LocationUuid,
+						Forecaster: &pb.Forecaster{
+							ForecasterName:    "non_existent",
+							ForecasterVersion: "v1",
+						},
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						InitTimeUtc:  timestamppb.New(pivotTime),
+						Values:       yields,
+					}
+				}
+
+				return &pb.CreateForecastRequest{
+					LocationUuid: siteResp.LocationUuid,
+					Forecaster: &pb.Forecaster{
+						ForecasterName:    fc.ForecasterName,
+						ForecasterVersion: fc.ForecasterVersion,
+					},
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(i) * time.Hour)),
+					Values:       yields,
+				}
+			},
+			shouldErr: true,
+		},
+		{
+			name: "Limit Exceeded",
+			setupStream: func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error) {
+				return dc.StreamCreateForecasts(ctx)
+			},
+			sendCount: 5001,
+			getReq: func(i int) *pb.CreateForecastRequest {
+				return &pb.CreateForecastRequest{
+					LocationUuid: siteResp.LocationUuid,
+					Forecaster: &pb.Forecaster{
+						ForecasterName:    fc.ForecasterName,
+						ForecasterVersion: fc.ForecasterVersion,
+					},
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(i) * time.Hour)),
+					Values:       yields,
+				}
+			},
+			shouldErr:       true,
+			expectedErrCode: codes.InvalidArgument,
+		},
+	}
+
+	for tcIdx, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+
+			// We use a fresh site and forecaster per test case to avoid pollution
+			// when checking atomicity
+			siteRespTC := createTestLocation(
+				t,
+				fmt.Sprintf("test_stream_site_%d", tcIdx),
+				"POINT(-0.1 51.5)",
+				1000000,
+				pivotTime.Add(-time.Hour*24),
+				nil,
+			)
+
+			fcTC := createTestForecaster(t, fmt.Sprintf("test_stream_fc_%d", tcIdx), "v1")
+
+			stream, err := tc.setupStream(ctx)
+			require.NoError(t, err)
+
+			var sendErr error
+			for i := 0; i < tc.sendCount; i++ {
+				req := tc.getReq(i)
+				// Overwrite the location and forecaster with the testcase-specific ones
+				// unless it's the deliberately broken one
+				if req.Forecaster.ForecasterName != "non_existent" {
+					req.LocationUuid = siteRespTC.LocationUuid
+					req.Forecaster.ForecasterName = fcTC.ForecasterName
+					req.Forecaster.ForecasterVersion = fcTC.ForecasterVersion
+				}
+
+				if err := stream.Send(req); err != nil && err != io.EOF {
+					sendErr = err
+					break
+				}
+			}
+
+			var (
+				closeErr error
+				resp     *pb.StreamCreateForecastsResponse
+			)
+
+			if sendErr == nil {
+				resp, closeErr = stream.CloseAndRecv()
+			} else {
+				closeErr = sendErr
+			}
+
+			if tc.shouldErr {
+				require.Error(t, closeErr)
+
+				if tc.expectedErrCode != codes.OK {
+					require.Equal(t, tc.expectedErrCode, status.Code(closeErr))
+				}
+
+				// Assert atomicity: No new forecasts should have been saved
+				postResp, err := dc.GetLatestForecasts(ctx, &pb.GetLatestForecastsRequest{
+					LocationUuid: siteRespTC.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					PivotTimestampUtc: timestamppb.New(
+						pivotTime.Add(time.Duration(100000) * time.Hour),
+					),
+				})
+
+				var postCount int
+				if err == nil && postResp != nil {
+					postCount = len(postResp.Forecasts)
+				}
+
+				require.Equal(t, 0, postCount, "Atomicity failed: Forecasts were partially saved")
+			} else {
+				require.NoError(t, closeErr)
+				require.NotNil(t, resp)
+				require.Len(t, resp.ForecastUuids, tc.expectedUuidsCount)
+			}
+		})
+	}
+}
+
+func TestPrepareForecastParams(t *testing.T) {
+	geomID := uuid.MustParse("018e6a12-8854-7123-b123-123456789abc")
+	sourceID := int16(2)
+	forecasterID := int32(42)
+
+	testcases := []struct {
+		name                string
+		req                 *pb.CreateForecastRequest
+		expectedInitTime    time.Time
+		expectedCreatedTime time.Time
+		expectDynamicCreate bool
+		expectedTargetLower time.Time
+		expectedTargetUpper time.Time
+		expectedResolution  int16
+		shouldErr           bool
+	}{
+		{
+			name: "Valid request with CreatedTimestampUtc",
+			req: &pb.CreateForecastRequest{
+				InitTimeUtc: timestamppb.New(
+					time.Date(2024, 5, 5, 12, 30, 45, 0, time.UTC),
+				),
+				CreatedTimestampUtc: timestamppb.New(time.Date(2024, 5, 5, 12, 0, 0, 0, time.UTC)),
+				Values: []*pb.CreateForecastRequest_ForecastValue{
+					{HorizonMins: 30},
+					{HorizonMins: 60},
+					{HorizonMins: 90},
+				},
+			},
+			expectedInitTime: time.Date(
+				2024,
+				5,
+				5,
+				12,
+				30,
+				0,
+				0,
+				time.UTC,
+			), // Truncated to minute
+			expectedCreatedTime: time.Date(2024, 5, 5, 12, 0, 0, 0, time.UTC),
+			expectDynamicCreate: false,
+			expectedTargetLower: time.Date(2024, 5, 5, 13, 0, 0, 0, time.UTC), // 12:30 + 30m
+			expectedTargetUpper: time.Date(2024, 5, 5, 14, 0, 0, 0, time.UTC), // 12:30 + 90m
+			expectedResolution:  30,
+		},
+		{
+			name: "Valid request without CreatedTimestampUtc",
+			req: &pb.CreateForecastRequest{
+				InitTimeUtc: timestamppb.New(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
+				Values: []*pb.CreateForecastRequest_ForecastValue{
+					{HorizonMins: 0},
+					{HorizonMins: 15},
+				},
+			},
+			expectedInitTime:    time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			expectDynamicCreate: true, // Will default to current time
+			expectedTargetLower: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			expectedTargetUpper: time.Date(2024, 1, 1, 0, 15, 0, 0, time.UTC),
+			expectedResolution:  15,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			params, err := prepareForecastParams(tc.req, geomID, sourceID, forecasterID)
+			if tc.shouldErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			// Assert straightforward assignments
+			require.Equal(t, geomID, params.GeometryUuid)
+			require.Equal(t, sourceID, params.SourceTypeID)
+			require.Equal(t, forecasterID, params.ForecasterID)
+			require.Equal(t, tc.expectedResolution, params.ValueResolutionMins)
+
+			// Assert InitTime (should be truncated to the minute)
+			require.Equal(t, tc.expectedInitTime, params.InitTimeUtc.Time.UTC())
+
+			// Assert TargetPeriod boundaries
+			require.True(t, params.TargetPeriod.Valid)
+			require.Equal(t, tc.expectedTargetLower, params.TargetPeriod.Lower.Time.UTC())
+			require.Equal(t, tc.expectedTargetUpper, params.TargetPeriod.Upper.Time.UTC())
+
+			// Assert CreatedAt logic (either explicitly set or fallback to current time)
+			if tc.expectDynamicCreate {
+				now := time.Now().UTC().Truncate(time.Minute)
+				require.Equal(t, now, params.CreatedAtUtc.Time.UTC())
+			} else {
+				require.Equal(t, tc.expectedCreatedTime, params.CreatedAtUtc.Time.UTC())
+			}
+
+			// Assert UUIDv7 timestamp encoding
+			uuidBytes := params.ForecastUuid
+			ms := uint64(uuidBytes[0])<<40 |
+				uint64(uuidBytes[1])<<32 |
+				uint64(uuidBytes[2])<<24 |
+				uint64(uuidBytes[3])<<16 |
+				uint64(uuidBytes[4])<<8 |
+				uint64(uuidBytes[5])
+
+			extractedTime := time.UnixMilli(int64(ms)).UTC()
+			require.Equal(
+				t,
+				tc.expectedInitTime,
+				extractedTime,
+				"UUID prefix should encode the truncated InitTimeUtc",
+			)
 		})
 	}
 }

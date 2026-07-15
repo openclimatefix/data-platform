@@ -82,6 +82,10 @@ service DataPlatformDataService {
    */
   rpc StreamForecastData(StreamForecastDataRequest) returns (stream StreamForecastDataResponse) {}
 
+  /* StreamCreateForecasts allows for efficient batch creation of multiple forecasts and their values.
+  Note: This method is executed in a single transaction. To prevent resource exhaustion, a maximum of 5000 forecasts can be sent per stream. Exceeding this limit will abort the stream and roll back all inserts. */
+  rpc StreamCreateForecasts(stream CreateForecastRequest) returns (StreamCreateForecastsResponse) {}
+
 }
 
 

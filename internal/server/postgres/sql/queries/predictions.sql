@@ -63,7 +63,7 @@ ORDER BY forecaster_name ASC, created_at_utc DESC;
 
 /* --- Forecasts ------------------------------------------------------------------------------ */
 
--- name: CreateForecast :one
+-- name: CreateForecasts :copyfrom
 INSERT INTO pred.forecasts (
     forecast_uuid,
     geometry_uuid,
@@ -75,30 +75,8 @@ INSERT INTO pred.forecasts (
     metadata,
     created_at_utc
 ) VALUES (
-    UUIDV7($4::TIMESTAMP),
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    TSRANGE(
-        $4::TIMESTAMP + MAKE_INTERVAL(mins => sqlc.arg(first_horizon_mins)::INTEGER),
-        $4::TIMESTAMP + MAKE_INTERVAL(mins => sqlc.arg(last_horizon_mins)::INTEGER),
-        '[]'
-    ),
-    CASE WHEN sqlc.arg(metadata)::JSONB = '{}'::JSONB THEN NULL ELSE sqlc.arg(metadata)::JSONB END,
-    CASE
-        WHEN sqlc.narg(created_at_utc)::TIMESTAMP IS NULL THEN CURRENT_TIMESTAMP ELSE
-            sqlc.narg(created_at_utc)::TIMESTAMP
-    END
-) RETURNING
-    forecast_uuid,
-    init_time_utc,
-    source_type_id,
-    geometry_uuid,
-    forecaster_id,
-    target_period,
-    metadata;
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+);
 
 -- name: DeleteForecastByUUID :exec
 DELETE FROM pred.forecasts

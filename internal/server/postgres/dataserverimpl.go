@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,6 +74,66 @@ func extractSIPStatPtrFromMap(m map[string]float32, key string) *int16 {
 	sip_val := int16(val * 30000.0)
 
 	return &sip_val
+}
+
+// prepareForecastParams generates the database parameters for a single forecast from a gRPC request.
+func prepareForecastParams(
+	req *pb.CreateForecastRequest,
+	geometryUuid uuid.UUID,
+	sourceTypeId int16,
+	forecasterId int32,
+) (db.CreateForecastsParams, error) {
+	initTime := req.InitTimeUtc.AsTime().Truncate(time.Minute)
+
+	fUuid, err := uuid.NewV7()
+	if err != nil {
+		return db.CreateForecastsParams{}, fmt.Errorf("failed to generate uuidv7: %w", err)
+	}
+
+	// Manually overwrite the 48-bit timestamp with the initTime milliseconds
+	ms := uint64(initTime.UnixMilli())
+	fUuid[0] = byte(ms >> 40)
+	fUuid[1] = byte(ms >> 32)
+	fUuid[2] = byte(ms >> 24)
+	fUuid[3] = byte(ms >> 16)
+	fUuid[4] = byte(ms >> 8)
+	fUuid[5] = byte(ms)
+
+	firstHorizon := int32(req.Values[0].HorizonMins)
+	lastHorizon := int32(req.Values[len(req.Values)-1].HorizonMins)
+
+	periodStart := initTime.Add(time.Duration(firstHorizon) * time.Minute)
+	periodEnd := initTime.Add(time.Duration(lastHorizon) * time.Minute)
+
+	targetPeriod := pgtype.Range[pgtype.Timestamp]{
+		Lower:     pgtype.Timestamp{Time: periodStart, Valid: true},
+		Upper:     pgtype.Timestamp{Time: periodEnd, Valid: true},
+		LowerType: pgtype.Inclusive,
+		UpperType: pgtype.Inclusive,
+		Valid:     true,
+	}
+
+	var createdTime pgtype.Timestamp
+	if req.CreatedTimestampUtc != nil {
+		createdTime = pgtype.Timestamp{Time: req.CreatedTimestampUtc.AsTime(), Valid: true}
+	} else {
+		createdTime = pgtype.Timestamp{
+			Time:  time.Now().UTC().Truncate(time.Minute),
+			Valid: true,
+		}
+	}
+
+	return db.CreateForecastsParams{
+		ForecastUuid:        fUuid,
+		GeometryUuid:        geometryUuid,
+		SourceTypeID:        sourceTypeId,
+		ForecasterID:        forecasterId,
+		InitTimeUtc:         pgtype.Timestamp{Time: initTime, Valid: true},
+		ValueResolutionMins: int16(req.Values[1].HorizonMins - req.Values[0].HorizonMins),
+		TargetPeriod:        targetPeriod,
+		Metadata:            req.Metadata,
+		CreatedAtUtc:        createdTime,
+	}, nil
 }
 
 // --- Server Implementation ----------------------------------------------------------------------
@@ -146,21 +207,22 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		Msg("found forecaster")
 
 	// Create a new forecast
-	cfprms := db.CreateForecastParams{
-		GeometryUuid:        uuid.MustParse(req.LocationUuid),
-		SourceTypeID:        dbSource.SourceTypeID,
-		ForecasterID:        dbForecaster.ForecasterID,
-		ValueResolutionMins: int16(resolution_mins),
-		InitTimeUtc:         timeptrToPgTimestamp(req.InitTimeUtc),
-		FirstHorizonMins:    int32(req.Values[0].HorizonMins),
-		// Okay to take the last value as we checked it was monotonically increasing above
-		LastHorizonMins: int32(req.Values[len(req.Values)-1].HorizonMins),
-		Metadata:        req.Metadata,
-		CreatedAtUtc:    timeptrToPgTimestamp(req.CreatedTimestampUtc),
+	fParams, err := prepareForecastParams(
+		req,
+		uuid.MustParse(req.LocationUuid),
+		dbSource.SourceTypeID,
+		dbForecaster.ForecasterID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare forecast params: %w", err)
 	}
 
-	dbForecast, err := querier.CreateForecast(ctx, cfprms)
-	if err != nil {
+	countF, err := querier.CreateForecasts(ctx, []db.CreateForecastsParams{fParams})
+	if err != nil || countF < 1 {
+		if err == nil {
+			err = errors.New("inserted forecasts count less than requested")
+		}
+
 		return nil, fmt.Errorf("invalid forecast: %w", err)
 	}
 
@@ -176,7 +238,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 			P75Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p75"),
 			P90Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p90"),
 			P98Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p98"),
-			ForecastUuid: dbForecast.ForecastUuid,
+			ForecastUuid: fParams.ForecastUuid,
 		}
 	}
 
@@ -190,17 +252,17 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 	}
 
 	l.Debug().
-		Str("dp.forecast.uuid", dbForecast.ForecastUuid.String()).
-		Str("dp.geometry.uuid", dbForecast.GeometryUuid.String()).
-		Str("dp.forecast.init_time", dbForecast.InitTimeUtc.Time.String()).
+		Str("dp.forecast.uuid", fParams.ForecastUuid.String()).
+		Str("dp.geometry.uuid", fParams.GeometryUuid.String()).
+		Str("dp.forecast.init_time", fParams.InitTimeUtc.Time.String()).
 		Str("dp.forecast.target_period", fmt.Sprintf(
 			"%s - %s",
-			dbForecast.TargetPeriod.Lower.Time.String(),
-			dbForecast.TargetPeriod.Upper.Time.String(),
+			fParams.TargetPeriod.Lower.Time.String(),
+			fParams.TargetPeriod.Upper.Time.String(),
 		)).Msgf("created forecast")
 
 	return &pb.CreateForecastResponse{
-		ForecastUuid: dbForecast.ForecastUuid.String(),
+		ForecastUuid: fParams.ForecastUuid.String(),
 	}, nil
 }
 
@@ -1780,6 +1842,214 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 	return &pb.ListLocationsResponse{
 		Locations: locations,
 	}, nil
+}
+
+// StreamCreateForecasts efficiently creates multiple forecasts and their predictions via copyfrom batching.
+func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
+	stream grpc.ClientStreamingServer[pb.CreateForecastRequest, pb.StreamCreateForecastsResponse],
+) error {
+	ctx := stream.Context()
+	pool := ix.GetPoolFromContext(ctx)
+
+	tx, err := pool.Begin(ctx)
+	querier := db.New(tx)
+
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to begin transaction: %v", err)
+	}
+
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const (
+		batchSize  = 500
+		maxBatches = 10
+	)
+	batchesProcessed := 0
+
+	var (
+		forecastParams []db.CreateForecastsParams
+		valueParams    []db.CreatePredictedValuesParams
+		createdUuids   []string
+		batchUuids     []string
+	)
+
+	// In-memory caches to avoid hammering the database for repeated forecaster/source lookups
+	type sourceKey struct {
+		locationUuid string
+		sourceTypeId int16
+	}
+
+	type sourceInfo struct {
+		capacityWatts int64
+		geometryUuid  uuid.UUID
+	}
+
+	type forecasterKey struct {
+		name    string
+		version string
+	}
+
+	sourceCache := make(map[sourceKey]sourceInfo)
+	forecasterCache := make(map[forecasterKey]int32)
+
+	flushBatch := func() error {
+		if len(forecastParams) == 0 {
+			return nil
+		}
+
+		countF, err := querier.CreateForecasts(ctx, forecastParams)
+		if err != nil || countF < int64(len(forecastParams)) {
+			if err == nil {
+				err = errors.New("inserted forecasts count less than requested")
+			}
+
+			return fmt.Errorf("failed to insert forecasts batch: %w", err)
+		}
+
+		countV, err := querier.CreatePredictedValues(ctx, valueParams)
+		if err != nil || countV < int64(len(valueParams)) {
+			if err == nil {
+				err = errors.New("inserted predicted values count less than requested")
+			}
+
+			return fmt.Errorf("failed to insert predicted values batch: %w", err)
+		}
+
+		createdUuids = append(createdUuids, batchUuids...)
+
+		// Reset batch buffers
+		forecastParams = forecastParams[:0]
+		valueParams = valueParams[:0]
+		batchUuids = batchUuids[:0]
+
+		batchesProcessed++
+		if batchesProcessed > maxBatches {
+			return status.Error(
+				codes.InvalidArgument,
+				fmt.Sprintf(
+					"maximum number of forecasts per stream exceeded (%d)",
+					maxBatches*batchSize,
+				),
+			)
+		}
+
+		return nil
+	}
+
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			return fmt.Errorf("error receiving from stream: %w", err)
+		}
+
+		fKey := forecasterKey{
+			name:    req.Forecaster.ForecasterName,
+			version: req.Forecaster.ForecasterVersion,
+		}
+
+		fId, ok := forecasterCache[fKey]
+		if !ok {
+			pctprms := db.GetForecasterElseLatestParams{
+				ForecasterName:    fKey.name,
+				ForecasterVersion: fKey.version,
+			}
+
+			dbForecaster, err := querier.GetForecasterElseLatest(ctx, pctprms)
+			if err != nil {
+				return fmt.Errorf(
+					"no forecaster found for name '%s' and version '%s': %w",
+					fKey.name,
+					fKey.version,
+					err,
+				)
+			}
+
+			fId = dbForecaster.ForecasterID
+			forecasterCache[fKey] = fId
+		}
+
+		sKey := sourceKey{
+			locationUuid: req.LocationUuid,
+			sourceTypeId: int16(req.EnergySource.Number()),
+		}
+
+		sInfo, ok := sourceCache[sKey]
+		if !ok {
+			gsprms := db.GetSourceAtTimestampParams{
+				GeometryUuid:   uuid.MustParse(req.LocationUuid),
+				SourceTypeID:   sKey.sourceTypeId,
+				AtTimestampUtc: timeptrToPgTimestamp(req.InitTimeUtc),
+			}
+
+			dbSource, err := querier.GetSourceAtTimestamp(ctx, gsprms)
+			if err != nil {
+				return fmt.Errorf(
+					"no location source found for name '%s' with source type '%s': %w",
+					req.LocationUuid,
+					req.EnergySource,
+					err,
+				)
+			}
+
+			sInfo = sourceInfo{
+				capacityWatts: dbSource.CapacityWatts,
+				geometryUuid:  dbSource.GeometryUuid,
+			}
+			sourceCache[sKey] = sInfo
+		}
+
+		fParams, err := prepareForecastParams(
+			req,
+			sInfo.geometryUuid,
+			sKey.sourceTypeId,
+			fId,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to prepare forecast params: %w", err)
+		}
+
+		forecastParams = append(forecastParams, fParams)
+
+		for _, value := range req.Values {
+			valueParams = append(valueParams, db.CreatePredictedValuesParams{
+				HorizonMins:  int16(value.HorizonMins),
+				P02Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p02"),
+				P10Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p10"),
+				P25Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p25"),
+				P50Sip:       int16(value.P50Fraction * 30000.0),
+				P75Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p75"),
+				P90Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p90"),
+				P98Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p98"),
+				ForecastUuid: fParams.ForecastUuid,
+			})
+		}
+
+		batchUuids = append(batchUuids, fParams.ForecastUuid.String())
+
+		// Flush if we hit the batch size limit
+		if len(forecastParams) >= batchSize {
+			if err := flushBatch(); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Flush any remaining requests
+	if err := flushBatch(); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	}
+
+	return stream.SendAndClose(&pb.StreamCreateForecastsResponse{
+		ForecastUuids: createdUuids,
+	})
 }
 
 // Compile-time check to ensure the interface is implemented fully.
