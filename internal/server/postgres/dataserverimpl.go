@@ -31,51 +31,6 @@ import (
 // --- Reuseable Functions for Route Logic -------------------------------------------------------
 
 // timeWindowToPgWindow converts a TimeWindow protobuf message to a pair of pgtype.Timestamp values.
-func timeWindowToPgWindow(
-	window *pb.TimeWindow,
-) (start pgtype.Timestamp, end pgtype.Timestamp, err error) {
-	currentTime := time.Now().UTC()
-	if window == nil || (window.StartTimestampUtc == nil && window.EndTimestampUtc == nil) {
-		start = pgtype.Timestamp{Time: currentTime.Add(-48 * time.Hour), Valid: true}
-		end = pgtype.Timestamp{Time: currentTime.Add(36 * time.Hour), Valid: true}
-	} else if window.StartTimestampUtc != nil && window.EndTimestampUtc != nil {
-		start = pgtype.Timestamp{Time: window.StartTimestampUtc.AsTime(), Valid: true}
-		end = pgtype.Timestamp{Time: window.EndTimestampUtc.AsTime(), Valid: true}
-	} else {
-		err = errors.New(
-			"invalid time window: both start and end timestamps must be provided or neither",
-		)
-	}
-
-	return start, end, err
-}
-
-// timeptrToPgTimestamp converts a protobuf Timestamp pointer to a pgtype.Timestamp.
-// If the pointer is nil, it returns the current time truncated to the nearest minute.
-func timeptrToPgTimestamp(t *timestamppb.Timestamp) pgtype.Timestamp {
-	if t == nil {
-		return pgtype.Timestamp{
-			Time:  time.Now().UTC().Truncate(time.Minute),
-			Valid: true,
-		}
-	}
-
-	return pgtype.Timestamp{Time: t.AsTime().UTC(), Valid: true}
-}
-
-// extractSIPStatPtrFromMap gets a key's value from a map as a pointer, and converts it
-// to a smallint percentage. If it doesn't exist, it returns nil.
-func extractSIPStatPtrFromMap(m map[string]float32, key string) *int16 {
-	val, exists := m[key]
-	if !exists {
-		return nil
-	}
-
-	sip_val := int16(val * 30000.0)
-
-	return &sip_val
-}
-
 // prepareForecastParams generates the database parameters for a single forecast from a gRPC request.
 func prepareForecastParams(
 	req *pb.CreateForecastRequest,
@@ -327,19 +282,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestForecasts(
 		Int("dp.forecasts.count", len(dbListForecasts)).
 		Msg("fetched latest forecasts")
 
-	forecasts := make([]*pb.GetLatestForecastsResponse_Forecast, len(dbListForecasts))
-	for i, fc := range dbListForecasts {
-		forecasts[i] = &pb.GetLatestForecastsResponse_Forecast{
-			InitializationTimestampUtc: timestamppb.New(fc.InitTimeUtc.Time),
-			Forecaster: &pb.Forecaster{
-				ForecasterName:    fc.ForecasterName,
-				ForecasterVersion: fc.ForecasterVersion,
-			},
-			LocationUuid:        fc.GeometryUuid.String(),
-			Metadata:            fc.Metadata,
-			CreatedTimestampUtc: timestamppb.New(fc.CreatedAtUtc.Time),
-		}
-	}
+	forecasts := MapSlice(dbListForecasts, mapLatestForecast)
 
 	return &pb.GetLatestForecastsResponse{
 		Forecasts: forecasts,
@@ -444,13 +387,7 @@ func (s *DataPlatformDataServiceServerImpl) ListForecasters(
 		return nil, fmt.Errorf("no forecasters found with the specified filters: %w", err)
 	}
 
-	forecasters := make([]*pb.Forecaster, len(dbListForecasters))
-	for i, fc := range dbListForecasters {
-		forecasters[i] = &pb.Forecaster{
-			ForecasterName:    fc.ForecasterName,
-			ForecasterVersion: fc.ForecasterVersion,
-		}
-	}
+	forecasters := MapSlice(dbListForecasters, mapForecaster)
 
 	return &pb.ListForecastersResponse{
 		Forecasters: forecasters,
@@ -553,53 +490,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 						)
 					}
 
-					otherStatistics := make(map[string]float32)
-					if row.P02Sip != nil {
-						otherStatistics["p02"] = float32(*row.P02Sip) / 30000.0
-					}
-
-					if row.P10Sip != nil {
-						otherStatistics["p10"] = float32(*row.P10Sip) / 30000.0
-					}
-
-					if row.P25Sip != nil {
-						otherStatistics["p25"] = float32(*row.P25Sip) / 30000.0
-					}
-
-					if row.P75Sip != nil {
-						otherStatistics["p75"] = float32(*row.P75Sip) / 30000.0
-					}
-
-					if row.P90Sip != nil {
-						otherStatistics["p90"] = float32(*row.P90Sip) / 30000.0
-					}
-
-					if row.P98Sip != nil {
-						otherStatistics["p98"] = float32(*row.P98Sip) / 30000.0
-					}
-
-					metadata := make(map[string]string)
-					if req.IncludeMetadata && row.Metadata != nil {
-						for k, v := range row.Metadata.AsMap() {
-							metadata[k] = v.(string)
-						}
-					}
-
-					batch = append(batch, &pb.ForecastDatum{
-						InitTimestamp: timestamppb.New(row.InitTimeUtc.Time),
-						LocationUuid:  locationUuid.String(),
-						ForecasterFullname: fmt.Sprintf(
-							"%s:%s",
-							row.ForecasterName,
-							row.ForecasterVersion,
-						),
-						HorizonMins:              uint32(row.HorizonMins),
-						P50Fraction:              float32(row.P50Sip) / 30000.0,
-						OtherStatisticsFractions: otherStatistics,
-						CreatedTimestampUtc:      timestamppb.New(row.CreatedAtUtc.Time),
-						EffectiveCapacityWatts:   uint64(row.CapacityWatts),
-						Metadata:                 metadata,
-					})
+					batch = append(batch, mapStreamedForecastDatum(row, locationUuid, req.IncludeMetadata))
 					if len(batch) == batchSize {
 						select {
 						case resChan <- &pb.StreamForecastDataResponse{Values: batch}:
@@ -737,16 +628,9 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	}
 
 	// Convert the deltas to the response format
-	deltas := make([]*pb.GetWeekAverageDeltasResponse_AverageDelta, len(dbDeltas))
-	for i, delta := range dbDeltas {
-		deltas[i] = &pb.GetWeekAverageDeltasResponse_AverageDelta{
-			DeltaFraction: float32(delta.AvgDeltaSip) / 30000.0,
-			HorizonMins:   uint32(delta.HorizonMins),
-			EffectiveCapacityWatts: uint64(
-				dbSource.CapacityWatts,
-			), // Should this be done over time?
-		}
-	}
+	deltas := MapSlice(dbDeltas, func(row db.GetWeekAverageDeltasForLocationsRow) *pb.GetWeekAverageDeltasResponse_AverageDelta {
+		return mapWeekAverageDelta(row, dbSource.CapacityWatts)
+	})
 
 	return &pb.GetWeekAverageDeltasResponse{
 		Deltas:        deltas,
@@ -795,14 +679,7 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 		)
 	}
 
-	values := make([]*pb.GetObservationsAsTimeseriesResponse_Value, len(dbObs))
-	for i, obs := range dbObs {
-		values[i] = &pb.GetObservationsAsTimeseriesResponse_Value{
-			ValueFraction:          float32(obs.ValueSip) / 30000.0,
-			TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
-			EffectiveCapacityWatts: uint64(obs.CapacityWatts),
-		}
-	}
+	values := MapSlice(dbObs, mapObservationAsTimeseries)
 
 	return &pb.GetObservationsAsTimeseriesResponse{
 		LocationUuid: locationUuid.String(),
@@ -918,15 +795,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestObservations(
 		return nil, fmt.Errorf("backend communication error: %w", err)
 	}
 
-	observations := make([]*pb.GetLatestObservationsResponse_Observation, len(dbObs))
-	for i, obs := range dbObs {
-		observations[i] = &pb.GetLatestObservationsResponse_Observation{
-			LocationUuid:           obs.GeometryUuid.String(),
-			TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
-			ValueFraction:          float32(obs.ValueSip) / 30000.0,
-			EffectiveCapacityWatts: uint64(obs.CapacityWatts),
-		}
-	}
+	observations := MapSlice(dbObs, mapLatestObservation)
 
 	l.Debug().
 		Int16("dp.source.type_id", goprms.SourceTypeID).
@@ -978,13 +847,7 @@ func (s *DataPlatformDataServiceServerImpl) ListObservers(
 		Int("dp.observers.count", len(dbListObservers)).
 		Msg("found observers")
 
-	observers := make([]*pb.ListObserversResponse_ObserverSummary, len(dbListObservers))
-	for i, ob := range dbListObservers {
-		observers[i] = &pb.ListObserversResponse_ObserverSummary{
-			ObserverUuid: ob.ObserverUuid.String(),
-			ObserverName: ob.ObserverName,
-		}
-	}
+	observers := MapSlice(dbListObservers, mapObserver)
 
 	return &pb.ListObserversResponse{
 		Observers: observers,
@@ -1047,48 +910,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 		)
 	}
 
-	values := make([]*pb.GetForecastAtTimestampResponse_Value, len(dbPredictions))
-	for i, value := range dbPredictions {
-		otherStats := make(map[string]float32)
-		if value.P02Sip != nil {
-			otherStats["p02"] = float32(*value.P02Sip) / 30000.0
-		}
-
-		if value.P10Sip != nil {
-			otherStats["p10"] = float32(*value.P10Sip) / 30000.0
-		}
-
-		if value.P25Sip != nil {
-			otherStats["p25"] = float32(*value.P25Sip) / 30000.0
-		}
-
-		if value.P75Sip != nil {
-			otherStats["p75"] = float32(*value.P75Sip) / 30000.0
-		}
-
-		if value.P90Sip != nil {
-			otherStats["p90"] = float32(*value.P90Sip) / 30000.0
-		}
-
-		if value.P98Sip != nil {
-			otherStats["p98"] = float32(*value.P98Sip) / 30000.0
-		}
-
-		values[i] = &pb.GetForecastAtTimestampResponse_Value{
-			ValueFraction:          float32(value.P50Sip) / 30000.0,
-			EffectiveCapacityWatts: uint64(value.CapacityWatts),
-			LocationUuid:           value.GeometryUuid.String(),
-			LocationName:           value.GeometryName,
-			Latlng: &pb.LatLng{
-				Latitude:  value.Latitude,
-				Longitude: value.Longitude,
-			},
-			Metadata:                   value.Metadata,
-			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
-			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
-			OtherStatisticsFractions:   otherStats,
-		}
-	}
+	values := MapSlice(dbPredictions, mapPredictionAtTime)
 
 	return &pb.GetForecastAtTimestampResponse{
 		TimestampUtc: req.TimestampUtc,
@@ -1139,18 +961,7 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAtTimestamp(
 		)
 	}
 
-	observations := make([]*pb.GetObservationsAtTimestampResponse_Value, len(dbObs))
-	for i, obs := range dbObs {
-		observations[i] = &pb.GetObservationsAtTimestampResponse_Value{
-			ValueFraction:          float32(obs.ValueSip) / 30000.0,
-			EffectiveCapacityWatts: uint64(obs.CapacityWatts),
-			LocationUuid:           obs.GeometryUuid.String(),
-			Latlng: &pb.LatLng{
-				Latitude:  obs.Latitude,
-				Longitude: obs.Longitude,
-			},
-		}
-	}
+	observations := MapSlice(dbObs, mapObservationAtTimestamp)
 
 	return &pb.GetObservationsAtTimestampResponse{
 		TimestampUtc: req.TimestampUtc,
@@ -1245,14 +1056,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationAsTimeseries(
 		)
 	}
 
-	values := make([]*pb.GetLocationAsTimeseriesResponse_LocationSnapshot, len(dbValues))
-	for i, v := range dbValues {
-		values[i] = &pb.GetLocationAsTimeseriesResponse_LocationSnapshot{
-			EffectiveCapacityWatts: uint64(v.CapacityWatts),
-			TimestampUtc:           timestamppb.New(v.ValidFromUtc.Time),
-			Metadata:               v.Metadata,
-		}
-	}
+	values := MapSlice(dbValues, mapLocationSnapshot)
 
 	return &pb.GetLocationAsTimeseriesResponse{
 		Values: values,
@@ -1568,45 +1372,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			return nil, fmt.Errorf("no forecasts found for the given parameters: %w", err)
 		}
 
-		out := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbPreds))
-		for i, pred := range dbPreds {
-			otherStats := make(map[string]float32)
-			if pred.P02Sip != nil {
-				otherStats["p02"] = float32(*pred.P02Sip) / 30000.0
-			}
-
-			if pred.P10Sip != nil {
-				otherStats["p10"] = float32(*pred.P10Sip) / 30000.0
-			}
-
-			if pred.P25Sip != nil {
-				otherStats["p25"] = float32(*pred.P25Sip) / 30000.0
-			}
-
-			if pred.P75Sip != nil {
-				otherStats["p75"] = float32(*pred.P75Sip) / 30000.0
-			}
-
-			if pred.P90Sip != nil {
-				otherStats["p90"] = float32(*pred.P90Sip) / 30000.0
-			}
-
-			if pred.P98Sip != nil {
-				otherStats["p98"] = float32(*pred.P98Sip) / 30000.0
-			}
-
-			out[i] = &pb.GetForecastAsTimeseriesResponse_Value{
-				TargetTimestampUtc: timestamppb.New(
-					pred.InitTimeUtc.Time.Add(time.Duration(pred.HorizonMins) * time.Minute),
-				),
-				P50ValueFraction:           float32(pred.P50Sip) / 30000.0,
-				EffectiveCapacityWatts:     uint64(pred.CapacityWatts),
-				InitializationTimestampUtc: timestamppb.New(pred.InitTimeUtc.Time),
-				CreatedTimestampUtc:        timestamppb.New(pred.CreatedAtUtc.Time),
-				OtherStatisticsFractions:   otherStats,
-				Metadata:                   pred.Metadata,
-			}
-		}
+		out := MapSlice(dbPreds, mapForecastAsTimeseriesFromForecastValue)
 
 		return &pb.GetForecastAsTimeseriesResponse{
 			LocationUuid: req.LocationUuid,
@@ -1674,43 +1440,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 			Msg(fmt.Sprintf("found %d predictions", len(dbValues)))
 	}
 
-	values := make([]*pb.GetForecastAsTimeseriesResponse_Value, len(dbValues))
-	for i, value := range dbValues {
-		otherStats := make(map[string]float32)
-		if value.P02Sip != nil {
-			otherStats["p02"] = float32(*value.P02Sip) / 30000.0
-		}
-
-		if value.P10Sip != nil {
-			otherStats["p10"] = float32(*value.P10Sip) / 30000.0
-		}
-
-		if value.P25Sip != nil {
-			otherStats["p25"] = float32(*value.P25Sip) / 30000.0
-		}
-
-		if value.P75Sip != nil {
-			otherStats["p75"] = float32(*value.P75Sip) / 30000.0
-		}
-
-		if value.P90Sip != nil {
-			otherStats["p90"] = float32(*value.P90Sip) / 30000.0
-		}
-
-		if value.P98Sip != nil {
-			otherStats["p98"] = float32(*value.P98Sip) / 30000.0
-		}
-
-		values[i] = &pb.GetForecastAsTimeseriesResponse_Value{
-			TargetTimestampUtc:         timestamppb.New(value.TargetTimeUtc.Time),
-			P50ValueFraction:           float32(value.P50Sip) / 30000.0,
-			OtherStatisticsFractions:   otherStats,
-			EffectiveCapacityWatts:     uint64(value.CapacityWatts),
-			InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
-			CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
-			Metadata:                   value.Metadata,
-		}
-	}
+	values := MapSlice(dbValues, mapForecastAsTimeseriesFromLocationValue)
 
 	return &pb.GetForecastAsTimeseriesResponse{
 		LocationUuid: dbSource.GeometryUuid.String(),
@@ -1762,18 +1492,10 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 		}
 
 		for _, loc := range glResp {
-			locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
-				LocationUuid: loc.GeometryUuid.String(),
-				LocationName: loc.GeometryName,
-				Latlng: &pb.LatLng{
-					Latitude:  loc.Latitude,
-					Longitude: loc.Longitude,
-				},
-				EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-				EnergySource:           pb.EnergySource(loc.SourceTypeID),
-				LocationType:           pb.LocationType(loc.GeometryTypeID),
-				Metadata:               loc.MetadataJsonb,
-			})
+			locations = append(locations, mapLocationSummary(
+				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
+				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
+			))
 		}
 	} else if req.EnclosedLocationUuidFilter != nil {
 		llprms := db.ListSourcesAtTimestampWithoutParams{
@@ -1791,18 +1513,10 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 		}
 
 		for _, loc := range glResp {
-			locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
-				LocationUuid: loc.GeometryUuid.String(),
-				LocationName: loc.GeometryName,
-				Latlng: &pb.LatLng{
-					Latitude:  loc.Latitude,
-					Longitude: loc.Longitude,
-				},
-				EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-				EnergySource:           pb.EnergySource(loc.SourceTypeID),
-				LocationType:           pb.LocationType(loc.GeometryTypeID),
-				Metadata:               loc.MetadataJsonb,
-			})
+			locations = append(locations, mapLocationSummary(
+				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
+				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
+			))
 		}
 	} else {
 		lsprms := db.ListSourcesAtTimestampParams{
@@ -1820,18 +1534,10 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 		}
 
 		for _, loc := range glResp {
-			locations = append(locations, &pb.ListLocationsResponse_LocationSummary{
-				LocationUuid: loc.GeometryUuid.String(),
-				LocationName: loc.GeometryName,
-				Latlng: &pb.LatLng{
-					Latitude:  loc.Latitude,
-					Longitude: loc.Longitude,
-				},
-				EffectiveCapacityWatts: uint64(loc.CapacityWatts),
-				EnergySource:           pb.EnergySource(loc.SourceTypeID),
-				LocationType:           pb.LocationType(loc.GeometryTypeID),
-				Metadata:               loc.MetadataJsonb,
-			})
+			locations = append(locations, mapLocationSummary(
+				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
+				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
+			))
 		}
 	}
 

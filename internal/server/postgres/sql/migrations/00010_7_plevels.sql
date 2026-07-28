@@ -18,5 +18,5 @@ ALTER TABLE pred.predicted_generation_values
 ALTER TABLE pred.predicted_generation_values
     DROP COLUMN p02_sip,
     DROP COLUMN p25_sip,
-    DROP COLUMN p75_sip;
-    DROP COLUMN p98_sip,
+    DROP COLUMN p75_sip,
+    DROP COLUMN p98_sip;
