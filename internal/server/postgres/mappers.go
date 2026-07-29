@@ -106,6 +106,66 @@ func buildOtherStatsMap(p02, p10, p25, p75, p90, p98 *int16) map[string]float32 
 	return otherStats
 }
 
+// mapCreateForecast generates the database parameters for a single forecast from a gRPC request.
+func mapCreateForecast(
+	req *pb.CreateForecastRequest,
+	geometryUuid uuid.UUID,
+	sourceTypeId int16,
+	forecasterId int32,
+) (db.CreateForecastsParams, error) {
+	initTime := req.InitTimeUtc.AsTime().Truncate(time.Minute)
+
+	fUuid, err := uuid.NewV7()
+	if err != nil {
+		return db.CreateForecastsParams{}, fmt.Errorf("failed to generate uuidv7: %w", err)
+	}
+
+	// Manually overwrite the 48-bit timestamp with the initTime milliseconds
+	ms := uint64(initTime.UnixMilli())
+	fUuid[0] = byte(ms >> 40)
+	fUuid[1] = byte(ms >> 32)
+	fUuid[2] = byte(ms >> 24)
+	fUuid[3] = byte(ms >> 16)
+	fUuid[4] = byte(ms >> 8)
+	fUuid[5] = byte(ms)
+
+	firstHorizon := int32(req.Values[0].HorizonMins)
+	lastHorizon := int32(req.Values[len(req.Values)-1].HorizonMins)
+
+	periodStart := initTime.Add(time.Duration(firstHorizon) * time.Minute)
+	periodEnd := initTime.Add(time.Duration(lastHorizon) * time.Minute)
+
+	targetPeriod := pgtype.Range[pgtype.Timestamp]{
+		Lower:     pgtype.Timestamp{Time: periodStart, Valid: true},
+		Upper:     pgtype.Timestamp{Time: periodEnd, Valid: true},
+		LowerType: pgtype.Inclusive,
+		UpperType: pgtype.Inclusive,
+		Valid:     true,
+	}
+
+	var createdTime pgtype.Timestamp
+	if req.CreatedTimestampUtc != nil {
+		createdTime = pgtype.Timestamp{Time: req.CreatedTimestampUtc.AsTime(), Valid: true}
+	} else {
+		createdTime = pgtype.Timestamp{
+			Time:  time.Now().UTC().Truncate(time.Minute),
+			Valid: true,
+		}
+	}
+
+	return db.CreateForecastsParams{
+		ForecastUuid:        fUuid,
+		GeometryUuid:        geometryUuid,
+		SourceTypeID:        sourceTypeId,
+		ForecasterID:        forecasterId,
+		InitTimeUtc:         pgtype.Timestamp{Time: initTime, Valid: true},
+		ValueResolutionMins: int16(req.Values[1].HorizonMins - req.Values[0].HorizonMins),
+		TargetPeriod:        targetPeriod,
+		Metadata:            req.Metadata,
+		CreatedAtUtc:        createdTime,
+	}, nil
+}
+
 func mapLatestForecast(
 	fc db.GetLatestForecastsAtHorizonSincePivotRow,
 ) *pb.GetLatestForecastsResponse_Forecast {

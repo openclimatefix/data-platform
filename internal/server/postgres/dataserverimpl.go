@@ -28,71 +28,6 @@ import (
 	db "github.com/openclimatefix/data-platform/internal/server/postgres/gen"
 )
 
-// --- Reuseable Functions for Route Logic -------------------------------------------------------
-
-// timeWindowToPgWindow converts a TimeWindow protobuf message to a pair of pgtype.Timestamp values.
-// PrepareForecastParams generates the database parameters for a single forecast from a gRPC request.
-func prepareForecastParams(
-	req *pb.CreateForecastRequest,
-	geometryUuid uuid.UUID,
-	sourceTypeId int16,
-	forecasterId int32,
-) (db.CreateForecastsParams, error) {
-	initTime := req.InitTimeUtc.AsTime().Truncate(time.Minute)
-
-	fUuid, err := uuid.NewV7()
-	if err != nil {
-		return db.CreateForecastsParams{}, fmt.Errorf("failed to generate uuidv7: %w", err)
-	}
-
-	// Manually overwrite the 48-bit timestamp with the initTime milliseconds
-	ms := uint64(initTime.UnixMilli())
-	fUuid[0] = byte(ms >> 40)
-	fUuid[1] = byte(ms >> 32)
-	fUuid[2] = byte(ms >> 24)
-	fUuid[3] = byte(ms >> 16)
-	fUuid[4] = byte(ms >> 8)
-	fUuid[5] = byte(ms)
-
-	firstHorizon := int32(req.Values[0].HorizonMins)
-	lastHorizon := int32(req.Values[len(req.Values)-1].HorizonMins)
-
-	periodStart := initTime.Add(time.Duration(firstHorizon) * time.Minute)
-	periodEnd := initTime.Add(time.Duration(lastHorizon) * time.Minute)
-
-	targetPeriod := pgtype.Range[pgtype.Timestamp]{
-		Lower:     pgtype.Timestamp{Time: periodStart, Valid: true},
-		Upper:     pgtype.Timestamp{Time: periodEnd, Valid: true},
-		LowerType: pgtype.Inclusive,
-		UpperType: pgtype.Inclusive,
-		Valid:     true,
-	}
-
-	var createdTime pgtype.Timestamp
-	if req.CreatedTimestampUtc != nil {
-		createdTime = pgtype.Timestamp{Time: req.CreatedTimestampUtc.AsTime(), Valid: true}
-	} else {
-		createdTime = pgtype.Timestamp{
-			Time:  time.Now().UTC().Truncate(time.Minute),
-			Valid: true,
-		}
-	}
-
-	return db.CreateForecastsParams{
-		ForecastUuid:        fUuid,
-		GeometryUuid:        geometryUuid,
-		SourceTypeID:        sourceTypeId,
-		ForecasterID:        forecasterId,
-		InitTimeUtc:         pgtype.Timestamp{Time: initTime, Valid: true},
-		ValueResolutionMins: int16(req.Values[1].HorizonMins - req.Values[0].HorizonMins),
-		TargetPeriod:        targetPeriod,
-		Metadata:            req.Metadata,
-		CreatedAtUtc:        createdTime,
-	}, nil
-}
-
-// --- Server Implementation ----------------------------------------------------------------------
-
 func NewDataPlatformDataServiceServerImpl() *DataPlatformDataServiceServerImpl {
 	return &DataPlatformDataServiceServerImpl{}
 }
@@ -100,8 +35,6 @@ func NewDataPlatformDataServiceServerImpl() *DataPlatformDataServiceServerImpl {
 // DataPlatformDataServiceServerImpl implements the pb.DataPlatformDataServiceServer interface.
 // It requires the database transaction for the request to be set in the context.
 type DataPlatformDataServiceServerImpl struct{}
-
-// --- Server Method Implementations --------------------------------------------------------------
 
 // CreateForecast implements dp.DataPlatformDataServiceServer.
 func (s *DataPlatformDataServiceServerImpl) CreateForecast(
@@ -162,14 +95,14 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		Msg("found forecaster")
 
 	// Create a new forecast
-	fParams, err := prepareForecastParams(
+	fParams, err := mapCreateForecast(
 		req,
 		uuid.MustParse(req.LocationUuid),
 		dbSource.SourceTypeID,
 		dbForecaster.ForecasterID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare forecast params: %w", err)
+		return nil, fmt.Errorf("failed to map forecast params: %w", err)
 	}
 
 	countF, err := querier.CreateForecasts(ctx, []db.CreateForecastsParams{fParams})
@@ -1687,7 +1620,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 			sourceCache[sKey] = sInfo
 		}
 
-		fParams, err := prepareForecastParams(
+		fParams, err := mapCreateForecast(
 			req,
 			sInfo.geometryUuid,
 			sKey.sourceTypeId,

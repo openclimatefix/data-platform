@@ -2691,7 +2691,7 @@ func TestPrepareForecastParams(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			params, err := prepareForecastParams(tc.req, geomID, sourceID, forecasterID)
+			params, err := mapCreateForecast(tc.req, geomID, sourceID, forecasterID)
 			if tc.shouldErr {
 				require.Error(t, err)
 				return
