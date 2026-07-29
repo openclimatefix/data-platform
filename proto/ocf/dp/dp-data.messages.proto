@@ -44,6 +44,12 @@ message TimeWindow {
     message: "start_timestamp_utc must be before end_timestamp_utc"
     expression: "this.start_timestamp_utc <= this.end_timestamp_utc"
   };
+
+  option (buf.validate.message).cel = {
+    id: "both_or_neither_timestamps"
+    message: "Both start and end timestamps must be provided or neither"
+    expression: "(has(this.start_timestamp_utc) && has(this.end_timestamp_utc)) || (!has(this.start_timestamp_utc) && !has(this.end_timestamp_utc))"
+  };
 }
 
 
@@ -547,12 +553,12 @@ message UpdateLocationRequest {
 
   // Ensure one of the updatable fields is set.
   option (buf.validate.message).cel = {
-    id: "at_least_one_field"
+    id: "has_update_field"
     message: "at least one updatable field must be set"
     expression: 
         "has(this.new_location_name) "
         "|| has(this.new_effective_capacity_watts) "
-        "|| has(this.new_metadata) ? true : false" 
+        "|| has(this.new_metadata)" 
   };
 }
 
@@ -584,8 +590,8 @@ message GetLocationsAsGeoJSONRequest {
     (buf.validate.field).repeated.max_items = 1000,
     (buf.validate.field).repeated.unique = true,
     (buf.validate.field).repeated.items = {
-      string: {uuid:  true}
-    } 
+      string: {uuid: true}
+    }
   ];
   /* If true, the GeoJSON will not be simplified.
    * Defaults to false if not set to reduce response size.

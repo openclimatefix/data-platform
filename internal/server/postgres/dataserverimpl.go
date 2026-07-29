@@ -31,7 +31,7 @@ import (
 // --- Reuseable Functions for Route Logic -------------------------------------------------------
 
 // timeWindowToPgWindow converts a TimeWindow protobuf message to a pair of pgtype.Timestamp values.
-// prepareForecastParams generates the database parameters for a single forecast from a gRPC request.
+// PrepareForecastParams generates the database parameters for a single forecast from a gRPC request.
 func prepareForecastParams(
 	req *pb.CreateForecastRequest,
 	geometryUuid uuid.UUID,
@@ -430,10 +430,7 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 
 				l.Debug().Str("loc", locStr).Msg("STARTING database query")
 
-				locationUuid, err := uuid.Parse(locStr)
-				if err != nil {
-					return status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
-				}
+				locationUuid := uuid.MustParse(locStr)
 
 				// Query with the pool directly so each concurrent request gets a fresh connection.
 				// This is to avoid very large data requests choking the memory of the API.
@@ -490,7 +487,10 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 						)
 					}
 
-					batch = append(batch, mapStreamedForecastDatum(row, locationUuid, req.IncludeMetadata))
+					batch = append(
+						batch,
+						mapStreamedForecastDatum(row, locationUuid, req.IncludeMetadata),
+					)
 					if len(batch) == batchSize {
 						select {
 						case resChan <- &pb.StreamForecastDataResponse{Values: batch}:
@@ -558,10 +558,7 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location and source
-	locationUuid, err := uuid.Parse(req.LocationUuid)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
-	}
+	locationUuid := uuid.MustParse(req.LocationUuid)
 
 	gstprms := db.GetSourceAtTimestampParams{
 		GeometryUuid:   locationUuid,
@@ -628,9 +625,12 @@ func (s *DataPlatformDataServiceServerImpl) GetWeekAverageDeltas(
 	}
 
 	// Convert the deltas to the response format
-	deltas := MapSlice(dbDeltas, func(row db.GetWeekAverageDeltasForLocationsRow) *pb.GetWeekAverageDeltasResponse_AverageDelta {
-		return mapWeekAverageDelta(row, dbSource.CapacityWatts)
-	})
+	deltas := MapSlice(
+		dbDeltas,
+		func(row db.GetWeekAverageDeltasForLocationsRow) *pb.GetWeekAverageDeltasResponse_AverageDelta {
+			return mapWeekAverageDelta(row, dbSource.CapacityWatts)
+		},
+	)
 
 	return &pb.GetWeekAverageDeltasResponse{
 		Deltas:        deltas,
@@ -657,10 +657,7 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 		)
 	}
 
-	start, end, err := timeWindowToPgWindow(req.TimeWindow)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid time window: %v", err)
-	}
+	start, end := timeWindowToPgWindow(req.TimeWindow)
 
 	goprms := db.GetObservationsBetweenParams{
 		GeometryUuid: locationUuid,
@@ -696,10 +693,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	querier := db.New(ix.GetTxFromContext(ctx))
 
 	// Get the location and source
-	locationUuid, err := uuid.Parse(req.LocationUuid)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
-	}
+	locationUuid := uuid.MustParse(req.LocationUuid)
 
 	cfprms := db.GetSourceAtTimestampParams{
 		GeometryUuid:   locationUuid,
@@ -1148,15 +1142,6 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocation(
 	l := zerolog.Ctx(ctx)
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	if req.NewEffectiveCapacityWatts == nil &&
-		req.NewLocationName == nil &&
-		req.NewMetadata == nil {
-		return nil, status.Error(
-			codes.InvalidArgument,
-			"At least one of new effective capacity, new location name, or new metadata must be provided.",
-		)
-	}
-
 	// Set the valid from time to now if not provided
 	validFrom := time.Now().UTC().Truncate(time.Minute)
 	if req.ValidFromUtc != nil {
@@ -1309,10 +1294,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 
 	locationUuids := make([]uuid.UUID, len(req.LocationUuids))
 	for i, id := range req.LocationUuids {
-		locationUuids[i], err = uuid.Parse(id)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid location UUID: %v", err)
-		}
+		locationUuids[i] = uuid.MustParse(id)
 	}
 
 	ggprms := db.GetGeometryGeoJSONParams{
@@ -1394,10 +1376,7 @@ func (s *DataPlatformDataServiceServerImpl) GetForecastAsTimeseries(
 	}
 
 	// Get the predictions for the given location source
-	start, end, err := timeWindowToPgWindow(req.TimeWindow)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "Invalid time window: %v", err)
-	}
+	start, end := timeWindowToPgWindow(req.TimeWindow)
 
 	pivotTime := pgtype.Timestamp{Valid: false}
 	if req.PivotTimestampUtc != nil {

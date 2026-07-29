@@ -1,16 +1,16 @@
 package postgres
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
-	db "github.com/openclimatefix/data-platform/internal/server/postgres/gen"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
+	db "github.com/openclimatefix/data-platform/internal/server/postgres/gen"
 )
 
 // MapSlice transforms a slice of type T into a slice of type U using a mapping function.
@@ -18,31 +18,30 @@ func MapSlice[T, U any](input []T, mapper func(T) U) []U {
 	if input == nil {
 		return nil
 	}
+
 	out := make([]U, len(input))
 	for i, v := range input {
 		out[i] = mapper(v)
 	}
+
 	return out
 }
 
 // timeWindowToPgWindow converts a TimeWindow protobuf message to a pair of pgtype.Timestamp values.
+// If the TimeWindow is nil or its StartTimestampUtc is nil, it defaults to a window from 48 hours ago to 36 hours in the future. Protovalidate ensures at the boundary that the start is always before the end, so we don't need to check that here.
 func timeWindowToPgWindow(
 	window *pb.TimeWindow,
-) (start pgtype.Timestamp, end pgtype.Timestamp, err error) {
+) (start pgtype.Timestamp, end pgtype.Timestamp) {
 	currentTime := time.Now().UTC()
-	if window == nil || (window.StartTimestampUtc == nil && window.EndTimestampUtc == nil) {
+	if window == nil || window.StartTimestampUtc == nil {
 		start = pgtype.Timestamp{Time: currentTime.Add(-48 * time.Hour), Valid: true}
 		end = pgtype.Timestamp{Time: currentTime.Add(36 * time.Hour), Valid: true}
-	} else if window.StartTimestampUtc != nil && window.EndTimestampUtc != nil {
+	} else {
 		start = pgtype.Timestamp{Time: window.StartTimestampUtc.AsTime(), Valid: true}
 		end = pgtype.Timestamp{Time: window.EndTimestampUtc.AsTime(), Valid: true}
-	} else {
-		err = errors.New(
-			"invalid time window: both start and end timestamps must be provided or neither",
-		)
 	}
 
-	return start, end, err
+	return start, end
 }
 
 // timeptrToPgTimestamp converts a protobuf Timestamp pointer to a pgtype.Timestamp.
@@ -77,30 +76,39 @@ func sipToFraction(sip int16) float32 {
 }
 
 // buildOtherStatsMap constructs a map of other statistics from optional SIP pointers.
+// Only keys that are not nil will be included in the returned map.
 func buildOtherStatsMap(p02, p10, p25, p75, p90, p98 *int16) map[string]float32 {
 	otherStats := make(map[string]float32)
 	if p02 != nil {
 		otherStats["p02"] = sipToFraction(*p02)
 	}
+
 	if p10 != nil {
 		otherStats["p10"] = sipToFraction(*p10)
 	}
+
 	if p25 != nil {
 		otherStats["p25"] = sipToFraction(*p25)
 	}
+
 	if p75 != nil {
 		otherStats["p75"] = sipToFraction(*p75)
 	}
+
 	if p90 != nil {
 		otherStats["p90"] = sipToFraction(*p90)
 	}
+
 	if p98 != nil {
 		otherStats["p98"] = sipToFraction(*p98)
 	}
+
 	return otherStats
 }
 
-func mapLatestForecast(fc db.GetLatestForecastsAtHorizonSincePivotRow) *pb.GetLatestForecastsResponse_Forecast {
+func mapLatestForecast(
+	fc db.GetLatestForecastsAtHorizonSincePivotRow,
+) *pb.GetLatestForecastsResponse_Forecast {
 	return &pb.GetLatestForecastsResponse_Forecast{
 		InitializationTimestampUtc: timestamppb.New(fc.InitTimeUtc.Time),
 		Forecaster: &pb.Forecaster{
@@ -120,7 +128,10 @@ func mapForecaster(fc db.GetForecastersByFiltersRow) *pb.Forecaster {
 	}
 }
 
-func mapWeekAverageDelta(delta db.GetWeekAverageDeltasForLocationsRow, capacityWatts int64) *pb.GetWeekAverageDeltasResponse_AverageDelta {
+func mapWeekAverageDelta(
+	delta db.GetWeekAverageDeltasForLocationsRow,
+	capacityWatts int64,
+) *pb.GetWeekAverageDeltasResponse_AverageDelta {
 	return &pb.GetWeekAverageDeltasResponse_AverageDelta{
 		DeltaFraction:          float32(delta.AvgDeltaSip) / 30000.0,
 		HorizonMins:            uint32(delta.HorizonMins),
@@ -128,7 +139,9 @@ func mapWeekAverageDelta(delta db.GetWeekAverageDeltasForLocationsRow, capacityW
 	}
 }
 
-func mapObservationAsTimeseries(obs db.GetObservationsBetweenRow) *pb.GetObservationsAsTimeseriesResponse_Value {
+func mapObservationAsTimeseries(
+	obs db.GetObservationsBetweenRow,
+) *pb.GetObservationsAsTimeseriesResponse_Value {
 	return &pb.GetObservationsAsTimeseriesResponse_Value{
 		ValueFraction:          sipToFraction(obs.ValueSip),
 		TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
@@ -136,7 +149,9 @@ func mapObservationAsTimeseries(obs db.GetObservationsBetweenRow) *pb.GetObserva
 	}
 }
 
-func mapLatestObservation(obs db.GetLatestObservationsRow) *pb.GetLatestObservationsResponse_Observation {
+func mapLatestObservation(
+	obs db.GetLatestObservationsRow,
+) *pb.GetLatestObservationsResponse_Observation {
 	return &pb.GetLatestObservationsResponse_Observation{
 		LocationUuid:           obs.GeometryUuid.String(),
 		TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
@@ -152,12 +167,14 @@ func mapObserver(ob db.ObsObserver) *pb.ListObserversResponse_ObserverSummary {
 	}
 }
 
-func mapPredictionAtTime(value db.ListPredictionsAtTimeForLocationsRow) *pb.GetForecastAtTimestampResponse_Value {
+func mapPredictionAtTime(
+	value db.ListPredictionsAtTimeForLocationsRow,
+) *pb.GetForecastAtTimestampResponse_Value {
 	return &pb.GetForecastAtTimestampResponse_Value{
-		ValueFraction:              sipToFraction(value.P50Sip),
-		EffectiveCapacityWatts:     uint64(value.CapacityWatts),
-		LocationUuid:               value.GeometryUuid.String(),
-		LocationName:               value.GeometryName,
+		ValueFraction:          sipToFraction(value.P50Sip),
+		EffectiveCapacityWatts: uint64(value.CapacityWatts),
+		LocationUuid:           value.GeometryUuid.String(),
+		LocationName:           value.GeometryName,
 		Latlng: &pb.LatLng{
 			Latitude:  value.Latitude,
 			Longitude: value.Longitude,
@@ -165,11 +182,20 @@ func mapPredictionAtTime(value db.ListPredictionsAtTimeForLocationsRow) *pb.GetF
 		Metadata:                   value.Metadata,
 		InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 		CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
-		OtherStatisticsFractions:   buildOtherStatsMap(value.P02Sip, value.P10Sip, value.P25Sip, value.P75Sip, value.P90Sip, value.P98Sip),
+		OtherStatisticsFractions: buildOtherStatsMap(
+			value.P02Sip,
+			value.P10Sip,
+			value.P25Sip,
+			value.P75Sip,
+			value.P90Sip,
+			value.P98Sip,
+		),
 	}
 }
 
-func mapObservationAtTimestamp(obs db.ListObservationsAtTimeForLocationsRow) *pb.GetObservationsAtTimestampResponse_Value {
+func mapObservationAtTimestamp(
+	obs db.ListObservationsAtTimeForLocationsRow,
+) *pb.GetObservationsAtTimestampResponse_Value {
 	return &pb.GetObservationsAtTimestampResponse_Value{
 		ValueFraction:          sipToFraction(obs.ValueSip),
 		EffectiveCapacityWatts: uint64(obs.CapacityWatts),
@@ -181,7 +207,9 @@ func mapObservationAtTimestamp(obs db.ListObservationsAtTimeForLocationsRow) *pb
 	}
 }
 
-func mapLocationSnapshot(v db.GetSourceHistoryRow) *pb.GetLocationAsTimeseriesResponse_LocationSnapshot {
+func mapLocationSnapshot(
+	v db.GetSourceHistoryRow,
+) *pb.GetLocationAsTimeseriesResponse_LocationSnapshot {
 	return &pb.GetLocationAsTimeseriesResponse_LocationSnapshot{
 		EffectiveCapacityWatts: uint64(v.CapacityWatts),
 		TimestampUtc:           timestamppb.New(v.ValidFromUtc.Time),
@@ -189,7 +217,9 @@ func mapLocationSnapshot(v db.GetSourceHistoryRow) *pb.GetLocationAsTimeseriesRe
 	}
 }
 
-func mapForecastAsTimeseriesFromForecastValue(pred db.ListPredictionsForForecastsRow) *pb.GetForecastAsTimeseriesResponse_Value {
+func mapForecastAsTimeseriesFromForecastValue(
+	pred db.ListPredictionsForForecastsRow,
+) *pb.GetForecastAsTimeseriesResponse_Value {
 	return &pb.GetForecastAsTimeseriesResponse_Value{
 		TargetTimestampUtc: timestamppb.New(
 			pred.InitTimeUtc.Time.Add(time.Duration(pred.HorizonMins) * time.Minute),
@@ -198,16 +228,32 @@ func mapForecastAsTimeseriesFromForecastValue(pred db.ListPredictionsForForecast
 		EffectiveCapacityWatts:     uint64(pred.CapacityWatts),
 		InitializationTimestampUtc: timestamppb.New(pred.InitTimeUtc.Time),
 		CreatedTimestampUtc:        timestamppb.New(pred.CreatedAtUtc.Time),
-		OtherStatisticsFractions:   buildOtherStatsMap(pred.P02Sip, pred.P10Sip, pred.P25Sip, pred.P75Sip, pred.P90Sip, pred.P98Sip),
-		Metadata:                   pred.Metadata,
+		OtherStatisticsFractions: buildOtherStatsMap(
+			pred.P02Sip,
+			pred.P10Sip,
+			pred.P25Sip,
+			pred.P75Sip,
+			pred.P90Sip,
+			pred.P98Sip,
+		),
+		Metadata: pred.Metadata,
 	}
 }
 
-func mapForecastAsTimeseriesFromLocationValue(value db.ListPredictionsForLocationRow) *pb.GetForecastAsTimeseriesResponse_Value {
+func mapForecastAsTimeseriesFromLocationValue(
+	value db.ListPredictionsForLocationRow,
+) *pb.GetForecastAsTimeseriesResponse_Value {
 	return &pb.GetForecastAsTimeseriesResponse_Value{
-		TargetTimestampUtc:         timestamppb.New(value.TargetTimeUtc.Time),
-		P50ValueFraction:           sipToFraction(value.P50Sip),
-		OtherStatisticsFractions:   buildOtherStatsMap(value.P02Sip, value.P10Sip, value.P25Sip, value.P75Sip, value.P90Sip, value.P98Sip),
+		TargetTimestampUtc: timestamppb.New(value.TargetTimeUtc.Time),
+		P50ValueFraction:   sipToFraction(value.P50Sip),
+		OtherStatisticsFractions: buildOtherStatsMap(
+			value.P02Sip,
+			value.P10Sip,
+			value.P25Sip,
+			value.P75Sip,
+			value.P90Sip,
+			value.P98Sip,
+		),
 		EffectiveCapacityWatts:     uint64(value.CapacityWatts),
 		InitializationTimestampUtc: timestamppb.New(value.InitTimeUtc.Time),
 		CreatedTimestampUtc:        timestamppb.New(value.CreatedAtUtc.Time),
@@ -215,7 +261,14 @@ func mapForecastAsTimeseriesFromLocationValue(value db.ListPredictionsForLocatio
 	}
 }
 
-func mapLocationSummary(geomUuid uuid.UUID, geomName string, lat, lon float32, cap int64, srcType, geomType int16, meta *structpb.Struct) *pb.ListLocationsResponse_LocationSummary {
+func mapLocationSummary(
+	geomUuid uuid.UUID,
+	geomName string,
+	lat, lon float32,
+	cap int64,
+	srcType, geomType int16,
+	meta *structpb.Struct,
+) *pb.ListLocationsResponse_LocationSummary {
 	return &pb.ListLocationsResponse_LocationSummary{
 		LocationUuid: geomUuid.String(),
 		LocationName: geomName,
@@ -230,7 +283,11 @@ func mapLocationSummary(geomUuid uuid.UUID, geomName string, lat, lon float32, c
 	}
 }
 
-func mapStreamedForecastDatum(row db.ListPredictionsForForecastsRow, locUuid uuid.UUID, includeMetadata bool) *pb.ForecastDatum {
+func mapStreamedForecastDatum(
+	row db.ListPredictionsForForecastsRow,
+	locUuid uuid.UUID,
+	includeMetadata bool,
+) *pb.ForecastDatum {
 	metadata := make(map[string]string)
 	if includeMetadata && row.Metadata != nil {
 		for k, v := range row.Metadata.AsMap() {
@@ -246,11 +303,18 @@ func mapStreamedForecastDatum(row db.ListPredictionsForForecastsRow, locUuid uui
 			row.ForecasterName,
 			row.ForecasterVersion,
 		),
-		HorizonMins:              uint32(row.HorizonMins),
-		P50Fraction:              sipToFraction(row.P50Sip),
-		OtherStatisticsFractions: buildOtherStatsMap(row.P02Sip, row.P10Sip, row.P25Sip, row.P75Sip, row.P90Sip, row.P98Sip),
-		CreatedTimestampUtc:      timestamppb.New(row.CreatedAtUtc.Time),
-		EffectiveCapacityWatts:   uint64(row.CapacityWatts),
-		Metadata:                 metadata,
+		HorizonMins: uint32(row.HorizonMins),
+		P50Fraction: sipToFraction(row.P50Sip),
+		OtherStatisticsFractions: buildOtherStatsMap(
+			row.P02Sip,
+			row.P10Sip,
+			row.P25Sip,
+			row.P75Sip,
+			row.P90Sip,
+			row.P98Sip,
+		),
+		CreatedTimestampUtc:    timestamppb.New(row.CreatedAtUtc.Time),
+		EffectiveCapacityWatts: uint64(row.CapacityWatts),
+		Metadata:               metadata,
 	}
 }
