@@ -5,50 +5,175 @@
 
     <div class="form-grid">
         <div class="form-group">
-            <label for="location">Location</label>
-            <select id="location" name="location_uuid" required style="width: 100%;">
-                <option value="" disabled selected>Select a location</option>
+            <label for="location_search">Location</label>
+            <input type="text" list="location_options" id="location_search" autocomplete="off" placeholder="Search by name, type, or capacity..." required>
+            <input type="hidden" id="location_uuid" name="location_uuid" required>
+            <datalist id="location_options">
                 {{ range .Locations }}
-                <option value="{{ .LocationUuid }}">{{ .LocationName }} ({{ .EffectiveCapacityWatts }}W)</option>
+                <option data-uuid="{{ .LocationUuid }}" value="{{ .LocationName }} ({{ .LocationType }}, {{ formatCapacity .EffectiveCapacityWatts }})"></option>
                 {{ end }}
+            </datalist>
+        </div>
+
+        <div class="form-group">
+            <label for="forecaster_search">Forecaster(s)</label>
+            <div style="display: flex; gap: 8px; position: relative;">
+                <div style="position: relative; flex-grow: 1;">
+                    <input type="text" list="forecaster_options" id="forecaster_search" autocomplete="off" placeholder="Add a forecaster...">
+                    <datalist id="forecaster_options">
+                        {{ range .Forecasters }}
+                        <option data-val="{{ .ForecasterName }}|{{ .ForecasterVersion }}" value="{{ .ForecasterName }} (v{{ .ForecasterVersion }})"></option>
+                        {{ end }}
+                    </datalist>
+                </div>
+                <div style="position: relative;">
+                    <button type="button" id="fc_badge" class="badge-btn" onclick="document.getElementById('fc_chips').classList.toggle('show')">0 Selected</button>
+                    <div id="fc_chips" class="custom-dropdown" style="right: 0; left: auto; width: 250px; padding: 8px; flex-direction: column; gap: 8px;">
+                        <div id="fc_chips_container" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="forecaster_hidden_inputs"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Location Datalist Mapper ---
+        const locSearch = document.getElementById('location_search');
+        const locUuid = document.getElementById('location_uuid');
+
+        locSearch.addEventListener('input', e => {
+            locUuid.value = ''; // Reset actual value when typing
+            const options = Array.from(document.getElementById(e.target.getAttribute('list')).options);
+            const opt = options.find(o => o.value === e.target.value);
+            if (opt) {
+                locUuid.value = opt.getAttribute('data-uuid');
+            }
+        });
+
+        // --- Forecaster Multi-Select Chips from Datalist ---
+        const fcSearch = document.getElementById('forecaster_search');
+        const fcChipsContainer = document.getElementById('fc_chips_container');
+        const fcHiddenInputs = document.getElementById('forecaster_hidden_inputs');
+        const fcBadge = document.getElementById('fc_badge');
+        let selectedFc = [];
+
+        function updateFcBadge() {
+            fcBadge.textContent = selectedFc.length + ' Selected';
+            if (selectedFc.length === 0) {
+                document.getElementById('fc_chips').classList.remove('show');
+            }
+        }
+
+        fcSearch.addEventListener('input', e => {
+            const inputVal = e.target.value;
+            const options = Array.from(document.getElementById(e.target.getAttribute('list')).options);
+            const opt = options.find(o => o.value === inputVal);
+            
+            if (opt) {
+                const val = opt.getAttribute('data-val');
+                const text = opt.value;
+                
+                if (!selectedFc.find(f => f.val === val)) {
+                    selectedFc.push({val, text});
+                    
+                    // Add chip to popover
+                    const chip = document.createElement('div');
+                    chip.className = 'chip';
+                    chip.id = 'chip_' + val;
+                    chip.innerHTML = `<span>${text}</span><span style="cursor:pointer; font-weight:bold; opacity:0.8;" onclick="removeFc('${val}', event)">&times;</span>`;
+                    fcChipsContainer.appendChild(chip);
+
+                    // Add hidden input for form submission
+                    const hid = document.createElement('input');
+                    hid.type = 'hidden';
+                    hid.name = 'forecaster';
+                    hid.value = val;
+                    hid.id = 'hidden_' + val;
+                    fcHiddenInputs.appendChild(hid);
+
+                    updateFcBadge();
+                    
+                    // Remove option from datalist so it can't be selected again
+                    opt.remove();
+                }
+                
+                fcSearch.value = ''; // Reset input after selection
+            }
+        });
+
+        window.removeFc = function(val, event) {
+            if (event) event.stopPropagation();
+            
+            // Re-add to datalist
+            const removedItem = selectedFc.find(f => f.val === val);
+            if (removedItem) {
+                const opt = document.createElement('option');
+                opt.setAttribute('data-val', removedItem.val);
+                opt.value = removedItem.text;
+                document.getElementById('forecaster_options').appendChild(opt);
+            }
+            
+            selectedFc = selectedFc.filter(f => f.val !== val);
+            document.getElementById('chip_' + val).remove();
+            document.getElementById('hidden_' + val).remove();
+            updateFcBadge();
+        };
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', e => {
+            if (!e.target.closest('#fc_badge') && !e.target.closest('#fc_chips')) {
+                document.getElementById('fc_chips').classList.remove('show');
+            }
+        });
+
+        // Ensure clicking the badge stops propagation so the document click listener doesn't close it instantly
+        document.getElementById('fc_badge').addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        // Ensure the form only submits if validation passes
+        document.getElementById('location_search').closest('form').addEventListener('submit', function(e) {
+            if (!document.getElementById('location_uuid').value) {
+                e.preventDefault();
+                alert('Please select a valid location from the list.');
+                return;
+            }
+            if (selectedFc.length === 0) {
+                e.preventDefault();
+                alert('Please select at least one forecaster.');
+            }
+        });
+    </script>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 20px; margin-bottom: 20px;">
+        <div class="form-group">
+            <label for="energy_source">Energy Source</label>
+            <select id="energy_source" name="energy_source" required>
+                <option value="1" selected>Solar</option>
+                <option value="2">Wind</option>
             </select>
         </div>
-
-            <div class="form-group">
-                <label for="forecaster">Forecaster</label>
-                <select id="forecaster" name="forecaster" required style="width: 100%;">
-                    <option value="" disabled selected>Select a forecaster</option>
-                    {{ range .Forecasters }}
-                    <option value="{{ .ForecasterName }}|{{ .ForecasterVersion }}">{{ .ForecasterName }} (v{{ .ForecasterVersion }})</option>
-                    {{ end }}
-                </select>
-            </div>
+        <div class="form-group">
+            <label for="horizon_mins">Horizon Mins</label>
+            <input type="number" id="horizon_mins" name="horizon_mins" value="0" min="0" max="2160" step="5" required>
         </div>
-
-        <div class="form-grid">
-            <div class="form-group">
-                <label for="energy_source">Energy Source (Int ID)</label>
-                <input type="number" id="energy_source" name="energy_source" value="1" required style="width: 100%;">
-                <small style="color: var(--nc-text-2);"><i>1 = Solar, 2 = Wind etc.</i></small>
-            </div>
-            <div class="form-group">
-                <label for="horizon_mins">Horizon Minutes</label>
-                <input type="number" id="horizon_mins" name="horizon_mins" value="60" required style="width: 100%;">
-            </div>
+        <div class="form-group">
+            <label for="time_window">Time Window (UTC)</label>
+            <input type="text" id="time_window" name="time_window" value="{{ .DefaultTimeWindow }}" required>
         </div>
-
-        <div class="form-grid">
-            <div class="form-group">
-                <label for="start_time">Start Time (UTC)</label>
-                <input type="datetime-local" id="start_time" name="start_time" value="{{ .DefaultStart }}" required style="width: 100%;">
-            </div>
-            <div class="form-group">
-                <label for="end_time">End Time (UTC)</label>
-                <input type="datetime-local" id="end_time" name="end_time" value="{{ .DefaultEnd }}" required style="width: 100%;">
-            </div>
-        </div>
+    </div>
     <div style="margin-top: 1rem;">
         <button type="submit">View Forecast</button>
         <span id="loading" class="htmx-indicator" style="margin-left: 1rem; color: var(--nc-text-2);"><i>Fetching data...</i></span>
     </div>
 </form>
+
+<script>
+    flatpickr("#time_window", {
+        mode: "range",
+        enableTime: true,
+        time_24hr: true,
+        dateFormat: "Y-m-d H:i",
+    });
+</script>

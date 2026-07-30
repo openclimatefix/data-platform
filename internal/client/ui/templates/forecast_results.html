@@ -1,28 +1,35 @@
 <article>
     <div class="panel-header">
-        <strong>{{ .Forecast.LocationName }} Forecast</strong> 
-        <small>{{ .Forecast.LocationUuid }}</small>
+        <strong>{{ .Location.LocationName }} Forecast</strong> 
+        <small>{{ .Location.LocationUuid }}</small>
     </div>
     
-    {{ if not .Forecast.Values }}
+    {{ if not .Series }}
         <div style="height: 320px; display: flex; align-items: center; justify-content: center; color: var(--nc-text-2);">
             No forecast data found for this configuration.
         </div>
     {{ else }}
-        <style>
-            .ct-chart { height: 320px; }
-            .ct-grid.ct-vertical { display: none; }
-        </style>
+        <div style="display: flex; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; font-size: 0.85rem;">
+            {{ range $i, $s := .Series }}
+            <span style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--chart-color-{{ $i }});"></div>
+                {{ $s.Name }}
+            </span>
+            {{ end }}
+        </div>
+
         <figure style="margin: 0;">
             <div id="forecastChart" class="ct-chart"></div>
         </figure>
         <script>
-            var labels = [{{ range .Forecast.Values }}"{{ .TargetTimestampUtc.AsTime.Format "01-02 15:04" }}",{{ end }}];
+            var labels = [{{ range .Labels }}"{{ . }}",{{ end }}];
             
             new Chartist.Line('#forecastChart', {
                 labels: labels,
                 series: [
-                    [{{ range .Forecast.Values }}{{ printf "%.2f" (calcWatts .P50ValueFraction .EffectiveCapacityWatts) }},{{ end }}]
+                    {{ range .Series }}
+                    [{{ range .Data }}{{ . }},{{ end }}],
+                    {{ end }}
                 ]
             }, {
                 fullWidth: true,

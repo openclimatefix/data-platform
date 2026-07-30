@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Platform Overview</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -19,6 +21,11 @@
             --nc-text-2: #6b6b70;
             --nc-ac-1: #7a9374;
             --nc-ac-tx: #ffffff;
+            --chart-color-0: #7a9374;
+            --chart-color-1: #1095c1;
+            --chart-color-2: #f2a900;
+            --chart-color-3: #e07a5f;
+            --chart-color-4: #8e8e93;
         }
 
         body { 
@@ -50,7 +57,7 @@
         }
 
         .panel {
-            background: #ffffff;
+            background: var(--nc-bg-2);
             border-radius: 16px;
             padding: 24px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.03);
@@ -62,7 +69,7 @@
             flex-grow: 1;
             border-radius: 8px;
             overflow: hidden;
-            background: #e5e5ea;
+            background: var(--nc-bg-3);
             min-height: 450px;
         }
 
@@ -70,9 +77,42 @@
         input, select {
             border-radius: 8px !important;
             border: 1px solid #e0e0e4 !important;
-            background-color: #fafafb !important;
-            color: #1c1c1e !important;
+            background-color: var(--nc-bg-2) !important;
+            color: var(--nc-text-1) !important;
             padding: 10px 12px !important;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .badge-btn {
+            white-space: nowrap !important;
+            padding: 10px 16px !important;
+            background-color: var(--nc-bg-3) !important;
+            color: var(--nc-text-1) !important;
+            border: 1px solid #e0e0e4 !important;
+        }
+
+        .custom-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--nc-bg-2); border: 1px solid #e0e0e4;
+            border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-height: 250px; overflow-y: auto; z-index: 50;
+            display: none;
+        }
+        .custom-dropdown.show { display: flex; flex-direction: column; }
+        .dropdown-item {
+            padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f1f3;
+            font-size: 0.9rem; color: var(--nc-text-1);
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--nc-bg-1); }
+        .chip {
+            background: var(--nc-text-1); color: var(--nc-bg-2);
+            padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;
+            display: flex; align-items: center; justify-content: space-between; gap: 6px;
         }
 
         button {
@@ -107,14 +147,36 @@
         .htmx-request.htmx-indicator { display: inline; }
 
         /* Chart & Headers */
-        .ct-series-a .ct-line { stroke: #7a9374; stroke-width: 3px; }
-        .ct-series-a .ct-area { fill: #7a9374; fill-opacity: 0.15; }
+        .ct-series-a .ct-line { stroke: var(--chart-color-0); stroke-width: 3px; }
+        .ct-series-a .ct-area { fill: var(--chart-color-0); fill-opacity: 0.15; }
+        .ct-series-b .ct-line { stroke: var(--chart-color-1); stroke-width: 3px; }
+        .ct-series-b .ct-area { fill: var(--chart-color-1); fill-opacity: 0.15; }
+        .ct-series-c .ct-line { stroke: var(--chart-color-2); stroke-width: 3px; }
+        .ct-series-c .ct-area { fill: var(--chart-color-2); fill-opacity: 0.15; }
+        .ct-series-d .ct-line { stroke: var(--chart-color-3); stroke-width: 3px; }
+        .ct-series-d .ct-area { fill: var(--chart-color-3); fill-opacity: 0.15; }
+        .ct-series-e .ct-line { stroke: var(--chart-color-4); stroke-width: 3px; }
+        .ct-series-e .ct-area { fill: var(--chart-color-4); fill-opacity: 0.15; }
         .ct-label { font-size: 0.85rem; fill: #8e8e93; color: #8e8e93; }
         .ct-grid { stroke: #ebebeb; stroke-dasharray: 4px; }
+        .ct-chart { height: 320px; }
+        .ct-grid.ct-vertical { display: none; }
         
         .panel-header { margin-bottom: 1.5rem; }
         .panel-header strong { font-size: 1.2rem; display: block; margin-bottom: 0.2rem; color: var(--nc-text-1); }
         .panel-header small { color: var(--nc-text-2); font-size: 0.85rem; }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --nc-bg-1: #1c1c1e;
+                --nc-bg-2: #2c2c2e;
+                --nc-bg-3: #3a3a3c;
+                --nc-text-1: #ffffff;
+                --nc-text-2: #ebebf5;
+            }
+            .ct-label { fill: #ebebf5; color: #ebebf5; }
+            .ct-grid { stroke: #3a3a3c; }
+        }
     </style>
 </head>
 <body>
