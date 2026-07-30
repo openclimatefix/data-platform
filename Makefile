@@ -15,6 +15,7 @@ PROTOC_GEN_GRPC  := $(LOCAL_BIN)/protoc-gen-go-grpc
 
 # --- Sources & Stamps ---
 GO_SOURCES          := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
+UI_SOURCES          := $(shell find internal/client/ui/templates -name '*.html')
 PROTO_SOURCES       := $(shell find proto/ocf/dp -name '*.proto')
 PROTO_GO_STAMP_FILE := internal/gen/.protoc.stamp
 SQLC_SOURCES        := $(shell find internal/server/postgres/sql -name '*.sql')
@@ -26,7 +27,7 @@ SQLC_STAMP_FILE     := internal/server/postgres/.sqlc.stamp
 .PHONY: build
 build: ${OUT}
 
-${OUT}: ${GO_SOURCES} ${PROTO_GO_STAMP_FILE} ${SQLC_STAMP_FILE}
+${OUT}: ${GO_SOURCES} ${UI_SOURCES} ${PROTO_GO_STAMP_FILE} ${SQLC_STAMP_FILE}
 	@echo "Compiling to ${OUT}..."
 	@mkdir -p $(dir $@)
 	go build -v -o=${OUT} -ldflags="-X 'main.version=${VERSION}'" cmd/main.go
@@ -64,6 +65,7 @@ bench: gen
 clean:
 	@echo "Cleaning up..."
 	@rm -rf bin/
+	@rm -f ${OUT}
 	@rm -f ${SQLC_STAMP_FILE} ${PROTO_GO_STAMP_FILE} unit-tests.xml
 	@rm -rf internal/gen internal/server/postgres/gen gen/
 

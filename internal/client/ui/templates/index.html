@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Platform Overview</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --nc-bg-1: #f4f5f7;
+            --nc-bg-2: #ffffff;
+            --nc-bg-3: #f0f1f3;
+            --nc-text-1: #1c1c1e;
+            --nc-text-2: #6b6b70;
+            --nc-ac-1: #7a9374;
+            --nc-ac-tx: #ffffff;
+        }
+
+        body { 
+            background-color: var(--nc-bg-1);
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 32px;
+            max-width: none;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+            align-items: stretch;
+        }
+
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .right-column {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.04);
+            margin: 0;
+        }
+
+        .map-container {
+            flex-grow: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #e5e5ea;
+            min-height: 450px;
+        }
+
+        /* Fix input readability in dark-mode environments */
+        input, select {
+            border-radius: 8px !important;
+            border: 1px solid #e0e0e4 !important;
+            background-color: #fafafb !important;
+            color: #1c1c1e !important;
+            padding: 10px 12px !important;
+        }
+
+        button {
+            background-color: #1c1c1e !important;
+            color: #ffffff !important;
+            border-radius: 8px !important;
+            padding: 10px 24px !important;
+            font-weight: 600 !important;
+            border: none !important;
+            cursor: pointer;
+        }
+
+        button:hover { background-color: #3a3a3c !important; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--nc-text-2);
+            margin-bottom: 6px;
+        }
+
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline; }
+        .htmx-request.htmx-indicator { display: inline; }
+
+        /* Chart & Headers */
+        .ct-series-a .ct-line { stroke: #7a9374; stroke-width: 3px; }
+        .ct-series-a .ct-area { fill: #7a9374; fill-opacity: 0.15; }
+        .ct-label { font-size: 0.85rem; fill: #8e8e93; color: #8e8e93; }
+        .ct-grid { stroke: #ebebeb; stroke-dasharray: 4px; }
+        
+        .panel-header { margin-bottom: 1.5rem; }
+        .panel-header strong { font-size: 1.2rem; display: block; margin-bottom: 0.2rem; color: var(--nc-text-1); }
+        .panel-header small { color: var(--nc-text-2); font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <main class="dashboard-grid">
+        <div class="left-column">
+            <!-- Selectors Panel -->
+            <div class="panel" id="selectors-panel" hx-get="/components/selectors" hx-trigger="load">
+                <p style="color: var(--nc-text-2);"><i>Loading configuration...</i></p>
+            </div>
+
+            <!-- Chart Panel -->
+            <div class="panel" id="chart-panel">
+                <div class="panel-header">
+                    <strong>Forecast Generation</strong>
+                    <small>Select a configuration to view timeseries data</small>
+                </div>
+                <div style="height: 320px; display: flex; align-items: center; justify-content: center; color: var(--nc-text-2);">
+                    Waiting for input...
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Panel -->
+        <div class="panel right-column" id="map-panel">
+            <div class="panel-header">
+                <strong>Location View</strong>
+                <small>Geospatial snapshot</small>
+            </div>
+            <div class="map-container" style="display: flex; align-items: center; justify-content: center; color: var(--nc-text-2);">
+                Select a location...
+            </div>
+        </div>
+    </main>
+</body>
+</html>

@@ -566,10 +566,38 @@ func (d *DataPlatformDataServiceServerImpl) ListLocations(
 
 // GetLocationsAsGeoJSON implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
-	context.Context,
-	*pb.GetLocationsAsGeoJSONRequest,
+	ctx context.Context,
+	req *pb.GetLocationsAsGeoJSONRequest,
 ) (*pb.GetLocationsAsGeoJSONResponse, error) {
-	panic("unimplemented")
+	// Generate a fake GeoJSON polygon roughly around London
+	fakeGeoJSON := `
+	{
+		"type": "FeatureCollection",
+		"features": [
+			{
+				"type": "Feature",
+				"properties": {
+					"uuid": "` + req.LocationUuids[0] + `"
+				},
+				"geometry": {
+					"type": "Polygon",
+					"coordinates": [
+						[
+							[-0.12, 51.51],
+							[-0.10, 51.51],
+							[-0.10, 51.49],
+							[-0.12, 51.49],
+							[-0.12, 51.51]
+						]
+					]
+				}
+			}
+		]
+	}`
+
+	return &pb.GetLocationsAsGeoJSONResponse{
+		Geojson: fakeGeoJSON,
+	}, nil
 }
 
 // GetObservationsAsTimeseries implements dp.DataPlatformDataServiceServer.

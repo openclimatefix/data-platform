@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/openclimatefix/data-platform/internal/client/ui"
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 	ix "github.com/openclimatefix/data-platform/internal/interceptors"
 	dbdy "github.com/openclimatefix/data-platform/internal/server/dummy"
@@ -110,5 +111,26 @@ func main() {
 	reflection.Register(s)
 
 	log.Info().Str("version", version).Msgf("listening on :%d", conf.GetInt("port"))
+
+	// Start UI server in a detached, fault-isolated goroutine
+	go func() {
+		uiPort := ":8080"
+		if conf.GetInt("ui_port") != 0 {
+			uiPort = fmt.Sprintf(":%d", conf.GetInt("ui_port"))
+		}
+
+		target := fmt.Sprintf("localhost:%d", conf.GetInt("port"))
+		uiClient, err := ui.NewUIClient(target)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to initialize UI client. UI will not be available.")
+			return
+		}
+
+		log.Info().Msgf("Starting UI client on %s pointing to %s", uiPort, target)
+		if err := uiClient.Start(uiPort); err != nil {
+			log.Error().Err(err).Msg("UI client crashed or failed to start. gRPC server remains unaffected.")
+		}
+	}()
+
 	_ = s.Serve(lis) // If this errors, we want it to panic! It's fundamental
 }
