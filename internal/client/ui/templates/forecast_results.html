@@ -49,6 +49,11 @@
                     offset: 60,
                     scaleMinSpace: 40,
                     labelInterpolationFnc: function(value) {
+                        if (value >= 1000000) {
+                            return (value / 1000000).toFixed(1) + ' MW';
+                        } else if (value >= 1000) {
+                            return (value / 1000).toFixed(0) + ' kW';
+                        }
                         return value + ' W';
                     }
                 },
@@ -59,9 +64,32 @@
                         y: 10
                     },
                     labelInterpolationFnc: function(value, index) {
-                        // Dynamically reduce labels: only show roughly 8 ticks across the graph
-                        var skip = Math.max(1, Math.floor(labels.length / 8));
-                        return index % skip === 0 ? value : null;
+                        if (!value || typeof value !== 'string') return null;
+                        
+                        // Extract the hour (e.g., "15" from "Jan 02 15:04")
+                        var match = value.match(/\s(\d{2}):\d{2}$/);
+                        if (!match) return null;
+                        
+                        var hour = parseInt(match[1], 10);
+                        
+                        // Only show labels for midnight (0) and noon (12)
+                        if (hour !== 0 && hour !== 12) return null;
+                        
+                        if (index === 0) return value;
+                        
+                        // Ensure we only show the FIRST label of that hour block
+                        // just in case data doesn't land perfectly on :00
+                        var prevValue = labels[index - 1];
+                        if (prevValue) {
+                            var prevMatch = prevValue.match(/\s(\d{2}):\d{2}$/);
+                            if (prevMatch) {
+                                var prevHour = parseInt(prevMatch[1], 10);
+                                if (prevHour === hour) {
+                                    return null; // We already showed a label for this hour block
+                                }
+                            }
+                        }
+                        return value;
                     }
                 }
             });

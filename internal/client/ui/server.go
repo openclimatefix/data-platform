@@ -280,7 +280,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 
 	var labels []string
 	for _, k := range timeKeys {
-		labels = append(labels, uniqueTimes[k].Format("01-02 15:04"))
+		labels = append(labels, uniqueTimes[k].Format("Jan 02 15:04"))
 	}
 
 	for _, f := range forecasters {

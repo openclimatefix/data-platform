@@ -157,13 +157,13 @@
         .ct-series-d .ct-area { fill: var(--chart-color-3); fill-opacity: 0.15; }
         .ct-series-e .ct-line { stroke: var(--chart-color-4); stroke-width: 3px; }
         .ct-series-e .ct-area { fill: var(--chart-color-4); fill-opacity: 0.15; }
-        .ct-label { font-size: 0.85rem; fill: #8e8e93; color: #8e8e93; }
+        .ct-label { font-size: 0.85rem; fill: #8e8e93; color: #8e8e93; white-space: nowrap; }
         .ct-grid { stroke: #ebebeb; stroke-dasharray: 4px; }
         .ct-chart { height: 320px; }
         .ct-grid.ct-vertical { display: none; }
         
-        .panel-header { margin-bottom: 1.5rem; }
-        .panel-header strong { font-size: 1.2rem; display: block; margin-bottom: 0.2rem; color: var(--nc-text-1); }
+        .panel-header { margin-bottom: 1.5rem; display: flex; align-items: baseline; gap: 12px; }
+        .panel-header strong { font-size: 1.2rem; color: var(--nc-text-1); }
         .panel-header small { color: var(--nc-text-2); font-size: 0.85rem; }
 
         @media (prefers-color-scheme: dark) {
