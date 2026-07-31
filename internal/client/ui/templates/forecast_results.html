@@ -19,84 +19,155 @@
         </div>
 
         <figure style="margin: 0; flex-grow: 1; display: flex; flex-direction: column;">
-            <div id="forecastChart" class="ct-chart"></div>
+            <div id="forecastChart" style="flex-grow: 1; min-height: 320px; width: 100%;"></div>
         </figure>
         <script>
-            var labels = [{{ range .Labels }}"{{ . }}",{{ end }}];
-            
-            new Chartist.Line('#forecastChart', {
-                labels: labels,
-                series: [
-                    {{ range .Series }}
-                    [{{ range .Data }}{{ . }},{{ end }}],
-                    {{ end }}
-                ]
-            }, {
-                fullWidth: true,
-                showArea: false,
-                showPoint: false,
-                lineSmooth: Chartist.Interpolation.cardinal({
-                    tension: 0.2
-                }),
-                chartPadding: { 
-                    right: 40,
-                    top: 20,
-                    bottom: 20,
-                    left: 20
-                },
-                axisY: {
-                    onlyInteger: true,
-                    offset: 60,
-                    scaleMinSpace: 40,
-                    labelInterpolationFnc: function(value) {
-                        if (value >= 1000000000000) {
-                            return (value / 1000000000000).toFixed(1) + ' TW';
-                        } else if (value >= 1000000000) {
-                            return (value / 1000000000).toFixed(1) + ' GW';
-                        } else if (value >= 1000000) {
-                            return (value / 1000000).toFixed(1) + ' MW';
-                        } else if (value >= 1000) {
-                            return (value / 1000).toFixed(0) + ' kW';
-                        }
-                        return value + ' W';
-                    }
-                },
-                axisX: {
-                    showGrid: false,
-                    labelOffset: {
-                        x: 0,
-                        y: 10
-                    },
-                    labelInterpolationFnc: function(value, index) {
-                        if (!value || typeof value !== 'string') return null;
-                        
-                        // Extract the hour (e.g., "15" from "Jan 02 15:04")
-                        var match = value.match(/\s(\d{2}):\d{2}$/);
-                        if (!match) return null;
-                        
-                        var hour = parseInt(match[1], 10);
-                        
-                        // Only show labels for midnight (0) and noon (12)
-                        if (hour !== 0 && hour !== 12) return null;
-                        
-                        if (index === 0) return value;
-                        
-                        // Ensure we only show the FIRST label of that hour block
-                        // just in case data doesn't land perfectly on :00
-                        var prevValue = labels[index - 1];
-                        if (prevValue) {
-                            var prevMatch = prevValue.match(/\s(\d{2}):\d{2}$/);
-                            if (prevMatch) {
-                                var prevHour = parseInt(prevMatch[1], 10);
-                                if (prevHour === hour) {
-                                    return null; // We already showed a label for this hour block
-                                }
-                            }
-                        }
-                        return value;
-                    }
+            (function() {
+                var chartDom = document.getElementById('forecastChart');
+                if (window.forecastChartInstance) {
+                    window.forecastChartInstance.dispose();
                 }
-            });
+                var myChart = echarts.init(chartDom);
+                window.forecastChartInstance = myChart;
+
+                var labels = [{{ range .Labels }}"{{ . }}",{{ end }}];
+                var seriesData = [];
+                var colors = ['#7a9374', '#1095c1', '#f2a900', '#e07a5f', '#8e8e93'];
+
+                {{ range $i, $s := .Series }}
+                    var color = colors[{{ $i }} % colors.length];
+                    var data = [{{ range .Data }}{{ . }},{{ end }}];
+                    seriesData.push({
+                        name: "{{ $s.Name }}",
+                        type: 'line',
+                        data: data,
+                        smooth: 0.2,
+                        showSymbol: false,
+                        lineStyle: { color: color, width: 2 },
+                        itemStyle: { color: color }
+                    });
+
+                    {{ if .HasBands }}
+                    var bandLower = [{{ range .BandLower }}{{ . }},{{ end }}];
+                    var bandUpper = [{{ range .BandUpper }}{{ . }},{{ end }}];
+                    var bandDiff = [];
+                    for (var j = 0; j < bandUpper.length; j++) {
+                        if (bandUpper[j] !== null && bandLower[j] !== null) {
+                            bandDiff.push(bandUpper[j] - bandLower[j]);
+                        } else {
+                            bandDiff.push(null);
+                        }
+                    }
+                    
+                    seriesData.push({
+                        name: "{{ $s.Name }} Band Lower",
+                        type: 'line',
+                        data: bandLower,
+                        lineStyle: { opacity: 0 },
+                        stack: "band_{{ $i }}",
+                        showSymbol: false,
+                        tooltip: { show: false }
+                    });
+                    seriesData.push({
+                        name: "{{ $s.Name }} Band",
+                        type: 'line',
+                        data: bandDiff,
+                        lineStyle: { opacity: 0 },
+                        areaStyle: { color: color, opacity: 0.2 },
+                        stack: "band_{{ $i }}",
+                        showSymbol: false,
+                        tooltip: { show: false }
+                    });
+                    {{ end }}
+                {{ end }}
+
+                var formatValue = function(value) {
+                    if (value >= 1000000000000) return (value / 1000000000000).toFixed(1) + ' TW';
+                    if (value >= 1000000000) return (value / 1000000000).toFixed(1) + ' GW';
+                    if (value >= 1000000) return (value / 1000000).toFixed(1) + ' MW';
+                    if (value >= 1000) return (value / 1000).toFixed(0) + ' kW';
+                    return value.toFixed(0) + ' W';
+                };
+
+                var isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var gridColor = isDarkMode ? '#3a3a3c' : '#ebebeb';
+                var textColor = isDarkMode ? '#ebebf5' : '#8e8e93';
+
+                var option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            if (!params || params.length === 0) return '';
+                            var tooltipStr = '<strong>' + params[0].axisValue + '</strong><br/>';
+                            
+                            var mainSeriesParams = params.filter(p => !p.seriesName.includes('Band'));
+                            var allParams = params;
+                            
+                            mainSeriesParams.forEach(function(param) {
+                                var valStr = formatValue(param.value);
+                                var name = param.seriesName;
+                                
+                                var extraStr = '';
+                                var bandLowerParam = allParams.find(p => p.seriesName === name + ' Band Lower');
+                                var bandUpperParam = allParams.find(p => p.seriesName === name + ' Band');
+                                
+                                if (bandLowerParam && bandUpperParam && bandLowerParam.value !== undefined && bandUpperParam.value !== undefined) {
+                                    var bLower = bandLowerParam.value;
+                                    var bUpper = bLower + bandUpperParam.value; // add diff
+                                    extraStr = ' (P10: ' + formatValue(bLower) + ' - P90: ' + formatValue(bUpper) + ')';
+                                }
+                                
+                                tooltipStr += '<div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">';
+                                tooltipStr += '<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:' + param.color + ';"></span>';
+                                tooltipStr += name + ': <strong>' + valStr + '</strong>' + '<span style="font-size: 0.85em; color: var(--nc-text-2)">' + extraStr + '</span>';
+                                tooltipStr += '</div>';
+                            });
+                            return tooltipStr;
+                        }
+                    },
+                    grid: {
+                        left: 20, right: 40, top: 20, bottom: 20, containLabel: true
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: labels,
+                        axisLabel: {
+                            color: textColor,
+                            formatter: function(value, index) {
+                                if (!value) return '';
+                                var match = value.match(/\s(\d{2}):\d{2}$/);
+                                if (!match) return value;
+                                var hour = parseInt(match[1], 10);
+                                if (hour !== 0 && hour !== 12) return '';
+                                
+                                var prevValue = index > 0 ? labels[index-1] : null;
+                                if (prevValue) {
+                                    var prevMatch = prevValue.match(/\s(\d{2}):\d{2}$/);
+                                    if (prevMatch && parseInt(prevMatch[1],10) === hour) return '';
+                                }
+                                return value;
+                            }
+                        },
+                        axisTick: { show: false },
+                        axisLine: { show: false },
+                        splitLine: { show: false }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        splitLine: {
+                            lineStyle: { type: 'dashed', color: gridColor }
+                        },
+                        axisLabel: { color: textColor, formatter: formatValue }
+                    },
+                    series: seriesData
+                };
+                myChart.setOption(option);
+                
+                var ro = new ResizeObserver(() => {
+                    myChart.resize();
+                });
+                ro.observe(chartDom);
+            })();
         </script>
     {{ end }}
 
@@ -107,46 +178,105 @@
     </div>
     <div id="map" class="map-container"></div>
     <script>
-        if (window.mapInstance) {
-            window.mapInstance.remove();
-        }
-        window.mapInstance = L.map('map', {
-            center: [{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }}],
-            zoom: 10,
-            zoomControl: false,
-            dragging: false,
-            scrollWheelZoom: false,
-            doubleClickZoom: false,
-            touchZoom: false
-        });
-        
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-            subdomains: 'abcd',
-            maxZoom: 20
-        }).addTo(window.mapInstance);
+        (function() {
+            var mapDom = document.getElementById('map');
+            if (window.mapInstance) {
+                window.mapInstance.dispose();
+            }
+            var myMap = echarts.init(mapDom);
+            window.mapInstance = myMap;
 
-        var geojsonStr = "{{ .GeoJSON }}";
-        if (geojsonStr !== "") {
-            var geojsonData = JSON.parse(geojsonStr);
+            var geojsonStr = "{{ .GeoJSON }}";
+            var lat = {{ .Location.Latlng.Latitude }};
+            var lng = {{ .Location.Latlng.Longitude }};
             var fillOpacity = {{ printf "%.2f" .AvgFraction }};
-            if (fillOpacity < 0.15) fillOpacity = 0.15; // Maintain visibility
+            if (fillOpacity < 0.15) fillOpacity = 0.15;
             
-            var geoLayer = L.geoJSON(geojsonData, {
-                style: {
-                    color: '#1c1c1e',
-                    weight: 2,
-                    fillColor: '#7a9374',
-                    fillOpacity: fillOpacity
+            var option = {};
+            
+            if (geojsonStr !== "") {
+                var geojsonData = JSON.parse(geojsonStr);
+                
+                var hasArea = false;
+                if (geojsonData.features) {
+                    geojsonData.features.forEach(function(f) {
+                        if (f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
+                            hasArea = true;
+                        }
+                    });
+                } else if (geojsonData.type === 'Polygon' || geojsonData.type === 'MultiPolygon') {
+                    hasArea = true;
                 }
-            }).addTo(window.mapInstance);
+                
+                if (hasArea) {
+                    echarts.registerMap('locMap', geojsonData);
+                    option = {
+                        geo: {
+                            map: 'locMap',
+                            roam: false,
+                            itemStyle: {
+                                areaColor: '#7a9374',
+                                opacity: fillOpacity,
+                                borderColor: '#1c1c1e',
+                                borderWidth: 2
+                            },
+                            emphasis: {
+                                itemStyle: {
+                                    areaColor: '#7a9374',
+                                    opacity: Math.min(fillOpacity + 0.2, 1)
+                                },
+                                label: { show: false }
+                            },
+                            layoutCenter: ['50%', '50%'],
+                            layoutSize: '80%'
+                        }
+                    };
+                } else {
+                    option = {
+                        xAxis: { type: 'value', show: false, min: lng - 0.1, max: lng + 0.1 },
+                        yAxis: { type: 'value', show: false, min: lat - 0.1, max: lat + 0.1 },
+                        grid: { left: 0, right: 0, top: 0, bottom: 0 },
+                        series: [{
+                            type: 'scatter',
+                            symbolSize: 14,
+                            itemStyle: {
+                                color: '#7a9374',
+                                borderColor: 'white',
+                                borderWidth: 3,
+                                shadowColor: 'rgba(0,0,0,0.3)',
+                                shadowBlur: 4,
+                                shadowOffsetY: 2
+                            },
+                            data: [[lng, lat]]
+                        }]
+                    };
+                }
+            } else {
+                option = {
+                    xAxis: { type: 'value', show: false, min: lng - 0.1, max: lng + 0.1 },
+                    yAxis: { type: 'value', show: false, min: lat - 0.1, max: lat + 0.1 },
+                    grid: { left: 0, right: 0, top: 0, bottom: 0 },
+                    series: [{
+                        type: 'scatter',
+                        symbolSize: 14,
+                        itemStyle: {
+                            color: '#7a9374',
+                            borderColor: 'white',
+                            borderWidth: 3,
+                            shadowColor: 'rgba(0,0,0,0.3)',
+                            shadowBlur: 4,
+                            shadowOffsetY: 2
+                        },
+                        data: [[lng, lat]]
+                    }]
+                };
+            }
             
-            window.mapInstance.fitBounds(geoLayer.getBounds(), { padding: [20, 20], maxZoom: 12 });
-        } else {
-            // Fallback to a single marker if no geometry exists
-            var markerHtml = `<div style="background-color: var(--nc-ac-1); width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`;
-            var icon = L.divIcon({ html: markerHtml, className: 'custom-marker', iconSize: [14, 14], iconAnchor: [7, 7] });
-            L.marker([{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }}], {icon: icon}).addTo(window.mapInstance);
-        }
+            myMap.setOption(option);
+            var ro = new ResizeObserver(() => {
+                myMap.resize();
+            });
+            ro.observe(mapDom);
+        })();
     </script>
 </div>

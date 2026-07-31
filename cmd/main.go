@@ -120,15 +120,19 @@ func main() {
 		}
 
 		target := fmt.Sprintf("localhost:%d", conf.GetInt("port"))
+
 		uiClient, err := ui.NewUIClient(target)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to initialize UI client. UI will not be available.")
+			log.Error().Err(err).Msg("Failed to initialise UI client. UI will not be available.")
 			return
 		}
 
 		log.Info().Msgf("Starting UI client on %s pointing to %s", uiPort, target)
+
 		if err := uiClient.Start(uiPort); err != nil {
-			log.Error().Err(err).Msg("UI client crashed or failed to start. gRPC server remains unaffected.")
+			log.Error().
+				Err(err).
+				Msg("UI client crashed or failed to start. gRPC server remains unaffected.")
 		}
 	}()
 

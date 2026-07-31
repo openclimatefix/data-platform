@@ -6,12 +6,9 @@
     <title>Data Platform Overview</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/chartist.js/latest/chartist.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/echarts.min.js"></script>
     <style>
         :root {
             --nc-bg-1: #f4f5f7;
@@ -147,17 +144,6 @@
         .htmx-request .htmx-indicator { display: inline; }
         .htmx-request.htmx-indicator { display: inline; }
 
-        /* Chart & Headers */
-        .ct-series-a .ct-line { stroke: var(--chart-color-0); stroke-width: 2px; }
-        .ct-series-b .ct-line { stroke: var(--chart-color-1); stroke-width: 2px; }
-        .ct-series-c .ct-line { stroke: var(--chart-color-2); stroke-width: 2px; }
-        .ct-series-d .ct-line { stroke: var(--chart-color-3); stroke-width: 2px; }
-        .ct-series-e .ct-line { stroke: var(--chart-color-4); stroke-width: 2px; }
-        .ct-label { font-size: 0.85rem; fill: #8e8e93; color: #8e8e93; white-space: nowrap; }
-        .ct-grid { stroke: #ebebeb; stroke-dasharray: 4px; }
-        .ct-chart { flex-grow: 1; min-height: 320px; height: auto; }
-        .ct-grid.ct-vertical { display: none; }
-        
         #chart-panel { display: flex; flex-direction: column; flex-grow: 1; }
         
         .panel-header { margin-bottom: 1.5rem; display: flex; align-items: baseline; gap: 12px; }
@@ -172,8 +158,6 @@
                 --nc-text-1: #ffffff;
                 --nc-text-2: #ebebf5;
             }
-            .ct-label { fill: #ebebf5; color: #ebebf5; }
-            .ct-grid { stroke: #3a3a3c; }
         }
     </style>
 </head>

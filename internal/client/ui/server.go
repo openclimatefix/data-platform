@@ -11,15 +11,16 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
-//go:embed templates/*.html
+//go:embed templates/*.html static/*
 var templateFiles embed.FS
 
 var tpl *template.Template
@@ -35,6 +36,7 @@ func init() {
 			} else if cap >= 1_000 {
 				return fmt.Sprintf("%.1fkW", float64(cap)/1_000.0)
 			}
+
 			return fmt.Sprintf("%dW", cap)
 		},
 	}
@@ -61,6 +63,7 @@ func NewUIClient(grpcTarget string) (*UIClient, error) {
 func (ui *UIClient) Start(port string) error {
 	mux := http.NewServeMux()
 
+	mux.Handle("/static/", http.FileServer(http.FS(templateFiles)))
 	mux.HandleFunc("/", ui.handleIndex)
 	mux.HandleFunc("/components/selectors", ui.handleSelectors)
 	mux.HandleFunc("/components/forecast", ui.handleForecast)
@@ -82,21 +85,33 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 	locResp, err := ui.grpcClient.ListLocations(ctx, &pb.ListLocationsRequest{})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list locations")
-		http.Error(w, fmt.Sprintf("Failed to list locations: %v", err), http.StatusInternalServerError)
+		http.Error(
+			w,
+			fmt.Sprintf("Failed to list locations: %v", err),
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
 	fcResp, err := ui.grpcClient.ListForecasters(ctx, &pb.ListForecastersRequest{})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list forecasters")
-		http.Error(w, fmt.Sprintf("Failed to list forecasters: %v", err), http.StatusInternalServerError)
+		http.Error(
+			w,
+			fmt.Sprintf("Failed to list forecasters: %v", err),
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
 	obsResp, err := ui.grpcClient.ListObservers(ctx, &pb.ListObserversRequest{})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list observers")
-		http.Error(w, fmt.Sprintf("Failed to list observers: %v", err), http.StatusInternalServerError)
+		http.Error(
+			w,
+			fmt.Sprintf("Failed to list observers: %v", err),
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
@@ -109,9 +124,9 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		Locations:   locResp.GetLocations(),
 		Forecasters: fcResp.GetForecasters(),
 		Observers:   obsResp.GetObservers(),
-		DefaultTimeWindow: fmt.Sprintf("%s to %s", 
-			time.Now().UTC().Add(-48 * time.Hour).Format("2006-01-02 15:04"),
-			time.Now().UTC().Add(36 * time.Hour).Format("2006-01-02 15:04"),
+		DefaultTimeWindow: fmt.Sprintf("%s to %s",
+			time.Now().UTC().Add(-48*time.Hour).Format("2006-01-02 15:04"),
+			time.Now().UTC().Add(36*time.Hour).Format("2006-01-02 15:04"),
 		),
 	}
 
@@ -132,7 +147,10 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	horizonMinsRaw := r.URL.Query().Get("horizon_mins")
 	timeWindowRaw := r.URL.Query().Get("time_window")
 
-	if locUUID == "" || (len(forecastersRaw) == 0 && len(observersRaw) == 0) || energySourceRaw == "" || horizonMinsRaw == "" || timeWindowRaw == "" {
+	if locUUID == "" || (len(forecastersRaw) == 0 && len(observersRaw) == 0) ||
+		energySourceRaw == "" ||
+		horizonMinsRaw == "" ||
+		timeWindowRaw == "" {
 		http.Error(w, "Missing required query parameters", http.StatusBadRequest)
 		return
 	}
@@ -142,6 +160,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid energy_source format", http.StatusBadRequest)
 		return
 	}
+
 	horizonMins, err := strconv.Atoi(horizonMinsRaw)
 	if err != nil {
 		http.Error(w, "Invalid horizon_mins format", http.StatusBadRequest)
@@ -170,12 +189,18 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		LocationUuid: locUUID,
 		EnergySource: pb.EnergySource(energySource),
 	}
+
 	locResp, err := ui.grpcClient.GetLocation(ctx, locReq)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get location for map")
-		http.Error(w, fmt.Sprintf("Failed to get location: %v", err), http.StatusInternalServerError)
+		http.Error(
+			w,
+			fmt.Sprintf("Failed to get location: %v", err),
+			http.StatusInternalServerError,
+		)
 		return
 	}
+
 	capacity := float32(locResp.GetEffectiveCapacityWatts())
 
 	type ForecasterInput struct {
@@ -200,6 +225,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		Raw  string
 		Name string
 	}
+
 	var observers []ObserverInput
 	for _, oRaw := range observersRaw {
 		observers = append(observers, ObserverInput{
@@ -209,16 +235,21 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type SeriesData struct {
-		Name string
-		Data []string
+		Name      string
+		Data      []string
+		HasBands  bool
+		BandLower []string
+		BandUpper []string
 	}
 
 	type ForecasterResult struct {
-		Raw         string
-		SeriesMap   map[int64]float32
-		UniqueT     map[int64]time.Time
-		FractionSum float32
-		Count       int
+		Raw          string
+		SeriesMap    map[int64]float32
+		BandLowerMap map[int64]float32
+		BandUpperMap map[int64]float32
+		UniqueT      map[int64]time.Time
+		FractionSum  float32
+		Count        int
 	}
 
 	results := make([]ForecasterResult, len(forecasters))
@@ -248,9 +279,14 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			}
 
 			seriesMap := make(map[int64]float32)
+			bandLowerMap := make(map[int64]float32)
+			bandUpperMap := make(map[int64]float32)
 			uniqueT := make(map[int64]time.Time)
-			var sum float32
-			var count int
+
+			var (
+				sum   float32
+				count int
+			)
 
 			for _, v := range resp.GetValues() {
 				t := v.GetTargetTimestampUtc().AsTime()
@@ -258,17 +294,30 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 				uniqueT[unix] = t
 				seriesMap[unix] = v.GetP50ValueFraction() * capacity
 
+				stats := v.GetOtherStatisticsFractions()
+				if stats != nil {
+					if p10, ok := stats["p10"]; ok {
+						if p90, ok := stats["p90"]; ok {
+							bandLowerMap[unix] = p10 * capacity
+							bandUpperMap[unix] = p90 * capacity
+						}
+					}
+				}
+
 				sum += v.GetP50ValueFraction()
 				count++
 			}
 
 			results[i] = ForecasterResult{
-				Raw:         f.Raw,
-				SeriesMap:   seriesMap,
-				UniqueT:     uniqueT,
-				FractionSum: sum,
-				Count:       count,
+				Raw:          f.Raw,
+				SeriesMap:    seriesMap,
+				BandLowerMap: bandLowerMap,
+				BandUpperMap: bandUpperMap,
+				UniqueT:      uniqueT,
+				FractionSum:  sum,
+				Count:        count,
 			}
+
 			return nil
 		})
 	}
@@ -308,6 +357,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 				SeriesMap: seriesMap,
 				UniqueT:   uniqueT,
 			}
+
 			return nil
 		})
 	}
@@ -317,17 +367,27 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	var allSeries []SeriesData
 	uniqueTimes := make(map[int64]time.Time)
 	forecasterResults := make(map[string]map[int64]float32)
-	var totalFraction float32
-	var count int
+	forecasterBandsLower := make(map[string]map[int64]float32)
+	forecasterBandsUpper := make(map[string]map[int64]float32)
+
+	var (
+		totalFraction float32
+		count         int
+	)
 
 	for _, res := range results {
 		if res.SeriesMap == nil {
 			continue
 		}
+
 		forecasterResults[res.Raw] = res.SeriesMap
+		forecasterBandsLower[res.Raw] = res.BandLowerMap
+
+		forecasterBandsUpper[res.Raw] = res.BandUpperMap
 		for unix, t := range res.UniqueT {
 			uniqueTimes[unix] = t
 		}
+
 		totalFraction += res.FractionSum
 		count += res.Count
 	}
@@ -336,6 +396,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		if res.SeriesMap == nil {
 			continue
 		}
+
 		forecasterResults[res.Raw] = res.SeriesMap
 		for unix, t := range res.UniqueT {
 			uniqueTimes[unix] = t
@@ -347,6 +408,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	for k := range uniqueTimes {
 		timeKeys = append(timeKeys, k)
 	}
+
 	slices.Sort(timeKeys)
 
 	var labels []string
@@ -356,18 +418,36 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 
 	for _, f := range forecasters {
 		sd := SeriesData{Name: fmt.Sprintf("%s (v%s)", f.Name, f.Version)}
+		hasBands := len(forecasterBandsLower[f.Raw]) > 0
+
+		sd.HasBands = hasBands
 		for _, k := range timeKeys {
 			if val, ok := forecasterResults[f.Raw][k]; ok {
 				sd.Data = append(sd.Data, fmt.Sprintf("%.2f", val))
 			} else {
 				sd.Data = append(sd.Data, "null")
 			}
+
+			if hasBands {
+				if val, ok := forecasterBandsLower[f.Raw][k]; ok {
+					sd.BandLower = append(sd.BandLower, fmt.Sprintf("%.2f", val))
+				} else {
+					sd.BandLower = append(sd.BandLower, "null")
+				}
+
+				if val, ok := forecasterBandsUpper[f.Raw][k]; ok {
+					sd.BandUpper = append(sd.BandUpper, fmt.Sprintf("%.2f", val))
+				} else {
+					sd.BandUpper = append(sd.BandUpper, "null")
+				}
+			}
 		}
+
 		allSeries = append(allSeries, sd)
 	}
 
 	for _, o := range observers {
-		sd := SeriesData{Name: fmt.Sprintf("%s [Obs]", o.Name)}
+		sd := SeriesData{Name: o.Name + " [Obs]"}
 		for _, k := range timeKeys {
 			if val, ok := forecasterResults[o.Raw][k]; ok {
 				sd.Data = append(sd.Data, fmt.Sprintf("%.2f", val))
@@ -375,13 +455,16 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 				sd.Data = append(sd.Data, "null")
 			}
 		}
+
 		allSeries = append(allSeries, sd)
 	}
 
 	geoReq := &pb.GetLocationsAsGeoJSONRequest{
 		LocationUuids: []string{locUUID},
+		Unsimplified:  true,
 	}
 	geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(ctx, geoReq)
+
 	var geoJSONStr string
 	if err == nil && geoResp != nil {
 		geoJSONStr = geoResp.GetGeojson()
