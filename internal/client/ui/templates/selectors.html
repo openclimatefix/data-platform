@@ -16,24 +16,34 @@
         </div>
 
         <div class="form-group">
-            <label for="forecaster_search">Forecaster(s)</label>
+            <label for="source_search">Data Sources</label>
             <div style="display: flex; gap: 8px; position: relative;">
                 <div style="position: relative; flex-grow: 1;">
-                    <input type="text" list="forecaster_options" id="forecaster_search" autocomplete="off" placeholder="Add a forecaster...">
-                    <datalist id="forecaster_options">
+                    <input type="text" list="source_options" id="source_search" autocomplete="off" placeholder="Add a forecaster or observer...">
+                    <datalist id="source_options">
                         {{ range .Forecasters }}
-                        <option data-val="{{ .ForecasterName }}|{{ .ForecasterVersion }}" value="{{ .ForecasterName }} (v{{ .ForecasterVersion }})"></option>
+                        <option data-type="forecaster" data-val="{{ .ForecasterName }}|{{ .ForecasterVersion }}" value="{{ .ForecasterName }} (v{{ .ForecasterVersion }}) [Forecaster]"></option>
+                        {{ end }}
+                        {{ range .Observers }}
+                        <option data-type="observer" data-val="{{ .ObserverName }}" value="{{ .ObserverName }} [Observer]"></option>
                         {{ end }}
                     </datalist>
                 </div>
                 <div style="position: relative;">
-                    <button type="button" id="fc_badge" class="badge-btn" onclick="document.getElementById('fc_chips').classList.toggle('show')">0 Selected</button>
-                    <div id="fc_chips" class="custom-dropdown" style="right: 0; left: auto; width: 250px; padding: 8px; flex-direction: column; gap: 8px;">
-                        <div id="fc_chips_container" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                    <button type="button" id="source_badge" class="badge-btn" onclick="document.getElementById('source_chips').classList.toggle('show')">0 Selected</button>
+                    <div id="source_chips" class="custom-dropdown" style="right: 0; left: auto; width: 350px; padding: 12px; flex-direction: row; gap: 16px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <strong style="font-size: 0.85rem; color: var(--nc-text-2); margin-bottom: 8px; display: block; border-bottom: 1px solid var(--nc-bg-3); padding-bottom: 4px;">Forecasters</strong>
+                            <div id="fc_chips_container" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <strong style="font-size: 0.85rem; color: var(--nc-text-2); margin-bottom: 8px; display: block; border-bottom: 1px solid var(--nc-bg-3); padding-bottom: 4px;">Observers</strong>
+                            <div id="obs_chips_container" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div id="forecaster_hidden_inputs"></div>
+            <div id="source_hidden_inputs"></div>
         </div>
     </div>
 
@@ -51,84 +61,93 @@
             }
         });
 
-        // --- Forecaster Multi-Select Chips from Datalist ---
-        const fcSearch = document.getElementById('forecaster_search');
+        // --- Multi-Select Chips from Datalist ---
+        const sourceSearch = document.getElementById('source_search');
         const fcChipsContainer = document.getElementById('fc_chips_container');
-        const fcHiddenInputs = document.getElementById('forecaster_hidden_inputs');
-        const fcBadge = document.getElementById('fc_badge');
-        let selectedFc = [];
+        const obsChipsContainer = document.getElementById('obs_chips_container');
+        const sourceHiddenInputs = document.getElementById('source_hidden_inputs');
+        const sourceBadge = document.getElementById('source_badge');
+        let selectedSources = { forecaster: [], observer: [] };
 
-        function updateFcBadge() {
-            fcBadge.textContent = selectedFc.length + ' Selected';
-            if (selectedFc.length === 0) {
-                document.getElementById('fc_chips').classList.remove('show');
+        function updateSourceBadge() {
+            const total = selectedSources.forecaster.length + selectedSources.observer.length;
+            sourceBadge.textContent = total + ' Selected';
+            if (total === 0) {
+                document.getElementById('source_chips').classList.remove('show');
             }
         }
 
-        fcSearch.addEventListener('input', e => {
+        sourceSearch.addEventListener('input', e => {
             const inputVal = e.target.value;
             const options = Array.from(document.getElementById(e.target.getAttribute('list')).options);
             const opt = options.find(o => o.value === inputVal);
             
             if (opt) {
+                const type = opt.getAttribute('data-type');
                 const val = opt.getAttribute('data-val');
                 const text = opt.value;
                 
-                if (!selectedFc.find(f => f.val === val)) {
-                    selectedFc.push({val, text});
+                if (!selectedSources[type].find(f => f.val === val)) {
+                    selectedSources[type].push({val, text, type});
                     
                     // Add chip to popover
                     const chip = document.createElement('div');
                     chip.className = 'chip';
-                    chip.id = 'chip_' + val;
-                    chip.innerHTML = `<span>${text}</span><span style="cursor:pointer; font-weight:bold; opacity:0.8;" onclick="removeFc('${val}', event)">&times;</span>`;
-                    fcChipsContainer.appendChild(chip);
+                    chip.id = 'chip_' + type + '_' + val.replace(/\|/g, '-');
+                    chip.innerHTML = `<span style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${text}">${text.replace(' [' + (type === 'forecaster' ? 'Forecaster' : 'Observer') + ']', '')}</span><span style="cursor:pointer; font-weight:bold; opacity:0.8; flex-shrink: 0;" onclick="removeSource('${type}', '${val}', event)">&times;</span>`;
+                    
+                    if (type === 'forecaster') {
+                        fcChipsContainer.appendChild(chip);
+                    } else {
+                        obsChipsContainer.appendChild(chip);
+                    }
 
                     // Add hidden input for form submission
                     const hid = document.createElement('input');
                     hid.type = 'hidden';
-                    hid.name = 'forecaster';
+                    hid.name = type;
                     hid.value = val;
-                    hid.id = 'hidden_' + val;
-                    fcHiddenInputs.appendChild(hid);
+                    hid.id = 'hidden_' + type + '_' + val.replace(/\|/g, '-');
+                    sourceHiddenInputs.appendChild(hid);
 
-                    updateFcBadge();
+                    updateSourceBadge();
                     
                     // Remove option from datalist so it can't be selected again
                     opt.remove();
                 }
                 
-                fcSearch.value = ''; // Reset input after selection
+                sourceSearch.value = ''; // Reset input after selection
             }
         });
 
-        window.removeFc = function(val, event) {
+        window.removeSource = function(type, val, event) {
             if (event) event.stopPropagation();
             
             // Re-add to datalist
-            const removedItem = selectedFc.find(f => f.val === val);
+            const removedItem = selectedSources[type].find(f => f.val === val);
             if (removedItem) {
                 const opt = document.createElement('option');
+                opt.setAttribute('data-type', removedItem.type);
                 opt.setAttribute('data-val', removedItem.val);
                 opt.value = removedItem.text;
-                document.getElementById('forecaster_options').appendChild(opt);
+                document.getElementById('source_options').appendChild(opt);
             }
             
-            selectedFc = selectedFc.filter(f => f.val !== val);
-            document.getElementById('chip_' + val).remove();
-            document.getElementById('hidden_' + val).remove();
-            updateFcBadge();
+            selectedSources[type] = selectedSources[type].filter(f => f.val !== val);
+            document.getElementById('chip_' + type + '_' + val.replace(/\|/g, '-')).remove();
+            document.getElementById('hidden_' + type + '_' + val.replace(/\|/g, '-')).remove();
+            updateSourceBadge();
         };
 
         // Close dropdowns when clicking outside
         document.addEventListener('click', e => {
-            if (!e.target.closest('#fc_badge') && !e.target.closest('#fc_chips')) {
-                document.getElementById('fc_chips').classList.remove('show');
+            if (!e.target.closest('#source_badge') && !e.target.closest('#source_chips')) {
+                document.getElementById('source_chips').classList.remove('show');
             }
         });
 
         // Ensure clicking the badge stops propagation so the document click listener doesn't close it instantly
-        document.getElementById('fc_badge').addEventListener('click', function(e) {
+        document.getElementById('source_badge').addEventListener('click', function(e) {
             e.stopPropagation();
         });
 
@@ -139,9 +158,9 @@
                 alert('Please select a valid location from the list.');
                 return;
             }
-            if (selectedFc.length === 0) {
+            if (selectedSources.forecaster.length === 0 && selectedSources.observer.length === 0) {
                 e.preventDefault();
-                alert('Please select at least one forecaster.');
+                alert('Please select at least one forecaster or observer.');
             }
         });
     </script>

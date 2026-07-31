@@ -93,13 +93,22 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	obsResp, err := ui.grpcClient.ListObservers(ctx, &pb.ListObserversRequest{})
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to list observers")
+		http.Error(w, fmt.Sprintf("Failed to list observers: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	data := struct {
-		Locations   []*pb.ListLocationsResponse_LocationSummary
-		Forecasters []*pb.Forecaster
+		Locations         []*pb.ListLocationsResponse_LocationSummary
+		Forecasters       []*pb.Forecaster
+		Observers         []*pb.ListObserversResponse_ObserverSummary
 		DefaultTimeWindow string
 	}{
 		Locations:   locResp.GetLocations(),
 		Forecasters: fcResp.GetForecasters(),
+		Observers:   obsResp.GetObservers(),
 		DefaultTimeWindow: fmt.Sprintf("%s to %s", 
 			time.Now().UTC().Add(-48 * time.Hour).Format("2006-01-02 15:04"),
 			time.Now().UTC().Add(36 * time.Hour).Format("2006-01-02 15:04"),
@@ -118,11 +127,12 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 
 	locUUID := r.URL.Query().Get("location_uuid")
 	forecastersRaw := r.URL.Query()["forecaster"]
+	observersRaw := r.URL.Query()["observer"]
 	energySourceRaw := r.URL.Query().Get("energy_source")
 	horizonMinsRaw := r.URL.Query().Get("horizon_mins")
 	timeWindowRaw := r.URL.Query().Get("time_window")
 
-	if locUUID == "" || len(forecastersRaw) == 0 || energySourceRaw == "" || horizonMinsRaw == "" || timeWindowRaw == "" {
+	if locUUID == "" || (len(forecastersRaw) == 0 && len(observersRaw) == 0) || energySourceRaw == "" || horizonMinsRaw == "" || timeWindowRaw == "" {
 		http.Error(w, "Missing required query parameters", http.StatusBadRequest)
 		return
 	}
@@ -184,6 +194,18 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 				Version: parts[1],
 			})
 		}
+	}
+
+	type ObserverInput struct {
+		Raw  string
+		Name string
+	}
+	var observers []ObserverInput
+	for _, oRaw := range observersRaw {
+		observers = append(observers, ObserverInput{
+			Raw:  oRaw,
+			Name: oRaw,
+		})
 	}
 
 	type SeriesData struct {
@@ -251,6 +273,45 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	obsResults := make([]ForecasterResult, len(observers))
+	for i, o := range observers {
+		i, o := i, o
+		g.Go(func() error {
+			req := &pb.GetObservationsAsTimeseriesRequest{
+				LocationUuid: locUUID,
+				ObserverName: o.Name,
+				EnergySource: pb.EnergySource(energySource),
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(startTsObj),
+					EndTimestampUtc:   timestamppb.New(endTsObj),
+				},
+			}
+
+			resp, err := ui.grpcClient.GetObservationsAsTimeseries(gCtx, req)
+			if err != nil {
+				log.Warn().Err(err).Msgf("Failed to get observations for %s", o.Raw)
+				return nil
+			}
+
+			seriesMap := make(map[int64]float32)
+			uniqueT := make(map[int64]time.Time)
+
+			for _, v := range resp.GetValues() {
+				t := v.GetTimestampUtc().AsTime()
+				unix := t.Unix()
+				uniqueT[unix] = t
+				seriesMap[unix] = v.GetValueFraction() * capacity
+			}
+
+			obsResults[i] = ForecasterResult{
+				Raw:       o.Raw,
+				SeriesMap: seriesMap,
+				UniqueT:   uniqueT,
+			}
+			return nil
+		})
+	}
+
 	_ = g.Wait()
 
 	var allSeries []SeriesData
@@ -271,6 +332,16 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		count += res.Count
 	}
 
+	for _, res := range obsResults {
+		if res.SeriesMap == nil {
+			continue
+		}
+		forecasterResults[res.Raw] = res.SeriesMap
+		for unix, t := range res.UniqueT {
+			uniqueTimes[unix] = t
+		}
+	}
+
 	// Sort times to align X-axis labels
 	var timeKeys []int64
 	for k := range uniqueTimes {
@@ -287,6 +358,18 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		sd := SeriesData{Name: fmt.Sprintf("%s (v%s)", f.Name, f.Version)}
 		for _, k := range timeKeys {
 			if val, ok := forecasterResults[f.Raw][k]; ok {
+				sd.Data = append(sd.Data, fmt.Sprintf("%.2f", val))
+			} else {
+				sd.Data = append(sd.Data, "null")
+			}
+		}
+		allSeries = append(allSeries, sd)
+	}
+
+	for _, o := range observers {
+		sd := SeriesData{Name: fmt.Sprintf("%s [Obs]", o.Name)}
+		for _, k := range timeKeys {
+			if val, ok := forecasterResults[o.Raw][k]; ok {
 				sd.Data = append(sd.Data, fmt.Sprintf("%.2f", val))
 			} else {
 				sd.Data = append(sd.Data, "null")
