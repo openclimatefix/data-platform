@@ -235,11 +235,12 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type SeriesData struct {
-		Name      string
-		Data      []string
-		HasBands  bool
-		BandLower []string
-		BandUpper []string
+		Name          string
+		Data          []string
+		HasBands      bool
+		BandLower     []string
+		BandUpper     []string
+		IsObservation bool
 	}
 
 	type ForecasterResult struct {
@@ -447,7 +448,10 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, o := range observers {
-		sd := SeriesData{Name: o.Name + " [Obs]"}
+		sd := SeriesData{
+			Name:          o.Name + " [Obs]",
+			IsObservation: true,
+		}
 		for _, k := range timeKeys {
 			if val, ok := forecasterResults[o.Raw][k]; ok {
 				sd.Data = append(sd.Data, fmt.Sprintf("%.2f", val))

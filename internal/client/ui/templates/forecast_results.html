@@ -43,7 +43,11 @@
                         data: data,
                         smooth: 0.2,
                         showSymbol: false,
+                        {{ if .IsObservation }}
+                        lineStyle: { color: color, width: 2, type: 'dashed' },
+                        {{ else }}
                         lineStyle: { color: color, width: 2 },
+                        {{ end }}
                         itemStyle: { color: color }
                     });
 
@@ -82,18 +86,53 @@
                 {{ end }}
 
                 var formatValue = function(value) {
-                    if (value >= 1000000000000) return (value / 1000000000000).toFixed(1) + ' TW';
-                    if (value >= 1000000000) return (value / 1000000000).toFixed(1) + ' GW';
-                    if (value >= 1000000) return (value / 1000000).toFixed(1) + ' MW';
-                    if (value >= 1000) return (value / 1000).toFixed(0) + ' kW';
-                    return value.toFixed(0) + ' W';
+                    if (value === null || value === undefined || isNaN(value)) return 'N/A';
+                    var num = Number(value);
+                    if (num >= 1000000000000) return (num / 1000000000000).toFixed(1) + ' TW';
+                    if (num >= 1000000000) return (num / 1000000000).toFixed(1) + ' GW';
+                    if (num >= 1000000) return (num / 1000000).toFixed(1) + ' MW';
+                    if (num >= 1000) return (num / 1000).toFixed(0) + ' kW';
+                    return num.toFixed(0) + ' W';
                 };
 
                 var isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 var gridColor = isDarkMode ? '#3a3a3c' : '#ebebeb';
                 var textColor = isDarkMode ? '#ebebf5' : '#8e8e93';
 
+                var now = new Date();
+                var currentYear = now.getFullYear();
+                
+                var closestIndex = 0;
+                var minDiff = Infinity;
+                
+                labels.forEach(function(lbl, idx) {
+                    var dateStr = currentYear + " " + lbl;
+                    var d = new Date(dateStr);
+                    var diff = Math.abs(now.getTime() - d.getTime());
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIndex = idx;
+                    }
+                });
+
+                var markLineData = {
+                    data: [
+                        {
+                            xAxis: closestIndex,
+                            label: { show: false },
+                            lineStyle: { color: textColor, type: 'dashed', width: 2, opacity: 0.7 }
+                        }
+                    ],
+                    symbol: ['none', 'none'],
+                    animation: false
+                };
+
+                if (seriesData.length > 0) {
+                    seriesData[0].markLine = markLineData;
+                }
+
                 var option = {
+                    backgroundColor: 'transparent',
                     tooltip: {
                         trigger: 'axis',
                         formatter: function(params) {
@@ -163,6 +202,78 @@
                 };
                 myChart.setOption(option);
                 
+                myChart.getZr().on('click', function(params) {
+                    var pointInPixel = [params.offsetX, params.offsetY];
+                    if (myChart.containPixel('grid', pointInPixel)) {
+                        var pointInGrid = myChart.convertFromPixel({seriesIndex: 0}, pointInPixel);
+                        var xIndex = pointInGrid[0];
+                        
+                        var chartOpt = myChart.getOption();
+                        if (chartOpt.series && chartOpt.series.length > 0) {
+                            var markLine = chartOpt.series[0].markLine || { data: [] };
+                            if (markLine.data && markLine.data.length > 0) {
+                                markLine.data[0].xAxis = xIndex;
+                            } else {
+                                markLine = {
+                                    data: [{
+                                        xAxis: xIndex,
+                                        label: { show: false },
+                                        lineStyle: { color: textColor, type: 'dashed', width: 2, opacity: 0.7 }
+                                    }],
+                                    symbol: ['none', 'none'],
+                                    animation: false
+                                };
+                            }
+                            chartOpt.series[0].markLine = markLine;
+                            
+                            // Prevent re-animating the whole chart when updating the line
+                            chartOpt.animation = false;
+                            
+                            myChart.setOption(chartOpt, {replaceMerge: ['series']});
+                        }
+
+                        var capacity = {{ .Location.EffectiveCapacityWatts }};
+                        if (capacity <= 0) return;
+
+                        var sum = 0;
+                        var count = 0;
+                        var chartOpt = myChart.getOption();
+                        
+                        chartOpt.series.forEach(function(s) {
+                            if (typeof s.name === 'string' && !s.name.includes('Band')) {
+                                var val = s.data[xIndex];
+                                if (val !== null && val !== undefined && val !== 'null' && !isNaN(val)) {
+                                    sum += (val / capacity);
+                                    count++;
+                                }
+                            }
+                        });
+                        
+                        if (count > 0) {
+                            var fraction = sum / count;
+                            if (fraction < 0.15) fraction = 0.15;
+                            if (fraction > 1.0) fraction = 1.0;
+                            
+                            var mapEl = document.getElementById('map-time-label');
+                            if (mapEl) {
+                                mapEl.innerHTML = '{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }} | ' + labels[xIndex];
+                            }
+                            
+                            if (window.mapInstance) {
+                                var mapOpt = window.mapInstance.getOption();
+                                if (mapOpt.geo && mapOpt.geo.length > 0) {
+                                    mapOpt.geo[0].itemStyle.opacity = fraction;
+                                    mapOpt.geo[0].emphasis.itemStyle.opacity = Math.min(fraction + 0.2, 1);
+                                    window.mapInstance.setOption(mapOpt);
+                                } else if (mapOpt.series && mapOpt.series.length > 0) {
+                                    mapOpt.series[0].itemStyle.opacity = fraction;
+                                    window.mapInstance.setOption(mapOpt);
+                                }
+                            }
+                        }
+                    }
+                });
+
                 var ro = new ResizeObserver(() => {
                     myChart.resize();
                 });
@@ -174,7 +285,7 @@
 <div id="map-panel" hx-swap-oob="innerHTML">
     <div class="panel-header">
         <strong>Location Map</strong>
-        <small>{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }}</small>
+        <small id="map-time-label">{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }}</small>
     </div>
     <div id="map" class="map-container"></div>
     <script>
@@ -241,6 +352,7 @@
                             symbolSize: 14,
                             itemStyle: {
                                 color: '#7a9374',
+                                opacity: fillOpacity,
                                 borderColor: 'white',
                                 borderWidth: 3,
                                 shadowColor: 'rgba(0,0,0,0.3)',
@@ -261,6 +373,7 @@
                         symbolSize: 14,
                         itemStyle: {
                             color: '#7a9374',
+                            opacity: fillOpacity,
                             borderColor: 'white',
                             borderWidth: 3,
                             shadowColor: 'rgba(0,0,0,0.3)',
