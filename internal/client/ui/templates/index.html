@@ -43,6 +43,7 @@
             max-width: 1400px;
             margin: 0 auto;
             align-items: stretch;
+            min-height: calc(100vh - 64px);
         }
 
         .left-column {
@@ -147,20 +148,17 @@
         .htmx-request.htmx-indicator { display: inline; }
 
         /* Chart & Headers */
-        .ct-series-a .ct-line { stroke: var(--chart-color-0); stroke-width: 3px; }
-        .ct-series-a .ct-area { fill: var(--chart-color-0); fill-opacity: 0.15; }
-        .ct-series-b .ct-line { stroke: var(--chart-color-1); stroke-width: 3px; }
-        .ct-series-b .ct-area { fill: var(--chart-color-1); fill-opacity: 0.15; }
-        .ct-series-c .ct-line { stroke: var(--chart-color-2); stroke-width: 3px; }
-        .ct-series-c .ct-area { fill: var(--chart-color-2); fill-opacity: 0.15; }
-        .ct-series-d .ct-line { stroke: var(--chart-color-3); stroke-width: 3px; }
-        .ct-series-d .ct-area { fill: var(--chart-color-3); fill-opacity: 0.15; }
-        .ct-series-e .ct-line { stroke: var(--chart-color-4); stroke-width: 3px; }
-        .ct-series-e .ct-area { fill: var(--chart-color-4); fill-opacity: 0.15; }
+        .ct-series-a .ct-line { stroke: var(--chart-color-0); stroke-width: 2px; }
+        .ct-series-b .ct-line { stroke: var(--chart-color-1); stroke-width: 2px; }
+        .ct-series-c .ct-line { stroke: var(--chart-color-2); stroke-width: 2px; }
+        .ct-series-d .ct-line { stroke: var(--chart-color-3); stroke-width: 2px; }
+        .ct-series-e .ct-line { stroke: var(--chart-color-4); stroke-width: 2px; }
         .ct-label { font-size: 0.85rem; fill: #8e8e93; color: #8e8e93; white-space: nowrap; }
         .ct-grid { stroke: #ebebeb; stroke-dasharray: 4px; }
-        .ct-chart { height: 320px; }
+        .ct-chart { flex-grow: 1; min-height: 320px; height: auto; }
         .ct-grid.ct-vertical { display: none; }
+        
+        #chart-panel { display: flex; flex-direction: column; flex-grow: 1; }
         
         .panel-header { margin-bottom: 1.5rem; display: flex; align-items: baseline; gap: 12px; }
         .panel-header strong { font-size: 1.2rem; color: var(--nc-text-1); }
@@ -193,7 +191,7 @@
                     <strong>Forecast Generation</strong>
                     <small>Select a configuration to view timeseries data</small>
                 </div>
-                <div style="height: 320px; display: flex; align-items: center; justify-content: center; color: var(--nc-text-2);">
+                <div style="flex-grow: 1; min-height: 320px; display: flex; align-items: center; justify-content: center; color: var(--nc-text-2);">
                     Waiting for input...
                 </div>
             </div>
