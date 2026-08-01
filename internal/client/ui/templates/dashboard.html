@@ -29,7 +29,7 @@
             background-color: var(--nc-bg-1);
             font-family: system-ui, -apple-system, sans-serif;
             margin: 0;
-            padding: 32px;
+            padding: 0;
             max-width: none;
         }
 
@@ -39,8 +39,9 @@
             gap: 24px;
             max-width: 1400px;
             margin: 0 auto;
+            padding: 0 32px 32px 32px;
             align-items: stretch;
-            min-height: calc(100vh - 64px);
+            min-height: calc(100vh - 64px - 32px);
         }
 
         .left-column {
@@ -155,6 +156,38 @@
             margin-bottom: 6px;
         }
 
+        .dashboard-header {
+            background: var(--nc-bg-2);
+            padding: 16px 32px;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            margin-bottom: 32px;
+            box-sizing: border-box;
+            min-height: 64px;
+        }
+        
+        .dashboard-header h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: var(--nc-text-1);
+            line-height: 1.5;
+            margin-top: 0 !important;
+        }
+
+        .dashboard-header nav {
+            display: flex;
+            gap: 16px;
+        }
+
+        .dashboard-header a {
+            color: var(--nc-text-1);
+            text-decoration: none;
+            font-weight: 600;
+            line-height: 1.5;
+        }
+
         .htmx-indicator { display: none; }
         .htmx-request .htmx-indicator { display: inline; }
         .htmx-request.htmx-indicator { display: inline; }
@@ -176,19 +209,26 @@
         }
     </style>
 </head>
-<body>
+<body hx-boost="true">
+    <header class="dashboard-header">
+        <h1>Data Platform UI</h1>
+        <nav>
+            <a href="/">Analysis</a>
+            <a href="/dashboard">Dashboard</a>
+        </nav>
+    </header>
     <main class="dashboard-grid">
         <div class="left-column">
             <!-- Selectors Panel -->
-            <div class="panel" id="selectors-panel" hx-get="/components/selectors" hx-trigger="load">
-                <p style="color: var(--nc-text-2);"><i>Loading configuration...</i></p>
+            <div class="panel" id="selectors-panel" hx-get="/components/dashboard/selectors" hx-trigger="load">
+                <p style="color: var(--nc-text-2);"><i>Loading dashboard configuration...</i></p>
             </div>
 
             <!-- Chart Panel -->
             <div class="panel" id="chart-panel">
                 <div class="panel-header">
-                    <strong>Forecast Generation</strong>
-                    <small>Select a configuration to view timeseries data</small>
+                    <strong>Dashboard View</strong>
+                    <small>Select a Nation to begin</small>
                 </div>
                 <div class="empty-state" style="min-height: 320px;">
                     Waiting for input...
@@ -199,11 +239,11 @@
         <!-- Map Panel -->
         <div class="panel right-column" id="map-panel">
             <div class="panel-header">
-                <strong>Location View</strong>
-                <small>Geospatial snapshot</small>
+                <strong>GSP Map</strong>
+                <small>Snapshot</small>
             </div>
             <div class="map-container empty-state">
-                Select a location...
+                Select a Nation...
             </div>
         </div>
     </main>

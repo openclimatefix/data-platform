@@ -1,0 +1,87 @@
+<form id="dashboard-query-form" hx-get="/components/dashboard/forecast" hx-target="#chart-panel" hx-indicator="#loading">
+    <div class="panel-header" style="margin-bottom: 1rem;">
+        <strong>Dashboard Configuration</strong>
+    </div>
+
+    <div class="form-grid">
+        <div class="form-group">
+            <label for="location_search">Nation</label>
+            <input type="text" list="location_options" id="location_search" autocomplete="off" placeholder="Select a Nation..." required>
+            <input type="hidden" id="location_uuid" name="location_uuid" required>
+            <datalist id="location_options">
+                {{ range .Locations }}
+                <option data-uuid="{{ .LocationUuid }}" value="{{ .LocationName }}"></option>
+                {{ end }}
+            </datalist>
+        </div>
+
+        <div class="form-group">
+            <label for="forecaster_search">Forecaster</label>
+            <input type="text" list="forecaster_options" id="forecaster_search" autocomplete="off" placeholder="Select a Forecaster..." required>
+            <input type="hidden" id="forecaster_val" name="forecaster" required>
+            <datalist id="forecaster_options">
+                {{ range .Forecasters }}
+                <option data-val="{{ .ForecasterName }}|{{ .ForecasterVersion }}" value="{{ .ForecasterName }} (v{{ .ForecasterVersion }})"></option>
+                {{ end }}
+            </datalist>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            var locSearch = document.getElementById('location_search');
+            var locUuid = document.getElementById('location_uuid');
+            locSearch.addEventListener('input', e => {
+                locUuid.value = '';
+                var options = Array.from(document.getElementById('location_options').options);
+                var opt = options.find(o => o.value === e.target.value);
+                if (opt) locUuid.value = opt.getAttribute('data-uuid');
+            });
+
+            var fcSearch = document.getElementById('forecaster_search');
+            var fcVal = document.getElementById('forecaster_val');
+            fcSearch.addEventListener('input', e => {
+                fcVal.value = '';
+                var options = Array.from(document.getElementById('forecaster_options').options);
+                var opt = options.find(o => o.value === e.target.value);
+                if (opt) fcVal.value = opt.getAttribute('data-val');
+            });
+
+            document.getElementById('dashboard-query-form').addEventListener('htmx:beforeRequest', function(e) {
+                if (!locUuid.value) { e.preventDefault(); alert('Please select a valid Nation.'); return; }
+                if (!fcVal.value) { e.preventDefault(); alert('Please select a Forecaster.'); return; }
+            });
+        })();
+    </script>
+
+    <div class="params-grid">
+        <div class="form-group">
+            <label for="energy_source">Energy Source</label>
+            <select id="energy_source" name="energy_source" required>
+                <option value="1" selected>Solar</option>
+                <option value="2">Wind</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="horizon_mins">Horizon Mins</label>
+            <input type="number" id="horizon_mins" name="horizon_mins" value="0" min="0" max="2160" step="5" required>
+        </div>
+        <div class="form-group">
+            <label for="time_window">Time Window (UTC)</label>
+            <input type="text" id="time_window" name="time_window" value="{{ .DefaultTimeWindow }}" required>
+        </div>
+    </div>
+    <div style="margin-top: 1rem;">
+        <button type="submit">Load Dashboard</button>
+        <span id="loading" class="htmx-indicator" style="margin-left: 1rem; color: var(--nc-text-2);"><i>Fetching data...</i></span>
+    </div>
+</form>
+
+<script>
+    flatpickr("#time_window", {
+        mode: "range",
+        enableTime: true,
+        time_24hr: true,
+        dateFormat: "Y-m-d H:i",
+    });
+</script>

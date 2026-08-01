@@ -9,10 +9,10 @@ This specification outlines the architecture, layout, design, and functionality 
 - **Browser-Native Primacy:** Use native HTML5 components (e.g., `<datalist>`, `<input type="number">`) wherever possible before falling back to custom JavaScript.
 
 ## 2. Layout Structure
-The UI follows a desktop-optimized, responsive grid layout split into three distinct panels.
+The UI utilizes a Single Page Application (SPA) feel powered by HTMX (`hx-boost`). The structure is split across two primary modes: **Analysis** and **Dashboard**, both utilizing the same core CSS grid.
 
-**Global Layout:**
-- **Header:** Full-width title ("Data Platform Overview").
+**Global Layout (`base.html`):**
+- **Header Navigation:** A persistent top-level navigation bar linking to the Analysis and Dashboard modes.
 - **Grid:** A 2-column layout (`grid-template-columns: 2fr 1fr`) constrained to a maximum width of `1400px`.
 - **Panels:** All distinct UI sections are housed in white "cards" (`border-radius: 16px`, faint drop shadow, `1px` soft border).
 
@@ -25,49 +25,29 @@ Spans the full width of the left column below Panel 1. Displays the generated ti
 **Panel 3: Location Map (Right Column)**
 Spans the entire height of the right column, sitting adjacent to Panels 1 and 2. Displays a dynamically responsive geographical map of the selected location, focused primarily on the data shapes.
 
-## 3. Component Details & Functionality
+## 3. Modes & Functionality
 
-### 3.1. Query Configuration (Form)
-The form submits via an HTMX `hx-get` request to the backend. It consists of two rows of inputs:
+### 3.1. Analysis Mode
+Designed for data science teams to inspect timeseries overlap, compare forecasters against observers, and validate raw predictive accuracy.
 
-**Row 1 (33/33/33 Split):**
-- **Location Selector:** 
-  - `text` input mapped to an HTML5 `<datalist>`.
-  - Options display: `Location Name (Type, Capacity)`.
-  - **Behavior:** Standard browser fuzzy search. Selecting an option fires vanilla JS that maps the selected text to its underlying `UUID` and stores it in a hidden input for submission.
-- **Forecaster Selector (Multi-Select):** 
-  - `text` input mapped to an HTML5 `<datalist>`.
-  - **Behavior:** Selecting an option creates a visual "chip" and a hidden input. Crucially, the selected option is *removed* from the datalist to prevent duplicates.
-  - **Selected Badge:** An inline button displaying "X Selected". Clicking it toggles a popover (`z-index: 50`) listing the selected chips. Clicking the "x" on a chip destroys the hidden input and re-injects the option back into the `<datalist>`.
-- **Observer Selector (Multi-Select):**
-  - Follows the identical custom `<datalist>` behavior as the Forecaster selector, enabling timeseries observations to be overlaid alongside forecasts.
+**Configuration:**
+- **Location Selector:** Uses fuzzy search across all Location Types.
+- **Sources (Multi-Select):** Allows unlimited Forecaster and Observer selection to overlay alongside each other on the chart.
+- **Chart:** Plots all selected timeseries, incorporating probabilistic bounds (P10/P90) where available.
+- **Map:** Displays a single boundary polygon representing the requested Location. Map opacity updates based on the aggregate data fraction when scrubbing the chart.
 
-**Row 2 (25/25/50 Split):**
-- **Energy Source:** A standard HTML `<select>` dropdown (Options: "Solar", "Wind").
-- **Horizon Minutes:** An HTML5 `<input type="number">` constrained with `min="0"`, `max="2160"`, and `step="5"`.
-- **Time Window:** A single text input progressively enhanced by `flatpickr`. Opens a calendar popover allowing the user to select a contiguous Date/Time range.
+### 3.2. Dashboard Mode
+Designed for grid operators, this mode focuses on the hierarchical relationship between large areas (Nations) and their constituent distribution components (GSPs).
 
-### 3.2. Forecast Results (Chart)
-Powered by **ECharts** running from a locally hosted minified script, allowing for robust timeseries functionality, interactive tooltips, and rendering of probabilistic data bounds without external charting dependencies.
+**Configuration:**
+- **Location Selector:** Strictly filters to `LOCATION_TYPE_NATION`.
+- **Source:** Limited to a single Forecaster model.
+- **Chart Drill-Down:** The chart initially loads displaying the national aggregate timeseries. Clicking a specific GSP directly on the interactive map triggers an HTMX partial-swap, instantly replacing the Nation chart with that specific GSP's localized timeseries.
 
-- **Header:** Displays the Location Name and UUID.
-- **Legend:** A flexbox row mapping model names to colored circles corresponding to the chart lines.
-- **Graph:** 
-  - **Layout:** Flexes to fill the container height, with a minimum height of `320px`. Automatically resizes via `ResizeObserver`.
-  - **Lines:** P50 predictions are plotted as smooth lines. Observation data lines are automatically rendered with a `dashed` stroke style to distinguish them visually.
-  - **Probabilistic Bands:** If P10 and P90 data is returned by the backend, it is rendered as a semi-transparent layered area behind the main predictive lines (`opacity: 0.2`) to visually denote certainty ranges.
-  - **Axes:** Grid lines are styled to match light/dark mode seamlessly. The X-axis dynamically spaces labels (Jan 02 15:00) cleanly, avoiding overlap.
-  - **Tooltips:** Hovering over the chart renders dynamic tooltips showing formatted watts (W, kW, MW, GW) for the P50 line, explicitly appending `(P10: ... - P90: ...)` if probabilistic limits exist.
-- **Interactivity:** Clicking anywhere on the chart grid captures the timestamp beneath the cursor, updating the map panel instantly.
-
-### 3.3. Location Map
-Powered by **ECharts** native geo bindings. Eschews topographic tile-layers (like Leaflet) completely in favor of high-contrast data visualization.
-
-- **Header:** Displays the explicit Latitude and Longitude coordinates. Updates dynamically to indicate `"Snapshot: [Time]"` when the timeseries chart is clicked.
-- **Interactivity:** Pan/Zoom disabled. Click interactions in the chart update the map opacity directly via ECharts' fast `setOption` merges, reflecting the snapshot generation fraction at that specific instant.
-- **Rendering:**
-  - If the backend provides GeoJSON for the location, the map draws the geometry natively as an ECharts `geo` layer and sizes it optimally in the center of the panel.
-  - If no GeoJSON is provided (or if it is a single point), the map renders a custom coordinate `scatter` marker centered on a blank hidden Cartesian grid.
+**Map Interaction:**
+- **Asynchronous Snapshot Loading:** To avoid massive data payloads, the dashboard fetches all GSP boundaries asynchronously using a crisp simplification level (`0.005` degrees). 
+- **Time Scrubbing:** Clicking the timeseries chart triggers a lightweight JSON `fetch()` to `/api/dashboard/map-snapshot`, which instantly re-colorizes all GSPs to reflect their specific generation percentage at that given timestamp.
+- **Choropleth VisualMap:** Employs an interactive ECharts `visualMap` component. Users can drag the High/Low filters on the legend to dynamically hide/show GSPs in real-time based on their generation.
 
 ## 4. Design & Styling (CSS)
 - **Framework:** `@exampledev/new.css` (Classless CSS framework for minimal overhead).

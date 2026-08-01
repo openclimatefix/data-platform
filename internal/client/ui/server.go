@@ -45,7 +45,11 @@ func init() {
 			return template.JS(b)
 		},
 	}
-	tpl = template.Must(template.New("").Funcs(funcs).ParseFS(templateFiles, "templates/*.html"))
+	var err error
+	tpl, err = template.New("").Funcs(funcs).ParseFS(templateFiles, "templates/*.html")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to parse UI templates")
+	}
 }
 
 type UIClient struct {
@@ -73,12 +77,35 @@ func (ui *UIClient) Start(port string) error {
 	mux.HandleFunc("/components/selectors", ui.handleSelectors)
 	mux.HandleFunc("/components/forecast", ui.handleForecast)
 
+	mux.HandleFunc("/dashboard", ui.handleDashboard)
+	mux.HandleFunc("/components/dashboard/selectors", ui.handleDashboardSelectors)
+	mux.HandleFunc("/components/dashboard/forecast", ui.handleDashboardForecast)
+	mux.HandleFunc("/components/dashboard/gsp-timeseries", ui.handleDashboardGSPTimeseries)
+	mux.HandleFunc("/api/dashboard/map-snapshot", ui.handleDashboardMapSnapshot)
+
 	return http.ListenAndServe(port, mux)
 }
 
 func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
-	err := tpl.ExecuteTemplate(w, "index.html", nil)
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	// Note: analysis.html and dashboard.html both depend on "content" block overriding "base.html".
+	// Therefore, we execute "analysis.html" which defines "content" and then embeds within "base".
+	// Go's template engine parses them all, but we must execute the entrypoint template.
+	err := tpl.ExecuteTemplate(w, "analysis.html", nil)
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to execute analysis template")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (ui *UIClient) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	// dashboard.html defines the content block, wrapping inside base.html
+	err := tpl.ExecuteTemplate(w, "dashboard.html", nil)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to execute dashboard template")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -94,33 +121,34 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		var err error
-		locResp, err = ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{})
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to list locations")
+		var locErr error
+		locResp, locErr = ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{})
+		if locErr != nil {
+			log.Error().Err(locErr).Msg("Failed to list locations")
 		}
-		return err
+		return locErr
 	})
 
 	g.Go(func() error {
-		var err error
-		fcResp, err = ui.grpcClient.ListForecasters(gCtx, &pb.ListForecastersRequest{})
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to list forecasters")
+		var fcErr error
+		fcResp, fcErr = ui.grpcClient.ListForecasters(gCtx, &pb.ListForecastersRequest{})
+		if fcErr != nil {
+			log.Error().Err(fcErr).Msg("Failed to list forecasters")
 		}
-		return err
+		return fcErr
 	})
 
 	g.Go(func() error {
-		var err error
-		obsResp, err = ui.grpcClient.ListObservers(gCtx, &pb.ListObserversRequest{})
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to list observers")
+		var obsErr error
+		obsResp, obsErr = ui.grpcClient.ListObservers(gCtx, &pb.ListObserversRequest{})
+		if obsErr != nil {
+			log.Error().Err(obsErr).Msg("Failed to list observers")
 		}
-		return err
+		return obsErr
 	})
 
 	if err := g.Wait(); err != nil {
+		log.Error().Err(err).Msg("Failed to list required resources for selectors")
 		http.Error(w, fmt.Sprintf("Failed to list required resources: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -142,6 +170,7 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 
 	err := tpl.ExecuteTemplate(w, "selectors.html", data)
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to execute selectors template")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -377,7 +406,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	g.Go(func() error {
 		geoReq := &pb.GetLocationsAsGeoJSONRequest{
 			LocationUuids: []string{locUUID},
-			Unsimplified:  true,
+			Unsimplified:  false,
 		}
 		geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(gCtx, geoReq)
 		if err == nil && geoResp != nil && geoResp.GetGeojson() != "" {

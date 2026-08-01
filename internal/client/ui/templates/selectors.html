@@ -48,121 +48,131 @@
     </div>
 
     <script>
-        // --- Location Datalist Mapper ---
-        const locSearch = document.getElementById('location_search');
-        const locUuid = document.getElementById('location_uuid');
+        (function() {
+            // --- Location Datalist Mapper ---
+            var locSearch = document.getElementById('location_search');
+            var locUuid = document.getElementById('location_uuid');
 
-        locSearch.addEventListener('input', e => {
-            locUuid.value = ''; // Reset actual value when typing
-            const options = Array.from(document.getElementById(e.target.getAttribute('list')).options);
-            const opt = options.find(o => o.value === e.target.value);
-            if (opt) {
-                locUuid.value = opt.getAttribute('data-uuid');
+            locSearch.addEventListener('input', e => {
+                locUuid.value = ''; // Reset actual value when typing
+                var options = Array.from(document.getElementById(e.target.getAttribute('list')).options);
+                var opt = options.find(o => o.value === e.target.value);
+                if (opt) {
+                    locUuid.value = opt.getAttribute('data-uuid');
+                }
+            });
+
+            // --- Multi-Select Chips from Datalist ---
+            var sourceSearch = document.getElementById('source_search');
+            var fcChipsContainer = document.getElementById('fc_chips_container');
+            var obsChipsContainer = document.getElementById('obs_chips_container');
+            var sourceHiddenInputs = document.getElementById('source_hidden_inputs');
+            var sourceBadge = document.getElementById('source_badge');
+            var selectedSources = { forecaster: [], observer: [] };
+
+            function updateSourceBadge() {
+                var total = selectedSources.forecaster.length + selectedSources.observer.length;
+                sourceBadge.textContent = total + ' Selected';
+                if (total === 0) {
+                    document.getElementById('source_chips').classList.remove('show');
+                }
             }
-        });
 
-        // --- Multi-Select Chips from Datalist ---
-        const sourceSearch = document.getElementById('source_search');
-        const fcChipsContainer = document.getElementById('fc_chips_container');
-        const obsChipsContainer = document.getElementById('obs_chips_container');
-        const sourceHiddenInputs = document.getElementById('source_hidden_inputs');
-        const sourceBadge = document.getElementById('source_badge');
-        let selectedSources = { forecaster: [], observer: [] };
-
-        function updateSourceBadge() {
-            const total = selectedSources.forecaster.length + selectedSources.observer.length;
-            sourceBadge.textContent = total + ' Selected';
-            if (total === 0) {
-                document.getElementById('source_chips').classList.remove('show');
-            }
-        }
-
-        sourceSearch.addEventListener('input', e => {
-            const inputVal = e.target.value;
-            const options = Array.from(document.getElementById(e.target.getAttribute('list')).options);
-            const opt = options.find(o => o.value === inputVal);
-            
-            if (opt) {
-                const type = opt.getAttribute('data-type');
-                const val = opt.getAttribute('data-val');
-                const text = opt.value;
+            sourceSearch.addEventListener('input', e => {
+                var inputVal = e.target.value;
+                var listEl = document.getElementById(e.target.getAttribute('list'));
+                if (!listEl) return;
+                var options = Array.from(listEl.options);
+                var opt = options.find(o => o.value === inputVal);
                 
-                if (!selectedSources[type].find(f => f.val === val)) {
-                    selectedSources[type].push({val, text, type});
+                if (opt) {
+                    var type = opt.getAttribute('data-type');
+                    var val = opt.getAttribute('data-val');
+                    var text = opt.value;
                     
-                    // Add chip to popover
-                    const chip = document.createElement('div');
-                    chip.className = 'chip';
-                    chip.id = 'chip_' + type + '_' + val.replace(/\|/g, '-');
-                    chip.innerHTML = `<span style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${text}">${text.replace(' [' + (type === 'forecaster' ? 'Forecaster' : 'Observer') + ']', '')}</span><span style="cursor:pointer; font-weight:bold; opacity:0.8; flex-shrink: 0;" onclick="removeSource('${type}', '${val}', event)">&times;</span>`;
-                    
-                    if (type === 'forecaster') {
-                        fcChipsContainer.appendChild(chip);
-                    } else {
-                        obsChipsContainer.appendChild(chip);
+                    if (!selectedSources[type].find(f => f.val === val)) {
+                        selectedSources[type].push({val, text, type});
+                        
+                        // Add chip to popover
+                        var chip = document.createElement('div');
+                        chip.className = 'chip';
+                        chip.id = 'chip_' + type + '_' + val.replace(/\|/g, '-');
+                        chip.innerHTML = `<span style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${text}">${text.replace(' [' + (type === 'forecaster' ? 'Forecaster' : 'Observer') + ']', '')}</span><span style="cursor:pointer; font-weight:bold; opacity:0.8; flex-shrink: 0;" onclick="window.removeSource('${type}', '${val}', event)">&times;</span>`;
+                        
+                        if (type === 'forecaster') {
+                            fcChipsContainer.appendChild(chip);
+                        } else {
+                            obsChipsContainer.appendChild(chip);
+                        }
+
+                        // Add hidden input for form submission
+                        var hid = document.createElement('input');
+                        hid.type = 'hidden';
+                        hid.name = type;
+                        hid.value = val;
+                        hid.id = 'hidden_' + type + '_' + val.replace(/\|/g, '-');
+                        sourceHiddenInputs.appendChild(hid);
+
+                        updateSourceBadge();
+                        
+                        // Remove option from datalist so it can't be selected again
+                        opt.remove();
                     }
-
-                    // Add hidden input for form submission
-                    const hid = document.createElement('input');
-                    hid.type = 'hidden';
-                    hid.name = type;
-                    hid.value = val;
-                    hid.id = 'hidden_' + type + '_' + val.replace(/\|/g, '-');
-                    sourceHiddenInputs.appendChild(hid);
-
-                    updateSourceBadge();
                     
-                    // Remove option from datalist so it can't be selected again
-                    opt.remove();
+                    sourceSearch.value = ''; // Reset input after selection
+                }
+            });
+
+            window.removeSource = function(type, val, event) {
+                if (event) event.stopPropagation();
+                
+                // Re-add to datalist
+                var removedItem = selectedSources[type].find(f => f.val === val);
+                if (removedItem) {
+                    var opt = document.createElement('option');
+                    opt.setAttribute('data-type', removedItem.type);
+                    opt.setAttribute('data-val', removedItem.val);
+                    opt.value = removedItem.text;
+                    document.getElementById('source_options').appendChild(opt);
                 }
                 
-                sourceSearch.value = ''; // Reset input after selection
-            }
-        });
+                selectedSources[type] = selectedSources[type].filter(f => f.val !== val);
+                document.getElementById('chip_' + type + '_' + val.replace(/\|/g, '-')).remove();
+                document.getElementById('hidden_' + type + '_' + val.replace(/\|/g, '-')).remove();
+                updateSourceBadge();
+            };
 
-        window.removeSource = function(type, val, event) {
-            if (event) event.stopPropagation();
-            
-            // Re-add to datalist
-            const removedItem = selectedSources[type].find(f => f.val === val);
-            if (removedItem) {
-                const opt = document.createElement('option');
-                opt.setAttribute('data-type', removedItem.type);
-                opt.setAttribute('data-val', removedItem.val);
-                opt.value = removedItem.text;
-                document.getElementById('source_options').appendChild(opt);
+            // Close dropdowns when clicking outside
+            if (!window.dropdownClickListenerAdded) {
+                document.addEventListener('click', e => {
+                    var badge = document.getElementById('source_badge');
+                    var chips = document.getElementById('source_chips');
+                    if (!badge || !chips) return;
+                    if (!e.target.closest('#source_badge') && !e.target.closest('#source_chips')) {
+                        chips.classList.remove('show');
+                    }
+                });
+                window.dropdownClickListenerAdded = true;
             }
-            
-            selectedSources[type] = selectedSources[type].filter(f => f.val !== val);
-            document.getElementById('chip_' + type + '_' + val.replace(/\|/g, '-')).remove();
-            document.getElementById('hidden_' + type + '_' + val.replace(/\|/g, '-')).remove();
-            updateSourceBadge();
-        };
 
-        // Close dropdowns when clicking outside
-        document.addEventListener('click', e => {
-            if (!e.target.closest('#source_badge') && !e.target.closest('#source_chips')) {
-                document.getElementById('source_chips').classList.remove('show');
-            }
-        });
+            // Ensure clicking the badge stops propagation so the document click listener doesn't close it instantly
+            document.getElementById('source_badge').addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
 
-        // Ensure clicking the badge stops propagation so the document click listener doesn't close it instantly
-        document.getElementById('source_badge').addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
-
-        // Ensure the form only submits if validation passes
-        document.getElementById('query-form').addEventListener('submit', function(e) {
-            if (!document.getElementById('location_uuid').value) {
-                e.preventDefault();
-                alert('Please select a valid location from the list.');
-                return;
-            }
-            if (selectedSources.forecaster.length === 0 && selectedSources.observer.length === 0) {
-                e.preventDefault();
-                alert('Please select at least one forecaster or observer.');
-            }
-        });
+            // Ensure the form only submits if validation passes
+            document.getElementById('query-form').addEventListener('htmx:beforeRequest', function(e) {
+                if (!document.getElementById('location_uuid').value) {
+                    e.preventDefault();
+                    alert('Please select a valid location from the list.');
+                    return;
+                }
+                if (selectedSources.forecaster.length === 0 && selectedSources.observer.length === 0) {
+                    e.preventDefault();
+                    alert('Please select at least one forecaster or observer.');
+                }
+            });
+        })();
     </script>
 
     <div class="params-grid">

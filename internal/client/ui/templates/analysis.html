@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Platform Overview</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="/static/echarts.min.js"></script>
+    <style>
+        :root {
+            --nc-bg-1: #f4f5f7;
+            --nc-bg-2: #ffffff;
+            --nc-bg-3: #f0f1f3;
+            --nc-text-1: #1c1c1e;
+            --nc-text-2: #6b6b70;
+            --nc-ac-1: #7a9374;
+            --nc-ac-tx: #ffffff;
+            --chart-color-0: #7a9374;
+            --chart-color-1: #1095c1;
+            --chart-color-2: #f2a900;
+            --chart-color-3: #e07a5f;
+            --chart-color-4: #8e8e93;
+        }
+
+        body { 
+            background-color: var(--nc-bg-1);
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 0;
+            max-width: none;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 32px 32px 32px;
+            align-items: stretch;
+            min-height: calc(100vh - 64px - 32px);
+        }
+
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .right-column {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel {
+            background: var(--nc-bg-2);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.04);
+            margin: 0;
+        }
+
+        .map-container {
+            flex-grow: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--nc-bg-3);
+            min-height: 450px;
+        }
+
+        /* Fix input readability in dark-mode environments */
+        .dashboard-grid input, .dashboard-grid select {
+            border-radius: 8px;
+            border: 1px solid #e0e0e4;
+            background-color: var(--nc-bg-2);
+            color: var(--nc-text-1);
+            padding: 10px 12px;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button.badge-btn {
+            white-space: nowrap;
+            padding: 10px 16px;
+            background-color: var(--nc-bg-3);
+            color: var(--nc-text-1);
+            border: 1px solid #e0e0e4;
+        }
+
+        .custom-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--nc-bg-2); border: 1px solid #e0e0e4;
+            border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-height: 250px; overflow-y: auto; z-index: 50;
+            display: none;
+        }
+        .custom-dropdown.show { display: flex; flex-direction: column; }
+        .dropdown-item {
+            padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f1f3;
+            font-size: 0.9rem; color: var(--nc-text-1);
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--nc-bg-1); }
+        .chip {
+            background: var(--nc-text-1); color: var(--nc-bg-2);
+            padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;
+            display: flex; align-items: center; justify-content: space-between; gap: 6px;
+        }
+
+        button {
+            background-color: #1c1c1e;
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 10px 24px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover { background-color: #3a3a3c; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .params-grid {
+            display: grid; 
+            grid-template-columns: 1fr 1fr 2fr; 
+            gap: 20px; 
+            margin-bottom: 20px;
+        }
+
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--nc-text-2);
+            flex-grow: 1;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--nc-text-2);
+            margin-bottom: 6px;
+        }
+
+        .dashboard-header {
+            background: var(--nc-bg-2);
+            padding: 16px 32px;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            margin-bottom: 32px;
+            box-sizing: border-box;
+            min-height: 64px;
+        }
+        
+        .dashboard-header h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: var(--nc-text-1);
+            line-height: 1.5;
+            margin-top: 0 !important;
+        }
+
+        .dashboard-header nav {
+            display: flex;
+            gap: 16px;
+        }
+
+        .dashboard-header a {
+            color: var(--nc-text-1);
+            text-decoration: none;
+            font-weight: 600;
+            line-height: 1.5;
+        }
+
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline; }
+        .htmx-request.htmx-indicator { display: inline; }
+
+        #chart-panel { display: flex; flex-direction: column; flex-grow: 1; }
+        
+        .panel-header { margin-bottom: 1.5rem; display: flex; align-items: baseline; gap: 12px; }
+        .panel-header strong { font-size: 1.2rem; color: var(--nc-text-1); }
+        .panel-header small { color: var(--nc-text-2); font-size: 0.85rem; }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --nc-bg-1: #1c1c1e;
+                --nc-bg-2: #2c2c2e;
+                --nc-bg-3: #3a3a3c;
+                --nc-text-1: #ffffff;
+                --nc-text-2: #ebebf5;
+            }
+        }
+    </style>
+</head>
+<body hx-boost="true">
+    <header style="background: var(--nc-bg-2); padding: 16px 32px; border-bottom: 1px solid rgba(0,0,0,0.04); display: flex; gap: 24px; align-items: center; margin-bottom: 32px;">
+        <h1 style="margin: 0; font-size: 1.2rem; color: var(--nc-text-1);">Data Platform UI</h1>
+        <nav style="display: flex; gap: 16px;">
+            <a href="/" style="color: var(--nc-text-1); text-decoration: none; font-weight: 600;">Analysis</a>
+            <a href="/dashboard" style="color: var(--nc-text-1); text-decoration: none; font-weight: 600;">Dashboard</a>
+        </nav>
+    </header>
+    <main class="dashboard-grid">
+        <div class="left-column">
+            <!-- Selectors Panel -->
+            <div class="panel" id="selectors-panel" hx-get="/components/selectors" hx-trigger="load">
+                <p style="color: var(--nc-text-2);"><i>Loading configuration...</i></p>
+            </div>
+
+            <!-- Chart Panel -->
+            <div class="panel" id="chart-panel">
+                <div class="panel-header">
+                    <strong>Forecast Generation</strong>
+                    <small>Select a configuration to view timeseries data</small>
+                </div>
+                <div class="empty-state" style="min-height: 320px;">
+                    Waiting for input...
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Panel -->
+        <div class="panel right-column" id="map-panel">
+            <div class="panel-header">
+                <strong>Location View</strong>
+                <small>Geospatial snapshot</small>
+            </div>
+            <div class="map-container empty-state">
+                Select a location...
+            </div>
+        </div>
+    </main>
+</body>
+</html>
