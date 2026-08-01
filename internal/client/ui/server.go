@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -39,6 +40,10 @@ func init() {
 
 			return fmt.Sprintf("%dW", cap)
 		},
+		"toJSON": func(v interface{}) template.JS {
+			b, _ := json.Marshal(v)
+			return template.JS(b)
+		},
 	}
 	tpl = template.Must(template.New("").Funcs(funcs).ParseFS(templateFiles, "templates/*.html"))
 }
@@ -48,7 +53,7 @@ type UIClient struct {
 }
 
 func NewUIClient(grpcTarget string) (*UIClient, error) {
-	conn, err := grpc.Dial(grpcTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(grpcTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial gRPC target %s: %w", grpcTarget, err)
 	}
@@ -82,36 +87,41 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	locResp, err := ui.grpcClient.ListLocations(ctx, &pb.ListLocationsRequest{})
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to list locations")
-		http.Error(
-			w,
-			fmt.Sprintf("Failed to list locations: %v", err),
-			http.StatusInternalServerError,
-		)
-		return
-	}
+	var locResp *pb.ListLocationsResponse
+	var fcResp *pb.ListForecastersResponse
+	var obsResp *pb.ListObserversResponse
 
-	fcResp, err := ui.grpcClient.ListForecasters(ctx, &pb.ListForecastersRequest{})
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to list forecasters")
-		http.Error(
-			w,
-			fmt.Sprintf("Failed to list forecasters: %v", err),
-			http.StatusInternalServerError,
-		)
-		return
-	}
+	g, gCtx := errgroup.WithContext(ctx)
 
-	obsResp, err := ui.grpcClient.ListObservers(ctx, &pb.ListObserversRequest{})
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to list observers")
-		http.Error(
-			w,
-			fmt.Sprintf("Failed to list observers: %v", err),
-			http.StatusInternalServerError,
-		)
+	g.Go(func() error {
+		var err error
+		locResp, err = ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{})
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to list locations")
+		}
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+		fcResp, err = ui.grpcClient.ListForecasters(gCtx, &pb.ListForecastersRequest{})
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to list forecasters")
+		}
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+		obsResp, err = ui.grpcClient.ListObservers(gCtx, &pb.ListObserversRequest{})
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to list observers")
+		}
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to list required resources: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -130,10 +140,19 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		),
 	}
 
-	err = tpl.ExecuteTemplate(w, "selectors.html", data)
+	err := tpl.ExecuteTemplate(w, "selectors.html", data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+type SeriesData struct {
+	Name          string     `json:"name"`
+	Data          []*float32 `json:"data"`
+	HasBands      bool       `json:"hasBands"`
+	BandLower     []*float32 `json:"bandLower"`
+	BandDiff      []*float32 `json:"bandDiff"`
+	IsObservation bool       `json:"isObservation"`
 }
 
 func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
@@ -232,15 +251,6 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			Raw:  oRaw,
 			Name: oRaw,
 		})
-	}
-
-	type SeriesData struct {
-		Name          string
-		Data          []string
-		HasBands      bool
-		BandLower     []string
-		BandUpper     []string
-		IsObservation bool
 	}
 
 	type ForecasterResult struct {
@@ -363,6 +373,24 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	var geoJSONStr template.JS
+	g.Go(func() error {
+		geoReq := &pb.GetLocationsAsGeoJSONRequest{
+			LocationUuids: []string{locUUID},
+			Unsimplified:  true,
+		}
+		geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(gCtx, geoReq)
+		if err == nil && geoResp != nil && geoResp.GetGeojson() != "" {
+			geoJSONStr = template.JS(geoResp.GetGeojson())
+		} else {
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to get GeoJSON for map")
+			}
+			geoJSONStr = template.JS("null")
+		}
+		return nil
+	})
+
 	_ = g.Wait()
 
 	var allSeries []SeriesData
@@ -424,22 +452,34 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		sd.HasBands = hasBands
 		for _, k := range timeKeys {
 			if val, ok := forecasterResults[f.Raw][k]; ok {
-				sd.Data = append(sd.Data, fmt.Sprintf("%.2f", val))
+				v := val
+				sd.Data = append(sd.Data, &v)
 			} else {
-				sd.Data = append(sd.Data, "null")
+				sd.Data = append(sd.Data, nil)
 			}
 
 			if hasBands {
+				var bLow, bUp float32
+				var hasLow, hasUp bool
+
 				if val, ok := forecasterBandsLower[f.Raw][k]; ok {
-					sd.BandLower = append(sd.BandLower, fmt.Sprintf("%.2f", val))
+					bLow = val
+					hasLow = true
+					sd.BandLower = append(sd.BandLower, &bLow)
 				} else {
-					sd.BandLower = append(sd.BandLower, "null")
+					sd.BandLower = append(sd.BandLower, nil)
 				}
 
 				if val, ok := forecasterBandsUpper[f.Raw][k]; ok {
-					sd.BandUpper = append(sd.BandUpper, fmt.Sprintf("%.2f", val))
+					bUp = val
+					hasUp = true
+				}
+
+				if hasLow && hasUp {
+					diff := bUp - bLow
+					sd.BandDiff = append(sd.BandDiff, &diff)
 				} else {
-					sd.BandUpper = append(sd.BandUpper, "null")
+					sd.BandDiff = append(sd.BandDiff, nil)
 				}
 			}
 		}
@@ -454,26 +494,14 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, k := range timeKeys {
 			if val, ok := forecasterResults[o.Raw][k]; ok {
-				sd.Data = append(sd.Data, fmt.Sprintf("%.2f", val))
+				v := val
+				sd.Data = append(sd.Data, &v)
 			} else {
-				sd.Data = append(sd.Data, "null")
+				sd.Data = append(sd.Data, nil)
 			}
 		}
 
 		allSeries = append(allSeries, sd)
-	}
-
-	geoReq := &pb.GetLocationsAsGeoJSONRequest{
-		LocationUuids: []string{locUUID},
-		Unsimplified:  true,
-	}
-	geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(ctx, geoReq)
-
-	var geoJSONStr string
-	if err == nil && geoResp != nil {
-		geoJSONStr = geoResp.GetGeojson()
-	} else {
-		log.Warn().Err(err).Msg("Failed to get GeoJSON for map")
 	}
 
 	var avgFraction float32
@@ -483,7 +511,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		Location    *pb.GetLocationResponse
-		GeoJSON     string
+		GeoJSON     template.JS
 		AvgFraction float32
 		Labels      []string
 		Series      []SeriesData

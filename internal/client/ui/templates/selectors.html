@@ -1,4 +1,4 @@
-<form hx-get="/components/forecast" hx-target="#chart-panel" hx-indicator="#loading">
+<form id="query-form" hx-get="/components/forecast" hx-target="#chart-panel" hx-indicator="#loading">
     <div class="panel-header" style="margin-bottom: 1rem;">
         <strong>Query Configuration</strong>
     </div>
@@ -152,7 +152,7 @@
         });
 
         // Ensure the form only submits if validation passes
-        document.getElementById('location_search').closest('form').addEventListener('submit', function(e) {
+        document.getElementById('query-form').addEventListener('submit', function(e) {
             if (!document.getElementById('location_uuid').value) {
                 e.preventDefault();
                 alert('Please select a valid location from the list.');
@@ -165,7 +165,7 @@
         });
     </script>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 20px; margin-bottom: 20px;">
+    <div class="params-grid">
         <div class="form-group">
             <label for="energy_source">Energy Source</label>
             <select id="energy_source" name="energy_source" required>

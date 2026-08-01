@@ -72,12 +72,12 @@
         }
 
         /* Fix input readability in dark-mode environments */
-        input, select {
-            border-radius: 8px !important;
-            border: 1px solid #e0e0e4 !important;
-            background-color: var(--nc-bg-2) !important;
-            color: var(--nc-text-1) !important;
-            padding: 10px 12px !important;
+        .dashboard-grid input, .dashboard-grid select {
+            border-radius: 8px;
+            border: 1px solid #e0e0e4;
+            background-color: var(--nc-bg-2);
+            color: var(--nc-text-1);
+            padding: 10px 12px;
         }
 
         .form-group input, .form-group select {
@@ -85,12 +85,12 @@
             box-sizing: border-box;
         }
 
-        .badge-btn {
-            white-space: nowrap !important;
-            padding: 10px 16px !important;
-            background-color: var(--nc-bg-3) !important;
-            color: var(--nc-text-1) !important;
-            border: 1px solid #e0e0e4 !important;
+        button.badge-btn {
+            white-space: nowrap;
+            padding: 10px 16px;
+            background-color: var(--nc-bg-3);
+            color: var(--nc-text-1);
+            border: 1px solid #e0e0e4;
         }
 
         .custom-dropdown {
@@ -114,22 +114,37 @@
         }
 
         button {
-            background-color: #1c1c1e !important;
-            color: #ffffff !important;
-            border-radius: 8px !important;
-            padding: 10px 24px !important;
-            font-weight: 600 !important;
-            border: none !important;
+            background-color: #1c1c1e;
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 10px 24px;
+            font-weight: 600;
+            border: none;
             cursor: pointer;
         }
 
-        button:hover { background-color: #3a3a3c !important; }
+        button:hover { background-color: #3a3a3c; }
 
         .form-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 20px;
+        }
+
+        .params-grid {
+            display: grid; 
+            grid-template-columns: 1fr 1fr 2fr; 
+            gap: 20px; 
+            margin-bottom: 20px;
+        }
+
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--nc-text-2);
+            flex-grow: 1;
         }
 
         .form-group label {
@@ -175,7 +190,7 @@
                     <strong>Forecast Generation</strong>
                     <small>Select a configuration to view timeseries data</small>
                 </div>
-                <div style="flex-grow: 1; min-height: 320px; display: flex; align-items: center; justify-content: center; color: var(--nc-text-2);">
+                <div class="empty-state" style="min-height: 320px;">
                     Waiting for input...
                 </div>
             </div>
@@ -187,7 +202,7 @@
                 <strong>Location View</strong>
                 <small>Geospatial snapshot</small>
             </div>
-            <div class="map-container" style="display: flex; align-items: center; justify-content: center; color: var(--nc-text-2);">
+            <div class="map-container empty-state">
                 Select a location...
             </div>
         </div>

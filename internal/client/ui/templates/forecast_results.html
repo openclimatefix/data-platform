@@ -5,7 +5,7 @@
     </div>
     
     {{ if not .Series }}
-        <div style="flex-grow: 1; min-height: 320px; display: flex; align-items: center; justify-content: center; color: var(--nc-text-2);">
+        <div class="empty-state" style="min-height: 320px;">
             No forecast data found for this configuration.
         </div>
     {{ else }}
@@ -30,60 +30,50 @@
                 var myChart = echarts.init(chartDom);
                 window.forecastChartInstance = myChart;
 
-                var labels = [{{ range .Labels }}"{{ . }}",{{ end }}];
+                var labels = {{ .Labels | toJSON }};
+                var seriesConfig = {{ .Series | toJSON }};
                 var seriesData = [];
                 var colors = ['#7a9374', '#1095c1', '#f2a900', '#e07a5f', '#8e8e93'];
 
-                {{ range $i, $s := .Series }}
-                    var color = colors[{{ $i }} % colors.length];
-                    var data = [{{ range .Data }}{{ . }},{{ end }}];
-                    seriesData.push({
-                        name: "{{ $s.Name }}",
+                seriesConfig.forEach(function(s, i) {
+                    var color = colors[i % colors.length];
+                    var item = {
+                        name: s.name,
                         type: 'line',
-                        data: data,
+                        data: s.data,
                         smooth: 0.2,
                         showSymbol: false,
-                        {{ if .IsObservation }}
-                        lineStyle: { color: color, width: 2, type: 'dashed' },
-                        {{ else }}
                         lineStyle: { color: color, width: 2 },
-                        {{ end }}
                         itemStyle: { color: color }
-                    });
-
-                    {{ if .HasBands }}
-                    var bandLower = [{{ range .BandLower }}{{ . }},{{ end }}];
-                    var bandUpper = [{{ range .BandUpper }}{{ . }},{{ end }}];
-                    var bandDiff = [];
-                    for (var j = 0; j < bandUpper.length; j++) {
-                        if (bandUpper[j] !== null && bandLower[j] !== null) {
-                            bandDiff.push(bandUpper[j] - bandLower[j]);
-                        } else {
-                            bandDiff.push(null);
-                        }
-                    }
+                    };
                     
-                    seriesData.push({
-                        name: "{{ $s.Name }} Band Lower",
-                        type: 'line',
-                        data: bandLower,
-                        lineStyle: { opacity: 0 },
-                        stack: "band_{{ $i }}",
-                        showSymbol: false,
-                        tooltip: { show: false }
-                    });
-                    seriesData.push({
-                        name: "{{ $s.Name }} Band",
-                        type: 'line',
-                        data: bandDiff,
-                        lineStyle: { opacity: 0 },
-                        areaStyle: { color: color, opacity: 0.2 },
-                        stack: "band_{{ $i }}",
-                        showSymbol: false,
-                        tooltip: { show: false }
-                    });
-                    {{ end }}
-                {{ end }}
+                    if (s.isObservation) {
+                        item.lineStyle.type = 'dashed';
+                    }
+                    seriesData.push(item);
+
+                    if (s.hasBands) {
+                        seriesData.push({
+                            name: s.name + " Band Lower",
+                            type: 'line',
+                            data: s.bandLower,
+                            lineStyle: { opacity: 0 },
+                            stack: "band_" + i,
+                            showSymbol: false,
+                            tooltip: { show: false }
+                        });
+                        seriesData.push({
+                            name: s.name + " Band",
+                            type: 'line',
+                            data: s.bandDiff,
+                            lineStyle: { opacity: 0 },
+                            areaStyle: { color: color, opacity: 0.2 },
+                            stack: "band_" + i,
+                            showSymbol: false,
+                            tooltip: { show: false }
+                        });
+                    }
+                });
 
                 var formatValue = function(value) {
                     if (value === null || value === undefined || isNaN(value)) return 'N/A';
@@ -297,7 +287,7 @@
             var myMap = echarts.init(mapDom);
             window.mapInstance = myMap;
 
-            var geojsonStr = "{{ .GeoJSON }}";
+            var geojsonData = {{ .GeoJSON }};
             var lat = {{ .Location.Latlng.Latitude }};
             var lng = {{ .Location.Latlng.Longitude }};
             var fillOpacity = {{ printf "%.2f" .AvgFraction }};
@@ -305,9 +295,7 @@
             
             var option = {};
             
-            if (geojsonStr !== "") {
-                var geojsonData = JSON.parse(geojsonStr);
-                
+            if (geojsonData) {
                 var hasArea = false;
                 if (geojsonData.features) {
                     geojsonData.features.forEach(function(f) {
