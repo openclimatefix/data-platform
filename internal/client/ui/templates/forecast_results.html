@@ -239,6 +239,26 @@
                             }
                         });
                         
+                        {{ if .IsInteractiveMap }}
+                        var mapEl = document.getElementById('map-time-label');
+                        if (mapEl) mapEl.innerHTML = labels[xIndex];
+                        
+                        var timestamps = {{ .Timestamps | toJSON }};
+                        var timestamp = timestamps[xIndex];
+                        if (timestamp) {
+                            fetch('/api/dashboard/map-snapshot?timestamp=' + timestamp + '&nation_uuid={{ .Location.LocationUuid }}&energy_source={{ .EnergySource }}&forecaster=' + encodeURIComponent("{{ .FirstForecaster }}"))
+                                .then(r => r.json())
+                                .then(data => {
+                                    if (window.mapInstance) {
+                                        var mOpt = window.mapInstance.getOption();
+                                        if (mOpt && mOpt.series && mOpt.series.length > 0) {
+                                            mOpt.series[0].data = data;
+                                            window.mapInstance.setOption(mOpt);
+                                        }
+                                    }
+                                }).catch(err => console.error(err));
+                        }
+                        {{ else }}
                         if (count > 0) {
                             var fraction = sum / count;
                             if (fraction < 0.15) fraction = 0.15;
@@ -261,6 +281,7 @@
                                 }
                             }
                         }
+                        {{ end }}
                     }
                 });
 
@@ -272,10 +293,16 @@
         </script>
     {{ end }}
 
+{{ if not .SkipMap }}
 <div id="map-panel" hx-swap-oob="innerHTML">
     <div class="panel-header">
+        {{ if .IsInteractiveMap }}
+        <strong>GSP Generation Map</strong>
+        <small id="map-time-label">{{ index .Labels 0 }}</small>
+        {{ else }}
         <strong>Location Map</strong>
         <small id="map-time-label">{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }}</small>
+        {{ end }}
     </div>
     <div id="map" class="map-container"></div>
     <script>
@@ -288,6 +315,171 @@
             window.mapInstance = myMap;
 
             var geojsonData = {{ .GeoJSON }};
+            var isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var panelBgColor = isDarkMode ? '#2c2c2e' : '#ffffff';
+            
+            {{ if .IsInteractiveMap }}
+            if (geojsonData && geojsonData.features) {
+                window.uuidToName = {};
+                geojsonData.features.forEach(function(f) {
+                    if (!f.properties) f.properties = {};
+                    var uuid = f.id || f.properties.geometry_uuid || f.properties.uuid;
+                    if (!uuid && f.properties.name) uuid = f.properties.name;
+                    var name = f.properties.geometry_name || f.properties.location_name || uuid || 'Unknown GSP';
+                    if (uuid) {
+                        window.uuidToName[uuid] = name;
+                        f.properties.name = uuid; 
+                    }
+                });
+                echarts.registerMap('gspMap', geojsonData);
+                
+                var option = {
+                    tooltip: {
+                        trigger: 'item',
+                        showDelay: 0,
+                        transitionDuration: 0.2,
+                        formatter: function(params) {
+                            var title = 'Unknown GSP';
+                            if (params.name && window.uuidToName && window.uuidToName[params.name]) {
+                                title = window.uuidToName[params.name];
+                            } else if (params.name) {
+                                title = params.name;
+                            }
+
+                            if (!params.data) return '<strong>' + title + '</strong><br/>No Data';
+                            var val = params.data.value;
+                            if (isNaN(val) || val === null) return '<strong>' + title + '</strong><br/>No Data';
+                            
+                            var cap = params.data.capacity || 0;
+                            var gen = val * cap;
+                            
+                            var formatValue = function(num) {
+                                if (num >= 1e12) return (num / 1e12).toFixed(1) + ' TW';
+                                if (num >= 1e9) return (num / 1e9).toFixed(1) + ' GW';
+                                if (num >= 1e6) return (num / 1e6).toFixed(1) + ' MW';
+                                if (num >= 1e3) return (num / 1e3).toFixed(0) + ' kW';
+                                return num.toFixed(0) + ' W';
+                            };
+
+                            return '<strong>' + title + '</strong><br/>' +
+                                   'Generation: ' + formatValue(gen) + ' (' + (val * 100).toFixed(1) + '%)<br/>' +
+                                   'Capacity: ' + formatValue(cap);
+                        }
+                    },
+                    visualMap: {
+                        left: 'right',
+                        bottom: 'bottom',
+                        min: 0,
+                        max: 1.0,
+                        text: ['Max (100%)', 'Min (0%)'],
+                        realtime: true,
+                        calculable: true,
+                        inRange: {
+                            color: [
+                                '#f4f5f7',
+                                '#fae19b',
+                                '#f2a900',
+                                '#a87500',
+                                '#5e4200'
+                            ]
+                        },
+                        formatter: function (value) {
+                            return (value * 100).toFixed(0) + '%';
+                        }
+                    },
+                    series: [{
+                        name: 'GSP Generation',
+                        type: 'map',
+                        map: 'gspMap',
+                        roam: 'scale',
+                        scaleLimit: { min: 1 },
+                        selectedMode: 'single',
+                        label: { show: false },
+                        select: { 
+                            label: { show: false },
+                            itemStyle: {
+                                borderColor: isDarkMode ? '#ffffff' : '#1c1c1e',
+                                borderWidth: 2,
+                                shadowColor: 'rgba(0,0,0,0.5)',
+                                shadowBlur: 10
+                            }
+                        },
+                        itemStyle: {
+                            borderColor: panelBgColor,
+                            borderWidth: 0.5
+                        },
+                        emphasis: {
+                            label: { show: false },
+                            itemStyle: {
+                                areaColor: '#1095c1',
+                                borderColor: '#1c1c1e',
+                                borderWidth: 1
+                            }
+                        },
+                        data: []
+                    }]
+                };
+                myMap.setOption(option);
+
+                window.currentSelectedGsp = null;
+
+                myMap.on('click', function(params) {
+                    if (params.name) {
+                        var clickedUuid = params.name;
+                        var targetUuid = clickedUuid;
+
+                        if (window.currentSelectedGsp === clickedUuid) {
+                            // Deselect and return to national view
+                            targetUuid = "{{ .Location.LocationUuid }}";
+                            window.currentSelectedGsp = null;
+                        } else {
+                            window.currentSelectedGsp = clickedUuid;
+                        }
+
+                        // Trigger an HTMX swap preserving the form inputs but replacing the location_uuid
+                        // And skip_map=true.
+                        
+                        var url = '/components/forecast?location_uuid=' + targetUuid + 
+                                  '&skip_map=true' +
+                                  '&energy_source={{ .EnergySource }}' + 
+                                  '&time_window=' + encodeURIComponent("{{ .TimeWindow }}") + 
+                                  '&horizon_mins={{ .HorizonMins }}';
+                                  
+                        // Note: To preserve forecasters/observers exactly as in the form, 
+                        // we can append them from the DOM or we can fetch them via JS.
+                        var qf = document.getElementById('query-form');
+                        if (qf) {
+                            var fd = new FormData(qf);
+                            for (var pair of fd.entries()) {
+                                if (pair[0] === 'forecaster' || pair[0] === 'observer') {
+                                    url += '&' + pair[0] + '=' + encodeURIComponent(pair[1]);
+                                }
+                            }
+                        }
+                        
+                        htmx.ajax('GET', url, {target: '#chart-panel'});
+                    }
+                });
+                
+                // Also trigger map fetch for initial timestamp
+                var timestamps = {{ .Timestamps | toJSON }};
+                if (timestamps && timestamps.length > 0) {
+                    var firstTs = timestamps[0];
+                    fetch('/api/dashboard/map-snapshot?timestamp=' + firstTs + '&nation_uuid={{ .Location.LocationUuid }}&energy_source={{ .EnergySource }}&forecaster=' + encodeURIComponent("{{ .FirstForecaster }}"))
+                        .then(r => r.json())
+                        .then(data => {
+                            var mOpt = myMap.getOption();
+                            if (mOpt && mOpt.series && mOpt.series.length > 0) {
+                                mOpt.series[0].data = data;
+                                myMap.setOption(mOpt);
+                            }
+                        }).catch(err => console.error(err));
+                }
+
+            } else {
+                mapDom.innerHTML = '<div class="empty-state">No GSP boundary data found.</div>';
+            }
+            {{ else }}
             var lat = {{ .Location.Latlng.Latitude }};
             var lng = {{ .Location.Latlng.Longitude }};
             var fillOpacity = {{ printf "%.2f" .AvgFraction }};
@@ -374,6 +566,8 @@
             }
             
             myMap.setOption(option);
+            {{ end }}
+
             var ro = new ResizeObserver(() => {
                 myMap.resize();
             });
@@ -381,3 +575,4 @@
         })();
     </script>
 </div>
+{{ end }}

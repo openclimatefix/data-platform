@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -47,7 +48,9 @@ func init() {
 			return template.JS(b)
 		},
 	}
+
 	var err error
+
 	tpl, err = template.New("").Funcs(funcs).ParseFS(templateFiles, "templates/*.html")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to parse UI templates")
@@ -59,7 +62,10 @@ type UIClient struct {
 }
 
 func NewUIClient(grpcTarget string) (*UIClient, error) {
-	conn, err := grpc.NewClient(grpcTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(
+		grpcTarget,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial gRPC target %s: %w", grpcTarget, err)
 	}
@@ -86,8 +92,10 @@ func withGzip(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Set("Vary", "Accept-Encoding")
+
 		gz := gzip.NewWriter(w)
 		defer gz.Close()
 		gzw := gzipResponseWriter{Writer: gz, ResponseWriter: w}
@@ -103,10 +111,7 @@ func (ui *UIClient) Start(port string) error {
 	mux.HandleFunc("/components/selectors", ui.handleSelectors)
 	mux.HandleFunc("/components/forecast", ui.handleForecast)
 
-	mux.HandleFunc("/dashboard", ui.handleDashboard)
-	mux.HandleFunc("/components/dashboard/selectors", ui.handleDashboardSelectors)
-	mux.HandleFunc("/components/dashboard/forecast", ui.handleDashboardForecast)
-	mux.HandleFunc("/components/dashboard/gsp-timeseries", ui.handleDashboardGSPTimeseries)
+	mux.HandleFunc("/dashboard/", ui.handleDashboardCountry)
 	mux.HandleFunc("/api/dashboard/map-snapshot", ui.handleDashboardMapSnapshot)
 
 	return http.ListenAndServe(port, withGzip(mux))
@@ -117,9 +122,7 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// Note: analysis.html and dashboard.html both depend on "content" block overriding "base.html".
-	// Therefore, we execute "analysis.html" which defines "content" and then embeds within "base".
-	// Go's template engine parses them all, but we must execute the entrypoint template.
+
 	err := tpl.ExecuteTemplate(w, "analysis.html", nil)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to execute analysis template")
@@ -127,9 +130,20 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (ui *UIClient) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	// dashboard.html defines the content block, wrapping inside base.html
-	err := tpl.ExecuteTemplate(w, "dashboard.html", nil)
+func (ui *UIClient) handleDashboardCountry(w http.ResponseWriter, r *http.Request) {
+	country := strings.TrimPrefix(r.URL.Path, "/dashboard/")
+	if country == "" {
+		http.Redirect(w, r, "/dashboard/uk", http.StatusFound)
+		return
+	}
+
+	data := struct {
+		Country string
+	}{
+		Country: country,
+	}
+
+	err := tpl.ExecuteTemplate(w, "dashboard.html", data)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to execute dashboard template")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -140,50 +154,83 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	var locResp *pb.ListLocationsResponse
-	var fcResp *pb.ListForecastersResponse
-	var obsResp *pb.ListObserversResponse
+	mode := r.URL.Query().Get("mode")
+
+	var (
+		locResp *pb.ListLocationsResponse
+		fcResp  *pb.ListForecastersResponse
+		obsResp *pb.ListObserversResponse
+	)
 
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		var locErr error
+
 		locResp, locErr = ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{})
 		if locErr != nil {
 			log.Error().Err(locErr).Msg("Failed to list locations")
 		}
+
 		return locErr
 	})
 
 	g.Go(func() error {
 		var fcErr error
+
 		fcResp, fcErr = ui.grpcClient.ListForecasters(gCtx, &pb.ListForecastersRequest{})
 		if fcErr != nil {
 			log.Error().Err(fcErr).Msg("Failed to list forecasters")
 		}
+
 		return fcErr
 	})
 
 	g.Go(func() error {
 		var obsErr error
+
 		obsResp, obsErr = ui.grpcClient.ListObservers(gCtx, &pb.ListObserversRequest{})
 		if obsErr != nil {
 			log.Error().Err(obsErr).Msg("Failed to list observers")
 		}
+
 		return obsErr
 	})
 
 	if err := g.Wait(); err != nil {
 		log.Error().Err(err).Msg("Failed to list required resources for selectors")
-		http.Error(w, fmt.Sprintf("Failed to list required resources: %v", err), http.StatusInternalServerError)
+		http.Error(
+			w,
+			fmt.Sprintf("Failed to list required resources: %v", err),
+			http.StatusInternalServerError,
+		)
+
 		return
 	}
 
+	dashboardMode := false
+
+	var dashboardCountry, defaultLocationUUID string
+	if mode != "" {
+		dashboardMode = true
+		dashboardCountry = mode
+		// find location uuid for country
+		for _, loc := range locResp.GetLocations() {
+			if strings.EqualFold(loc.GetLocationName(), dashboardCountry) {
+				defaultLocationUUID = loc.GetLocationUuid()
+				break
+			}
+		}
+	}
+
 	data := struct {
-		Locations         []*pb.ListLocationsResponse_LocationSummary
-		Forecasters       []*pb.Forecaster
-		Observers         []*pb.ListObserversResponse_ObserverSummary
-		DefaultTimeWindow string
+		Locations           []*pb.ListLocationsResponse_LocationSummary
+		Forecasters         []*pb.Forecaster
+		Observers           []*pb.ListObserversResponse_ObserverSummary
+		DefaultTimeWindow   string
+		DashboardMode       bool
+		DashboardCountry    string
+		DefaultLocationUUID string
 	}{
 		Locations:   locResp.GetLocations(),
 		Forecasters: fcResp.GetForecasters(),
@@ -192,6 +239,9 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 			time.Now().UTC().Add(-48*time.Hour).Format("2006-01-02 15:04"),
 			time.Now().UTC().Add(36*time.Hour).Format("2006-01-02 15:04"),
 		),
+		DashboardMode:       dashboardMode,
+		DashboardCountry:    dashboardCountry,
+		DefaultLocationUUID: defaultLocationUUID,
 	}
 
 	err := tpl.ExecuteTemplate(w, "selectors.html", data)
@@ -220,6 +270,8 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	energySourceRaw := r.URL.Query().Get("energy_source")
 	horizonMinsRaw := r.URL.Query().Get("horizon_mins")
 	timeWindowRaw := r.URL.Query().Get("time_window")
+	skipMapRaw := r.URL.Query().Get("skip_map")
+	skipMap := skipMapRaw == "true"
 
 	if locUUID == "" || (len(forecastersRaw) == 0 && len(observersRaw) == 0) ||
 		energySourceRaw == "" ||
@@ -272,6 +324,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("Failed to get location: %v", err),
 			http.StatusInternalServerError,
 		)
+
 		return
 	}
 
@@ -358,14 +411,14 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 				t := v.GetTargetTimestampUtc().AsTime()
 				unix := t.Unix()
 				uniqueT[unix] = t
-				seriesMap[unix] = v.GetP50ValueFraction() * capacity
+				seriesMap[unix] = float32(math.Round(float64(v.GetP50ValueFraction()*capacity)*100) / 100)
 
 				stats := v.GetOtherStatisticsFractions()
 				if stats != nil {
 					if p10, ok := stats["p10"]; ok {
 						if p90, ok := stats["p90"]; ok {
-							bandLowerMap[unix] = p10 * capacity
-							bandUpperMap[unix] = p90 * capacity
+							bandLowerMap[unix] = float32(math.Round(float64(p10*capacity)*100) / 100)
+							bandUpperMap[unix] = float32(math.Round(float64(p90*capacity)*100) / 100)
 						}
 					}
 				}
@@ -415,7 +468,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 				t := v.GetTimestampUtc().AsTime()
 				unix := t.Unix()
 				uniqueT[unix] = t
-				seriesMap[unix] = v.GetValueFraction() * capacity
+				seriesMap[unix] = float32(math.Round(float64(v.GetValueFraction()*capacity)*100) / 100)
 			}
 
 			obsResults[i] = ForecasterResult{
@@ -428,23 +481,51 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	var geoJSONStr template.JS
-	g.Go(func() error {
-		geoReq := &pb.GetLocationsAsGeoJSONRequest{
-			LocationUuids: []string{locUUID},
-			Unsimplified:  false,
-		}
-		geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(gCtx, geoReq)
-		if err == nil && geoResp != nil && geoResp.GetGeojson() != "" {
-			geoJSONStr = template.JS(geoResp.GetGeojson())
-		} else {
+	var (
+		geoJSONStr       template.JS = "null"
+		isInteractiveMap bool
+	)
+
+	if !skipMap {
+		g.Go(func() error {
+			locTypeGSP := pb.LocationType_LOCATION_TYPE_GSP
+
+			gspResp, err := ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{
+				EnclosingLocationUuidFilter: &locUUID,
+				LocationTypeFilter:          &locTypeGSP,
+			})
 			if err != nil {
-				log.Warn().Err(err).Msg("Failed to get GeoJSON for map")
+				return err
 			}
-			geoJSONStr = template.JS("null")
-		}
-		return nil
-	})
+
+			var fetchUUIDs []string
+			if len(gspResp.GetLocations()) > 0 {
+				isInteractiveMap = true
+
+				for _, l := range gspResp.GetLocations() {
+					fetchUUIDs = append(fetchUUIDs, l.GetLocationUuid())
+				}
+			} else {
+				fetchUUIDs = []string{locUUID}
+			}
+
+			geoReq := &pb.GetLocationsAsGeoJSONRequest{
+				LocationUuids: fetchUUIDs,
+				Unsimplified:  false,
+			}
+
+			geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(gCtx, geoReq)
+			if err == nil && geoResp != nil && geoResp.GetGeojson() != "" {
+				geoJSONStr = template.JS(geoResp.GetGeojson())
+			} else {
+				if err != nil {
+					log.Warn().Err(err).Msg("Failed to get GeoJSON for map")
+				}
+			}
+
+			return nil
+		})
+	}
 
 	_ = g.Wait()
 
@@ -514,12 +595,15 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if hasBands {
-				var bLow, bUp float32
-				var hasLow, hasUp bool
+				var (
+					bLow, bUp     float32
+					hasLow, hasUp bool
+				)
 
 				if val, ok := forecasterBandsLower[f.Raw][k]; ok {
 					bLow = val
 					hasLow = true
+
 					sd.BandLower = append(sd.BandLower, &bLow)
 				} else {
 					sd.BandLower = append(sd.BandLower, nil)
@@ -531,7 +615,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 				}
 
 				if hasLow && hasUp {
-					diff := bUp - bLow
+					diff := float32(math.Round(float64(bUp-bLow)*100) / 100)
 					sd.BandDiff = append(sd.BandDiff, &diff)
 				} else {
 					sd.BandDiff = append(sd.BandDiff, nil)
@@ -564,18 +648,37 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		avgFraction = totalFraction / float32(count)
 	}
 
+	firstForecaster := ""
+	if len(forecasters) > 0 {
+		firstForecaster = forecasters[0].Name + "|" + forecasters[0].Version
+	}
+
 	data := struct {
-		Location    *pb.GetLocationResponse
-		GeoJSON     template.JS
-		AvgFraction float32
-		Labels      []string
-		Series      []SeriesData
+		Location         *pb.GetLocationResponse
+		GeoJSON          template.JS
+		AvgFraction      float32
+		Labels           []string
+		Timestamps       []int64
+		Series           []SeriesData
+		SkipMap          bool
+		IsInteractiveMap bool
+		EnergySource     string
+		FirstForecaster  string
+		TimeWindow       string
+		HorizonMins      string
 	}{
-		Location:    locResp,
-		GeoJSON:     geoJSONStr,
-		AvgFraction: avgFraction,
-		Labels:      labels,
-		Series:      allSeries,
+		Location:         locResp,
+		GeoJSON:          geoJSONStr,
+		AvgFraction:      avgFraction,
+		Labels:           labels,
+		Timestamps:       timeKeys,
+		Series:           allSeries,
+		SkipMap:          skipMap,
+		IsInteractiveMap: isInteractiveMap,
+		EnergySource:     energySourceRaw,
+		FirstForecaster:  firstForecaster,
+		TimeWindow:       timeWindowRaw,
+		HorizonMins:      horizonMinsRaw,
 	}
 
 	err = tpl.ExecuteTemplate(w, "forecast_results.html", data)
