@@ -74,7 +74,10 @@ SELECT
         'type', 'FeatureCollection',
         'features', JSON_AGG(
             ST_ASGEOJSON(
-                sl.*, id_column => 'geometry_uuid'::TEXT, geom_column => 'geom_simple'
+                sl.*, 
+                maxdecimaldigits => 5, 
+                id_column => 'geometry_uuid'::TEXT, 
+                geom_column => 'geom_simple'
             )::JSONB
         )
     ) AS geojson

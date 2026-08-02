@@ -1195,7 +1195,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	if req.Unsimplified {
 		simplificationLevel = 0
 	} else {
-		simplificationLevel = 0.05
+		simplificationLevel = 0.005
 	}
 
 	locationUuids := make([]uuid.UUID, len(req.LocationUuids))

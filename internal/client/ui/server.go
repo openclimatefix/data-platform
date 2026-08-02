@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"compress/gzip"
 	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"slices"
 	"strconv"
@@ -69,6 +71,30 @@ func NewUIClient(grpcTarget string) (*UIClient, error) {
 	}, nil
 }
 
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func withGzip(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		gzw := gzipResponseWriter{Writer: gz, ResponseWriter: w}
+		next.ServeHTTP(gzw, r)
+	})
+}
+
 func (ui *UIClient) Start(port string) error {
 	mux := http.NewServeMux()
 
@@ -83,7 +109,7 @@ func (ui *UIClient) Start(port string) error {
 	mux.HandleFunc("/components/dashboard/gsp-timeseries", ui.handleDashboardGSPTimeseries)
 	mux.HandleFunc("/api/dashboard/map-snapshot", ui.handleDashboardMapSnapshot)
 
-	return http.ListenAndServe(port, mux)
+	return http.ListenAndServe(port, withGzip(mux))
 }
 
 func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {

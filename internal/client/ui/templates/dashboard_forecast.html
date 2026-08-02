@@ -189,6 +189,9 @@
                 });
                 echarts.registerMap('gspMap', geojsonData);
                 
+                var isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var panelBgColor = isDarkMode ? '#2c2c2e' : '#ffffff';
+
                 var option = {
                     tooltip: {
                         trigger: 'item',
@@ -233,10 +236,10 @@
                         inRange: {
                             color: [
                                 '#f4f5f7',
-                                '#b1cbb0',
-                                '#7a9374',
-                                '#465c43',
-                                '#283827'
+                                '#fae19b',
+                                '#f2a900',
+                                '#a87500',
+                                '#5e4200'
                             ]
                         },
                         formatter: function (value) {
@@ -247,15 +250,18 @@
                         name: 'GSP Generation',
                         type: 'map',
                         map: 'gspMap',
-                        roam: true,
+                        roam: 'scale',
+                        scaleLimit: { min: 1 },
+                        label: { show: false },
+                        select: { label: { show: false } },
                         itemStyle: {
-                            borderColor: '#1c1c1e',
+                            borderColor: panelBgColor,
                             borderWidth: 0.5
                         },
                         emphasis: {
                             label: { show: false },
                             itemStyle: {
-                                areaColor: '#f2a900',
+                                areaColor: '#1095c1', // Use the blue accent color for hover emphasis to contrast with the yellow map
                                 borderColor: '#1c1c1e',
                                 borderWidth: 1
                             }
