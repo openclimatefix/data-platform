@@ -243,5 +243,13 @@
             </div>
         </div>
     </main>
+    <script>
+        document.body.addEventListener('htmx:configRequest', function(evt) {
+            var uuid = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+                ? crypto.randomUUID() 
+                : 'req' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+            evt.detail.headers['X-Request-Id'] = uuid.replace(/-/g, '');
+        });
+    </script>
 </body>
 </html>

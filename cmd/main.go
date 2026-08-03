@@ -114,11 +114,7 @@ func main() {
 
 	// Start UI server in a detached, fault-isolated goroutine
 	go func() {
-		uiPort := ":8080"
-		if conf.GetInt("ui_port") != 0 {
-			uiPort = fmt.Sprintf(":%d", conf.GetInt("ui_port"))
-		}
-
+		uiPort := fmt.Sprintf(":%d", conf.GetInt("ui_port"))
 		target := fmt.Sprintf("localhost:%d", conf.GetInt("port"))
 
 		uiClient, err := ui.NewUIClient(target)
@@ -127,7 +123,7 @@ func main() {
 			return
 		}
 
-		log.Info().Msgf("Starting UI client on %s pointing to %s", uiPort, target)
+		log.Info().Msgf("Starting UI client on %s", uiPort)
 
 		if err := uiClient.Start(uiPort); err != nil {
 			log.Error().

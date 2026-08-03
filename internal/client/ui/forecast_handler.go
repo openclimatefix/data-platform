@@ -401,6 +401,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("Failed to get location: %v", err),
 			http.StatusInternalServerError,
 		)
+
 		return
 	}
 
@@ -464,6 +465,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		Series           []SeriesData
 		SkipMap          bool
 		IsInteractiveMap bool
+		IsPolygon        bool
 		EnergySource     string
 		FirstForecaster  string
 		TimeWindow       string
@@ -477,10 +479,12 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		Series:           allSeries,
 		SkipMap:          p.SkipMap,
 		IsInteractiveMap: isInteractiveMap,
-		EnergySource:     p.RawEnergySource,
-		FirstForecaster:  firstForecaster,
-		TimeWindow:       p.RawTimeWindow,
-		HorizonMins:      p.RawHorizonMins,
+		IsPolygon: strings.Contains(string(geoJSONStr), `"Polygon"`) ||
+			strings.Contains(string(geoJSONStr), `"MultiPolygon"`),
+		EnergySource:    p.RawEnergySource,
+		FirstForecaster: firstForecaster,
+		TimeWindow:      p.RawTimeWindow,
+		HorizonMins:     p.RawHorizonMins,
 	}
 
 	if err := tpl.ExecuteTemplate(w, "forecast_results.html", data); err != nil {

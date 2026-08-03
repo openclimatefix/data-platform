@@ -141,7 +141,12 @@ func withGzip(next http.Handler) http.Handler {
 
 func withTraceID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+		traceID := r.Header.Get("X-Request-Id")
+		if traceID == "" {
+			traceID = strings.ReplaceAll(uuid.New().String(), "-", "")
+		}
+
+		w.Header().Set("X-Request-Id", traceID)
 		ctx := context.WithValue(r.Context(), traceKeyType{}, traceID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

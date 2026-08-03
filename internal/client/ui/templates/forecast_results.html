@@ -37,16 +37,29 @@
 
                 seriesConfig.forEach(function(s, i) {
                     var color = colors[i % colors.length];
+                    
+                    var dataObjects = s.data.map(function(val, idx) {
+                        var obj = { value: val };
+                        if (s.hasBands && s.bandLower && s.bandDiff && s.bandLower[idx] !== null && s.bandDiff[idx] !== null) {
+                            obj.p10 = s.bandLower[idx];
+                            obj.p90 = s.bandLower[idx] + s.bandDiff[idx];
+                        }
+                        return obj;
+                    });
+
                     var item = {
+                        id: (i === 0) ? 'primaryLine' : s.name + '_Main',
                         name: s.name,
                         type: 'line',
-                        data: s.data,
+                        data: dataObjects,
                         smooth: 0.2,
                         showSymbol: false,
                         lineStyle: { color: color, width: 2 },
-                        itemStyle: { color: color }
+                        itemStyle: { color: color },
+                        emphasis: { focus: 'series' },
+                        blur: { lineStyle: { opacity: 0.3 } }
                     };
-                    
+
                     if (s.isObservation) {
                         item.lineStyle.type = 'dashed';
                     }
@@ -54,23 +67,29 @@
 
                     if (s.hasBands) {
                         seriesData.push({
-                            name: s.name + " Band Lower",
+                            id: s.name + "_Band_Lower",
+                            name: s.name,
                             type: 'line',
                             data: s.bandLower,
                             lineStyle: { opacity: 0 },
                             stack: "band_" + i,
                             showSymbol: false,
-                            tooltip: { show: false }
+                            tooltip: { show: false },
+                            emphasis: { focus: 'series' },
+                            blur: { lineStyle: { opacity: 0 } }
                         });
                         seriesData.push({
-                            name: s.name + " Band",
+                            id: s.name + "_Band",
+                            name: s.name,
                             type: 'line',
                             data: s.bandDiff,
                             lineStyle: { opacity: 0 },
                             areaStyle: { color: color, opacity: 0.2 },
                             stack: "band_" + i,
                             showSymbol: false,
-                            tooltip: { show: false }
+                            tooltip: { show: false },
+                            emphasis: { focus: 'series' },
+                            blur: { areaStyle: { opacity: 0.1 }, lineStyle: { opacity: 0 } }
                         });
                     }
                 });
@@ -114,30 +133,35 @@
                     backgroundColor: 'transparent',
                     tooltip: {
                         trigger: 'axis',
+                        axisPointer: { type: 'line', lineStyle: { type: 'dotted', color: textColor, opacity: 0.5 } },
                         formatter: function(params) {
                             if (!params || params.length === 0) return '';
                             var tooltipStr = '<strong>' + params[0].axisValue + '</strong><br/>';
                             
-                            var mainSeriesParams = params.filter(p => !p.seriesName.includes('Band'));
-                            var allParams = params;
+                            var mainSeriesParams = params.filter(p => !p.seriesId || !p.seriesId.includes('_Band'));
                             
                             mainSeriesParams.forEach(function(param) {
                                 var valStr = window.formatEnergyValue(param.value);
                                 var name = param.seriesName;
                                 
                                 var extraStr = '';
-                                var bandLowerParam = allParams.find(p => p.seriesName === name + ' Band Lower');
-                                var bandUpperParam = allParams.find(p => p.seriesName === name + ' Band');
-                                
-                                if (bandLowerParam && bandUpperParam && bandLowerParam.value !== undefined && bandUpperParam.value !== undefined) {
-                                    var bLower = bandLowerParam.value;
-                                    var bUpper = bLower + bandUpperParam.value;
-                                    extraStr = ' (P10: ' + window.formatEnergyValue(bLower) + ' - P90: ' + window.formatEnergyValue(bUpper) + ')';
+                                if (param.data && param.data.p10 !== undefined && param.data.p90 !== undefined) {
+                                    var p10Str = window.formatEnergyValue(param.data.p10);
+                                    var p90Str = window.formatEnergyValue(param.data.p90);
+                                    var p90Unit = p90Str.replace(/[\d\.\s]/g, '');
+                                    if (p90Unit && p10Str.endsWith(p90Unit)) {
+                                        p10Str = p10Str.replace(' ' + p90Unit, '');
+                                    }
+                                    extraStr = ' (P10/90: ' + p10Str + '/' + p90Str + ')';
                                 }
                                 
-                                tooltipStr += '<div class="flex-row align-center mt-sm">';
-                                tooltipStr += '<span class="chart-legend-color mr-sm" style="background-color:' + param.color + ';"></span>';
-                                tooltipStr += name + ': <strong>' + valStr + '</strong>' + '<span class="text-small text-muted">' + extraStr + '</span>';
+                                tooltipStr += '<div style="margin-top: 6px;">';
+                                tooltipStr += param.marker;
+                                tooltipStr += '<span>' + name + ': </span>';
+                                tooltipStr += '<strong>' + valStr + '</strong>';
+                                if (extraStr) {
+                                    tooltipStr += '<span style="font-size: 0.9em; opacity: 0.8; margin-left: 8px;">' + extraStr + '</span>';
+                                }
                                 tooltipStr += '</div>';
                             });
                             return tooltipStr;
@@ -187,16 +211,22 @@
                         var pointInGrid = myChart.convertFromPixel({seriesIndex: 0}, pointInPixel);
                         var xIndex = pointInGrid[0];
                         
-                        var chartOpt = myChart.getOption();
-                        if (chartOpt.series && chartOpt.series.length > 0) {
-                            var markLine = chartOpt.series[0].markLine || { data: [] };
-                            if (markLine.data && markLine.data.length > 0) {
-                                markLine.data[0].xAxis = xIndex;
-                            }
-                            chartOpt.series[0].markLine = markLine;
-                            chartOpt.animation = false;
-                            myChart.setOption(chartOpt, {replaceMerge: ['series']});
-                        }
+                        myChart.setOption({
+                            series: [{
+                                id: 'primaryLine',
+                                markLine: {
+                                    data: [
+                                        {
+                                            xAxis: xIndex,
+                                            label: { show: false },
+                                            lineStyle: { color: textColor, type: 'dashed', width: 2, opacity: 0.7 }
+                                        }
+                                    ],
+                                    symbol: ['none', 'none'],
+                                    animation: false
+                                }
+                            }]
+                        });
 
                         var capacity = {{ .Location.EffectiveCapacityWatts }};
                         if (capacity <= 0) return;
@@ -204,9 +234,10 @@
                         var sum = 0;
                         var count = 0;
                         
-                        chartOpt.series.forEach(function(s) {
-                            if (typeof s.name === 'string' && !s.name.includes('Band')) {
-                                var val = s.data[xIndex];
+                        seriesData.forEach(function(s) {
+                            if (s.type === 'line' && !s.name.includes('Band')) {
+                                var d = s.data[xIndex];
+                                var val = (d && typeof d === 'object') ? d.value : d;
                                 if (val !== null && val !== undefined && val !== 'null' && !isNaN(val)) {
                                     sum += (val / capacity);
                                     count++;
@@ -232,51 +263,6 @@
                                 fraction: fraction
                             }
                         }));
-                    }
-                });
-
-                myChart.getZr().on('mousemove', function(params) {
-                    var pointInPixel = [params.offsetX, params.offsetY];
-                    if (myChart.containPixel('grid', pointInPixel)) {
-                        var pointInGrid = myChart.convertFromPixel({seriesIndex: 0}, pointInPixel);
-                        var xIndex = pointInGrid[0];
-                        
-                        var chartOpt = myChart.getOption();
-                        if (chartOpt.series && chartOpt.series.length > 0) {
-                            var markLine = chartOpt.series[0].markLine || { data: [] };
-                            if (markLine.data && markLine.data.length > 1) {
-                                markLine.data[2] = {
-                                    xAxis: xIndex,
-                                    label: { show: false },
-                                    lineStyle: { color: textColor, type: 'dotted', width: 2, opacity: 0.5 }
-                                };
-                            } else if (markLine.data && markLine.data.length === 1) {
-                                markLine.data[1] = {
-                                    xAxis: xIndex,
-                                    label: { show: false },
-                                    lineStyle: { color: textColor, type: 'dotted', width: 2, opacity: 0.5 }
-                                };
-                            }
-                            chartOpt.series[0].markLine = markLine;
-                            chartOpt.animation = false;
-                            myChart.setOption(chartOpt, {replaceMerge: ['series']});
-                        }
-                    } else {
-                        var chartOpt = myChart.getOption();
-                        if (chartOpt.series && chartOpt.series.length > 0) {
-                            var markLine = chartOpt.series[0].markLine || { data: [] };
-                            if (markLine.data && markLine.data.length > 2) {
-                                markLine.data.splice(2, 1);
-                                chartOpt.series[0].markLine = markLine;
-                                chartOpt.animation = false;
-                                myChart.setOption(chartOpt, {replaceMerge: ['series']});
-                            } else if (markLine.data && markLine.data.length === 2 && !markLine.data[1].label) {
-                                markLine.data.splice(1, 1);
-                                chartOpt.series[0].markLine = markLine;
-                                chartOpt.animation = false;
-                                myChart.setOption(chartOpt, {replaceMerge: ['series']});
-                            }
-                        }
                     }
                 });
 
@@ -354,8 +340,8 @@
                             var gen = val * cap;
                             
                             return '<strong>' + title + '</strong><br/>' +
-                                   'Generation: ' + window.formatEnergyValue(gen) + ' (' + (val * 100).toFixed(1) + '%)<br/>' +
-                                   'Capacity: ' + window.formatEnergyValue(cap);
+                                   'Generation: <strong>' + window.formatEnergyValue(gen) + '</strong> (' + (val * 100).toFixed(1) + '%)<br/>' +
+                                   'Capacity: <strong>' + window.formatEnergyValue(cap) + '</strong>';
                         }
                     },
                     visualMap: {
@@ -368,6 +354,7 @@
                         formatter: function (value) { return (value * 100).toFixed(0) + '%'; }
                     },
                     series: [{
+                        id: 'gspSeries',
                         name: 'GSP Generation',
                         type: 'map', map: 'gspMap',
                         roam: true, layoutCenter: ['50%', '50%'], layoutSize: '100%',
@@ -389,16 +376,38 @@
                 myMap.setOption(option);
 
                 window.currentSelectedGsp = null;
+                var resetTimeout = null;
+                var isResettingMap = false;
 
                 myMap.on('georoam', function(params) {
+                    if (isResettingMap) return;
+
                     var opt = myMap.getOption();
                     if (opt && opt.series && opt.series.length > 0) {
                         var s = opt.series[0];
                         if (s.zoom <= 1.001) {
+                            var needsReset = false;
                             if (s.center) {
-                                delete s.center;
-                                s.zoom = 1;
-                                myMap.setOption(opt, true);
+                                needsReset = true;
+                            } else if (params.dx || params.dy) {
+                                needsReset = true;
+                            }
+                            
+                            if (needsReset) {
+                                if (resetTimeout) clearTimeout(resetTimeout);
+                                resetTimeout = setTimeout(function() {
+                                    isResettingMap = true;
+                                    myMap.setOption({
+                                        series: [{
+                                            id: 'gspSeries',
+                                            zoom: 1,
+                                            center: null,
+                                            animationDurationUpdate: 300,
+                                            animationEasingUpdate: 'cubicOut'
+                                        }]
+                                    });
+                                    setTimeout(function() { isResettingMap = false; }, 350);
+                                }, 100);
                             }
                         }
                     }
@@ -474,12 +483,7 @@
             var option = {};
             
             if (geojsonData) {
-                var hasArea = false;
-                if (geojsonData.features) {
-                    hasArea = geojsonData.features.some(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
-                } else if (geojsonData.type === 'Polygon' || geojsonData.type === 'MultiPolygon') {
-                    hasArea = true;
-                }
+                var hasArea = {{ .IsPolygon }};
                 
                 var locMapColor = window.getCssVar('--chart-color-0', '#7a9374');
                 if (hasArea) {
