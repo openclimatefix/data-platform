@@ -1,25 +1,25 @@
-<article style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0;">
+<article class="flex-col flex-grow min-h-0">
     <div class="panel-header">
         <strong>Forecast Generation</strong> 
         <small>{{ .Location.LocationName }} ({{ .Location.LocationUuid }})</small>
     </div>
     
     {{ if not .Series }}
-        <div class="empty-state" style="min-height: 320px;">
+        <div class="empty-state min-h-320">
             No forecast data found for this configuration.
         </div>
     {{ else }}
-        <div style="display: flex; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; font-size: 0.85rem;">
+        <div class="flex-row wrap gap-md mb-sm text-small">
             {{ range $i, $s := .Series }}
-            <span style="display: flex; align-items: center; gap: 6px;">
-                <div style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--chart-color-{{ $i }});"></div>
+            <span class="flex-row align-center gap-sm">
+                <div class="chart-legend-color" style="background-color: var(--chart-color-{{ $i }});"></div>
                 {{ $s.Name }}
             </span>
             {{ end }}
         </div>
 
-        <figure style="margin: 0; flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
-            <div id="forecastChart" style="flex-grow: 1; min-height: 0; width: 100%;"></div>
+        <figure class="m-0 flex-grow flex-col min-h-0">
+            <div id="forecastChart" class="flex-grow min-h-0 w-full"></div>
         </figure>
         <script>
             (function() {
@@ -75,19 +75,8 @@
                     }
                 });
 
-                var formatValue = function(value) {
-                    if (value === null || value === undefined || isNaN(value)) return 'N/A';
-                    var num = Number(value);
-                    if (num >= 1000000000000) return (num / 1000000000000).toFixed(1) + ' TW';
-                    if (num >= 1000000000) return (num / 1000000000).toFixed(1) + ' GW';
-                    if (num >= 1000000) return (num / 1000000).toFixed(1) + ' MW';
-                    if (num >= 1000) return (num / 1000).toFixed(0) + ' kW';
-                    return num.toFixed(0) + ' W';
-                };
-
-                var isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                var gridColor = isDarkMode ? '#3a3a3c' : '#ebebeb';
-                var textColor = isDarkMode ? '#ebebf5' : '#8e8e93';
+                var gridColor = window.getCssVar('--nc-bg-3', '#ebebeb');
+                var textColor = window.getCssVar('--nc-text-2', '#8e8e93');
 
                 var now = new Date();
                 var currentYear = now.getFullYear();
@@ -108,7 +97,7 @@
                 var markLineData = {
                     data: [
                         {
-                            xAxis: closestIndex, // Index 0: The fixed "Active Snapshot" line 
+                            xAxis: closestIndex,
                             label: { show: false },
                             lineStyle: { color: textColor, type: 'dashed', width: 2, opacity: 0.7 }
                         }
@@ -133,7 +122,7 @@
                             var allParams = params;
                             
                             mainSeriesParams.forEach(function(param) {
-                                var valStr = formatValue(param.value);
+                                var valStr = window.formatEnergyValue(param.value);
                                 var name = param.seriesName;
                                 
                                 var extraStr = '';
@@ -142,13 +131,13 @@
                                 
                                 if (bandLowerParam && bandUpperParam && bandLowerParam.value !== undefined && bandUpperParam.value !== undefined) {
                                     var bLower = bandLowerParam.value;
-                                    var bUpper = bLower + bandUpperParam.value; // add diff
-                                    extraStr = ' (P10: ' + formatValue(bLower) + ' - P90: ' + formatValue(bUpper) + ')';
+                                    var bUpper = bLower + bandUpperParam.value;
+                                    extraStr = ' (P10: ' + window.formatEnergyValue(bLower) + ' - P90: ' + window.formatEnergyValue(bUpper) + ')';
                                 }
                                 
-                                tooltipStr += '<div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">';
-                                tooltipStr += '<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:' + param.color + ';"></span>';
-                                tooltipStr += name + ': <strong>' + valStr + '</strong>' + '<span style="font-size: 0.85em; color: var(--nc-text-2)">' + extraStr + '</span>';
+                                tooltipStr += '<div class="flex-row align-center mt-sm">';
+                                tooltipStr += '<span class="chart-legend-color mr-sm" style="background-color:' + param.color + ';"></span>';
+                                tooltipStr += name + ': <strong>' + valStr + '</strong>' + '<span class="text-small text-muted">' + extraStr + '</span>';
                                 tooltipStr += '</div>';
                             });
                             return tooltipStr;
@@ -186,7 +175,7 @@
                         splitLine: {
                             lineStyle: { type: 'dashed', color: gridColor }
                         },
-                        axisLabel: { color: textColor, formatter: formatValue }
+                        axisLabel: { color: textColor, formatter: window.formatEnergyValue }
                     },
                     series: seriesData
                 };
@@ -202,14 +191,10 @@
                         if (chartOpt.series && chartOpt.series.length > 0) {
                             var markLine = chartOpt.series[0].markLine || { data: [] };
                             if (markLine.data && markLine.data.length > 0) {
-                                // Freeze the clicked line to the active snapshot coordinate
                                 markLine.data[0].xAxis = xIndex;
                             }
                             chartOpt.series[0].markLine = markLine;
-                            
-                            // Prevent re-animating the whole chart when updating the line
                             chartOpt.animation = false;
-                            
                             myChart.setOption(chartOpt, {replaceMerge: ['series']});
                         }
 
@@ -218,7 +203,6 @@
 
                         var sum = 0;
                         var count = 0;
-                        var chartOpt = myChart.getOption();
                         
                         chartOpt.series.forEach(function(s) {
                             if (typeof s.name === 'string' && !s.name.includes('Band')) {
@@ -230,49 +214,24 @@
                             }
                         });
                         
-                        {{ if .IsInteractiveMap }}
-                        var mapEl = document.getElementById('map-time-label');
-                        if (mapEl) mapEl.innerHTML = labels[xIndex];
-                        
                         var timestamps = {{ .Timestamps | toJSON }};
                         var timestamp = timestamps[xIndex];
-                        if (timestamp) {
-                            fetch('/api/dashboard/map-snapshot?timestamp=' + timestamp + '&nation_uuid={{ .Location.LocationUuid }}&energy_source={{ .EnergySource }}&forecaster=' + encodeURIComponent("{{ .FirstForecaster }}"))
-                                .then(r => r.json())
-                                .then(data => {
-                                    if (window.mapInstance) {
-                                        var mOpt = window.mapInstance.getOption();
-                                        if (mOpt && mOpt.series && mOpt.series.length > 0) {
-                                            mOpt.series[0].data = data;
-                                            window.mapInstance.setOption(mOpt);
-                                        }
-                                    }
-                                }).catch(err => console.error(err));
-                        }
-                        {{ else }}
+                        var label = labels[xIndex];
+                        
+                        var fraction = 0.15;
                         if (count > 0) {
-                            var fraction = sum / count;
+                            fraction = sum / count;
                             if (fraction < 0.15) fraction = 0.15;
                             if (fraction > 1.0) fraction = 1.0;
-                            
-                            var mapEl = document.getElementById('map-time-label');
-                            if (mapEl) {
-                                mapEl.innerHTML = '{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }} | ' + labels[xIndex];
-                            }
-                            
-                            if (window.mapInstance) {
-                                var mapOpt = window.mapInstance.getOption();
-                                if (mapOpt.geo && mapOpt.geo.length > 0) {
-                                    mapOpt.geo[0].itemStyle.opacity = fraction;
-                                    mapOpt.geo[0].emphasis.itemStyle.opacity = Math.min(fraction + 0.2, 1);
-                                    window.mapInstance.setOption(mapOpt);
-                                } else if (mapOpt.series && mapOpt.series.length > 0) {
-                                    mapOpt.series[0].itemStyle.opacity = fraction;
-                                    window.mapInstance.setOption(mapOpt);
-                                }
-                            }
                         }
-                        {{ end }}
+
+                        document.dispatchEvent(new CustomEvent('timeSelected', {
+                            detail: {
+                                timestamp: timestamp,
+                                label: label,
+                                fraction: fraction
+                            }
+                        }));
                     }
                 });
 
@@ -286,7 +245,6 @@
                         if (chartOpt.series && chartOpt.series.length > 0) {
                             var markLine = chartOpt.series[0].markLine || { data: [] };
                             if (markLine.data && markLine.data.length > 1) {
-                                // Add a temporary third line for mouse tracking
                                 markLine.data[2] = {
                                     xAxis: xIndex,
                                     label: { show: false },
@@ -304,7 +262,6 @@
                             myChart.setOption(chartOpt, {replaceMerge: ['series']});
                         }
                     } else {
-                        // Mouse left the grid, clear the temporary hover line
                         var chartOpt = myChart.getOption();
                         if (chartOpt.series && chartOpt.series.length > 0) {
                             var markLine = chartOpt.series[0].markLine || { data: [] };
@@ -314,7 +271,6 @@
                                 chartOpt.animation = false;
                                 myChart.setOption(chartOpt, {replaceMerge: ['series']});
                             } else if (markLine.data && markLine.data.length === 2 && !markLine.data[1].label) {
-                                // Fallback if no "Now" line existed
                                 markLine.data.splice(1, 1);
                                 chartOpt.series[0].markLine = markLine;
                                 chartOpt.animation = false;
@@ -324,9 +280,7 @@
                     }
                 });
 
-                var ro = new ResizeObserver(() => {
-                    myChart.resize();
-                });
+                var ro = new ResizeObserver(() => { myChart.resize(); });
                 ro.observe(chartDom);
             })();
         </script>
@@ -350,19 +304,19 @@
             if (window.mapInstance) {
                 window.mapInstance.dispose();
             }
+            if (window.mapTimeSelectedListener) {
+                document.removeEventListener('timeSelected', window.mapTimeSelectedListener);
+            }
+
             var myMap = echarts.init(mapDom);
             window.mapInstance = myMap;
 
             var geojsonData = {{ .GeoJSON }};
-            var isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-            
-            // Derive ECharts palette strictly from root CSS variables
-            var rootStyles = getComputedStyle(document.documentElement);
-            var panelBgColor = rootStyles.getPropertyValue('--nc-bg-2').trim() || (isDarkMode ? '#2c2c2e' : '#ffffff');
-            var mapEmptyColor = rootStyles.getPropertyValue('--nc-bg-3').trim() || (isDarkMode ? '#3a3a3c' : '#f0f1f3');
-            var mapHoverColor = rootStyles.getPropertyValue('--chart-color-1').trim() || '#1095c1';
-            var mapHighlightBorder = rootStyles.getPropertyValue('--nc-text-1').trim() || (isDarkMode ? '#ffffff' : '#1c1c1e');
-            var mapDefaultBorder = rootStyles.getPropertyValue('--nc-text-1').trim() || (isDarkMode ? '#ffffff' : '#1c1c1e');
+            var panelBgColor = window.getCssVar('--nc-bg-2', '#ffffff');
+            var mapEmptyColor = window.getCssVar('--nc-bg-3', '#f0f1f3');
+            var mapHoverColor = window.getCssVar('--chart-color-1', '#1095c1');
+            var mapHighlightBorder = window.getCssVar('--nc-text-1', '#1c1c1e');
+            var mapDefaultBorder = window.getCssVar('--nc-text-1', '#1c1c1e');
             
             {{ if .IsInteractiveMap }}
             if (geojsonData && geojsonData.features) {
@@ -399,68 +353,35 @@
                             var cap = params.data.capacity || 0;
                             var gen = val * cap;
                             
-                            var formatValue = function(num) {
-                                if (num >= 1e12) return (num / 1e12).toFixed(1) + ' TW';
-                                if (num >= 1e9) return (num / 1e9).toFixed(1) + ' GW';
-                                if (num >= 1e6) return (num / 1e6).toFixed(1) + ' MW';
-                                if (num >= 1e3) return (num / 1e3).toFixed(0) + ' kW';
-                                return num.toFixed(0) + ' W';
-                            };
-
                             return '<strong>' + title + '</strong><br/>' +
-                                   'Generation: ' + formatValue(gen) + ' (' + (val * 100).toFixed(1) + '%)<br/>' +
-                                   'Capacity: ' + formatValue(cap);
+                                   'Generation: ' + window.formatEnergyValue(gen) + ' (' + (val * 100).toFixed(1) + '%)<br/>' +
+                                   'Capacity: ' + window.formatEnergyValue(cap);
                         }
                     },
                     visualMap: {
                         left: 'right',
                         bottom: 'bottom',
-                        min: 0,
-                        max: 1.0,
+                        min: 0, max: 1.0,
                         text: ['Max (100%)', 'Min (0%)'],
-                        realtime: true,
-                        calculable: true,
-                        inRange: {
-                            color: [
-                                mapEmptyColor,
-                                '#f2a900'
-                            ]
-                        },
-                        formatter: function (value) {
-                            return (value * 100).toFixed(0) + '%';
-                        }
+                        realtime: true, calculable: true,
+                        inRange: { color: [ mapEmptyColor, '#f2a900' ] },
+                        formatter: function (value) { return (value * 100).toFixed(0) + '%'; }
                     },
                     series: [{
                         name: 'GSP Generation',
-                        type: 'map',
-                        map: 'gspMap',
-                        roam: true,
-                        layoutCenter: ['50%', '50%'],
-                        layoutSize: '100%',
+                        type: 'map', map: 'gspMap',
+                        roam: true, layoutCenter: ['50%', '50%'], layoutSize: '100%',
                         scaleLimit: { min: 1, max: 10 },
                         selectedMode: 'single',
                         label: { show: false },
                         select: { 
                             label: { show: false },
-                            itemStyle: {
-                                borderColor: mapHighlightBorder,
-                                borderWidth: 2,
-                                shadowColor: 'rgba(0,0,0,0.5)',
-                                shadowBlur: 10
-                            }
+                            itemStyle: { borderColor: mapHighlightBorder, borderWidth: 2, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 }
                         },
-                        itemStyle: {
-                            areaColor: mapEmptyColor,
-                            borderColor: panelBgColor,
-                            borderWidth: 0.5
-                        },
+                        itemStyle: { areaColor: mapEmptyColor, borderColor: panelBgColor, borderWidth: 0.5 },
                         emphasis: {
                             label: { show: false },
-                            itemStyle: {
-                                areaColor: mapHoverColor,
-                                borderColor: mapDefaultBorder,
-                                borderWidth: 1
-                            }
+                            itemStyle: { areaColor: mapHoverColor, borderColor: mapDefaultBorder, borderWidth: 1 }
                         },
                         data: []
                     }]
@@ -477,7 +398,7 @@
                             if (s.center) {
                                 delete s.center;
                                 s.zoom = 1;
-                                myMap.setOption(opt, true); // Use notMerge to hard reset the coordinate center natively
+                                myMap.setOption(opt, true);
                             }
                         }
                     }
@@ -489,24 +410,17 @@
                         var targetUuid = clickedUuid;
 
                         if (window.currentSelectedGsp === clickedUuid) {
-                            // Deselect and return to national view
                             targetUuid = "{{ .Location.LocationUuid }}";
                             window.currentSelectedGsp = null;
                         } else {
                             window.currentSelectedGsp = clickedUuid;
                         }
 
-                        // Trigger an HTMX swap preserving the form inputs but replacing the location_uuid
-                        // And skip_map=true.
-                        
                         var url = '/components/forecast?location_uuid=' + targetUuid + 
-                                  '&skip_map=true' +
-                                  '&energy_source={{ .EnergySource }}' + 
+                                  '&skip_map=true&energy_source={{ .EnergySource }}' + 
                                   '&time_window=' + encodeURIComponent("{{ .TimeWindow }}") + 
                                   '&horizon_mins={{ .HorizonMins }}';
                                   
-                        // Note: To preserve forecasters/observers exactly as in the form, 
-                        // we can append them from the DOM or we can fetch them via JS.
                         var qf = document.getElementById('query-form');
                         if (qf) {
                             var fd = new FormData(qf);
@@ -517,27 +431,35 @@
                             }
                         }
                         
-                        // Instead of an object config which HTMX 1.9 chokes on in some setups,
-                        // use the 3-argument signature securely:
-                        htmx.ajax('GET', url, '#chart-panel').catch(function(err) {
-                            console.error("HTMX ajax error fetching chart update:", err);
-                        });
+                        htmx.ajax('GET', url, '#chart-panel').catch(function(err) { console.error(err); });
                     }
                 });
                 
-                // Also trigger map fetch for initial timestamp
-                var timestamps = {{ .Timestamps | toJSON }};
-                if (timestamps && timestamps.length > 0) {
-                    var firstTs = timestamps[0];
-                    fetch('/api/dashboard/map-snapshot?timestamp=' + firstTs + '&nation_uuid={{ .Location.LocationUuid }}&energy_source={{ .EnergySource }}&forecaster=' + encodeURIComponent("{{ .FirstForecaster }}"))
+                var updateMapData = function(timestamp) {
+                    if (!timestamp) return;
+                    fetch('/api/dashboard/map-snapshot?timestamp=' + timestamp + '&nation_uuid={{ .Location.LocationUuid }}&energy_source={{ .EnergySource }}&forecaster=' + encodeURIComponent("{{ .FirstForecaster }}"))
                         .then(r => r.json())
                         .then(data => {
-                            var mOpt = myMap.getOption();
-                            if (mOpt && mOpt.series && mOpt.series.length > 0) {
-                                mOpt.series[0].data = data;
-                                myMap.setOption(mOpt);
+                            if (window.mapInstance) {
+                                var mOpt = window.mapInstance.getOption();
+                                if (mOpt && mOpt.series && mOpt.series.length > 0) {
+                                    mOpt.series[0].data = data;
+                                    window.mapInstance.setOption(mOpt);
+                                }
                             }
                         }).catch(err => console.error(err));
+                };
+
+                window.mapTimeSelectedListener = function(e) {
+                    var mapEl = document.getElementById('map-time-label');
+                    if (mapEl) mapEl.innerHTML = e.detail.label;
+                    updateMapData(e.detail.timestamp);
+                };
+                document.addEventListener('timeSelected', window.mapTimeSelectedListener);
+
+                var timestamps = {{ .Timestamps | toJSON }};
+                if (timestamps && timestamps.length > 0) {
+                    updateMapData(timestamps[0]);
                 }
 
             } else {
@@ -554,36 +476,20 @@
             if (geojsonData) {
                 var hasArea = false;
                 if (geojsonData.features) {
-                    geojsonData.features.forEach(function(f) {
-                        if (f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
-                            hasArea = true;
-                        }
-                    });
+                    hasArea = geojsonData.features.some(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
                 } else if (geojsonData.type === 'Polygon' || geojsonData.type === 'MultiPolygon') {
                     hasArea = true;
                 }
                 
+                var locMapColor = window.getCssVar('--chart-color-0', '#7a9374');
                 if (hasArea) {
                     echarts.registerMap('locMap', geojsonData);
                     option = {
                         geo: {
-                            map: 'locMap',
-                            roam: false,
-                            itemStyle: {
-                                areaColor: rootStyles.getPropertyValue('--chart-color-0').trim() || '#7a9374',
-                                opacity: fillOpacity,
-                                borderColor: mapDefaultBorder,
-                                borderWidth: 2
-                            },
-                            emphasis: {
-                                itemStyle: {
-                                    areaColor: rootStyles.getPropertyValue('--chart-color-0').trim() || '#7a9374',
-                                    opacity: Math.min(fillOpacity + 0.2, 1)
-                                },
-                                label: { show: false }
-                            },
-                            layoutCenter: ['50%', '50%'],
-                            layoutSize: '80%'
+                            map: 'locMap', roam: false,
+                            itemStyle: { areaColor: locMapColor, opacity: fillOpacity, borderColor: mapDefaultBorder, borderWidth: 2 },
+                            emphasis: { itemStyle: { areaColor: locMapColor, opacity: Math.min(fillOpacity + 0.2, 1) }, label: { show: false } },
+                            layoutCenter: ['50%', '50%'], layoutSize: '80%'
                         }
                     };
                 } else {
@@ -592,51 +498,39 @@
                         yAxis: { type: 'value', show: false, min: lat - 0.1, max: lat + 0.1 },
                         grid: { left: 0, right: 0, top: 0, bottom: 0 },
                         series: [{
-                            type: 'scatter',
-                            symbolSize: 14,
-                            itemStyle: {
-                                color: rootStyles.getPropertyValue('--chart-color-0').trim() || '#7a9374',
-                                opacity: fillOpacity,
-                                borderColor: 'white',
-                                borderWidth: 3,
-                                shadowColor: 'rgba(0,0,0,0.3)',
-                                shadowBlur: 4,
-                                shadowOffsetY: 2
-                            },
+                            type: 'scatter', symbolSize: 14,
+                            itemStyle: { color: locMapColor, opacity: fillOpacity, borderColor: 'white', borderWidth: 3, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 4, shadowOffsetY: 2 },
                             data: [[lng, lat]]
                         }]
                     };
                 }
-            } else {
-                option = {
-                    xAxis: { type: 'value', show: false, min: lng - 0.1, max: lng + 0.1 },
-                    yAxis: { type: 'value', show: false, min: lat - 0.1, max: lat + 0.1 },
-                    grid: { left: 0, right: 0, top: 0, bottom: 0 },
-                    series: [{
-                        type: 'scatter',
-                        symbolSize: 14,
-                        itemStyle: {
-                            color: rootStyles.getPropertyValue('--chart-color-0').trim() || '#7a9374',
-                            opacity: fillOpacity,
-                            borderColor: 'white',
-                            borderWidth: 3,
-                            shadowColor: 'rgba(0,0,0,0.3)',
-                            shadowBlur: 4,
-                            shadowOffsetY: 2
-                        },
-                        data: [[lng, lat]]
-                    }]
-                };
             }
-            
             myMap.setOption(option);
+
+            window.mapTimeSelectedListener = function(e) {
+                var mapEl = document.getElementById('map-time-label');
+                if (mapEl) mapEl.innerHTML = '{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }} | ' + e.detail.label;
+                
+                if (window.mapInstance) {
+                    var mapOpt = window.mapInstance.getOption();
+                    if (mapOpt.geo && mapOpt.geo.length > 0) {
+                        mapOpt.geo[0].itemStyle.opacity = e.detail.fraction;
+                        mapOpt.geo[0].emphasis.itemStyle.opacity = Math.min(e.detail.fraction + 0.2, 1);
+                        window.mapInstance.setOption(mapOpt);
+                    } else if (mapOpt.series && mapOpt.series.length > 0) {
+                        mapOpt.series[0].itemStyle.opacity = e.detail.fraction;
+                        window.mapInstance.setOption(mapOpt);
+                    }
+                }
+            };
+            document.addEventListener('timeSelected', window.mapTimeSelectedListener);
+
             {{ end }}
 
-            var ro = new ResizeObserver(() => {
-                myMap.resize();
-            });
+            var ro = new ResizeObserver(() => { myMap.resize(); });
             ro.observe(mapDom);
         })();
     </script>
 </div>
 {{ end }}
+
