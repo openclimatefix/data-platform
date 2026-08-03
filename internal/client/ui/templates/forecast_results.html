@@ -1,4 +1,4 @@
-<article style="display: flex; flex-direction: column; flex-grow: 1;">
+<article style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0;">
     <div class="panel-header">
         <strong>Forecast Generation</strong> 
         <small>{{ .Location.LocationName }} ({{ .Location.LocationUuid }})</small>
@@ -18,8 +18,8 @@
             {{ end }}
         </div>
 
-        <figure style="margin: 0; flex-grow: 1; display: flex; flex-direction: column;">
-            <div id="forecastChart" style="flex-grow: 1; min-height: 320px; width: 100%;"></div>
+        <figure style="margin: 0; flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
+            <div id="forecastChart" style="flex-grow: 1; min-height: 0; width: 100%;"></div>
         </figure>
         <script>
             (function() {
@@ -108,7 +108,7 @@
                 var markLineData = {
                     data: [
                         {
-                            xAxis: closestIndex,
+                            xAxis: closestIndex, // Index 0: The fixed "Active Snapshot" line 
                             label: { show: false },
                             lineStyle: { color: textColor, type: 'dashed', width: 2, opacity: 0.7 }
                         }
@@ -202,17 +202,8 @@
                         if (chartOpt.series && chartOpt.series.length > 0) {
                             var markLine = chartOpt.series[0].markLine || { data: [] };
                             if (markLine.data && markLine.data.length > 0) {
+                                // Freeze the clicked line to the active snapshot coordinate
                                 markLine.data[0].xAxis = xIndex;
-                            } else {
-                                markLine = {
-                                    data: [{
-                                        xAxis: xIndex,
-                                        label: { show: false },
-                                        lineStyle: { color: textColor, type: 'dashed', width: 2, opacity: 0.7 }
-                                    }],
-                                    symbol: ['none', 'none'],
-                                    animation: false
-                                };
                             }
                             chartOpt.series[0].markLine = markLine;
                             
@@ -285,6 +276,54 @@
                     }
                 });
 
+                myChart.getZr().on('mousemove', function(params) {
+                    var pointInPixel = [params.offsetX, params.offsetY];
+                    if (myChart.containPixel('grid', pointInPixel)) {
+                        var pointInGrid = myChart.convertFromPixel({seriesIndex: 0}, pointInPixel);
+                        var xIndex = pointInGrid[0];
+                        
+                        var chartOpt = myChart.getOption();
+                        if (chartOpt.series && chartOpt.series.length > 0) {
+                            var markLine = chartOpt.series[0].markLine || { data: [] };
+                            if (markLine.data && markLine.data.length > 1) {
+                                // Add a temporary third line for mouse tracking
+                                markLine.data[2] = {
+                                    xAxis: xIndex,
+                                    label: { show: false },
+                                    lineStyle: { color: textColor, type: 'dotted', width: 2, opacity: 0.5 }
+                                };
+                            } else if (markLine.data && markLine.data.length === 1) {
+                                markLine.data[1] = {
+                                    xAxis: xIndex,
+                                    label: { show: false },
+                                    lineStyle: { color: textColor, type: 'dotted', width: 2, opacity: 0.5 }
+                                };
+                            }
+                            chartOpt.series[0].markLine = markLine;
+                            chartOpt.animation = false;
+                            myChart.setOption(chartOpt, {replaceMerge: ['series']});
+                        }
+                    } else {
+                        // Mouse left the grid, clear the temporary hover line
+                        var chartOpt = myChart.getOption();
+                        if (chartOpt.series && chartOpt.series.length > 0) {
+                            var markLine = chartOpt.series[0].markLine || { data: [] };
+                            if (markLine.data && markLine.data.length > 2) {
+                                markLine.data.splice(2, 1);
+                                chartOpt.series[0].markLine = markLine;
+                                chartOpt.animation = false;
+                                myChart.setOption(chartOpt, {replaceMerge: ['series']});
+                            } else if (markLine.data && markLine.data.length === 2 && !markLine.data[1].label) {
+                                // Fallback if no "Now" line existed
+                                markLine.data.splice(1, 1);
+                                chartOpt.series[0].markLine = markLine;
+                                chartOpt.animation = false;
+                                myChart.setOption(chartOpt, {replaceMerge: ['series']});
+                            }
+                        }
+                    }
+                });
+
                 var ro = new ResizeObserver(() => {
                     myChart.resize();
                 });
@@ -316,7 +355,14 @@
 
             var geojsonData = {{ .GeoJSON }};
             var isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-            var panelBgColor = isDarkMode ? '#2c2c2e' : '#ffffff';
+            
+            // Derive ECharts palette strictly from root CSS variables
+            var rootStyles = getComputedStyle(document.documentElement);
+            var panelBgColor = rootStyles.getPropertyValue('--nc-bg-2').trim() || (isDarkMode ? '#2c2c2e' : '#ffffff');
+            var mapEmptyColor = rootStyles.getPropertyValue('--nc-bg-3').trim() || (isDarkMode ? '#3a3a3c' : '#f0f1f3');
+            var mapHoverColor = rootStyles.getPropertyValue('--chart-color-1').trim() || '#1095c1';
+            var mapHighlightBorder = rootStyles.getPropertyValue('--nc-text-1').trim() || (isDarkMode ? '#ffffff' : '#1c1c1e');
+            var mapDefaultBorder = rootStyles.getPropertyValue('--nc-text-1').trim() || (isDarkMode ? '#ffffff' : '#1c1c1e');
             
             {{ if .IsInteractiveMap }}
             if (geojsonData && geojsonData.features) {
@@ -376,11 +422,8 @@
                         calculable: true,
                         inRange: {
                             color: [
-                                '#f4f5f7',
-                                '#fae19b',
-                                '#f2a900',
-                                '#a87500',
-                                '#5e4200'
+                                mapEmptyColor,
+                                '#f2a900'
                             ]
                         },
                         formatter: function (value) {
@@ -391,28 +434,31 @@
                         name: 'GSP Generation',
                         type: 'map',
                         map: 'gspMap',
-                        roam: 'scale',
-                        scaleLimit: { min: 1 },
+                        roam: true,
+                        layoutCenter: ['50%', '50%'],
+                        layoutSize: '100%',
+                        scaleLimit: { min: 1, max: 10 },
                         selectedMode: 'single',
                         label: { show: false },
                         select: { 
                             label: { show: false },
                             itemStyle: {
-                                borderColor: isDarkMode ? '#ffffff' : '#1c1c1e',
+                                borderColor: mapHighlightBorder,
                                 borderWidth: 2,
                                 shadowColor: 'rgba(0,0,0,0.5)',
                                 shadowBlur: 10
                             }
                         },
                         itemStyle: {
+                            areaColor: mapEmptyColor,
                             borderColor: panelBgColor,
                             borderWidth: 0.5
                         },
                         emphasis: {
                             label: { show: false },
                             itemStyle: {
-                                areaColor: '#1095c1',
-                                borderColor: '#1c1c1e',
+                                areaColor: mapHoverColor,
+                                borderColor: mapDefaultBorder,
                                 borderWidth: 1
                             }
                         },
@@ -422,6 +468,20 @@
                 myMap.setOption(option);
 
                 window.currentSelectedGsp = null;
+
+                myMap.on('georoam', function(params) {
+                    var opt = myMap.getOption();
+                    if (opt && opt.series && opt.series.length > 0) {
+                        var s = opt.series[0];
+                        if (s.zoom <= 1.001) {
+                            if (s.center) {
+                                delete s.center;
+                                s.zoom = 1;
+                                myMap.setOption(opt, true); // Use notMerge to hard reset the coordinate center natively
+                            }
+                        }
+                    }
+                });
 
                 myMap.on('click', function(params) {
                     if (params.name) {
@@ -457,7 +517,11 @@
                             }
                         }
                         
-                        htmx.ajax('GET', url, {target: '#chart-panel'});
+                        // Instead of an object config which HTMX 1.9 chokes on in some setups,
+                        // use the 3-argument signature securely:
+                        htmx.ajax('GET', url, '#chart-panel').catch(function(err) {
+                            console.error("HTMX ajax error fetching chart update:", err);
+                        });
                     }
                 });
                 
@@ -506,14 +570,14 @@
                             map: 'locMap',
                             roam: false,
                             itemStyle: {
-                                areaColor: '#7a9374',
+                                areaColor: rootStyles.getPropertyValue('--chart-color-0').trim() || '#7a9374',
                                 opacity: fillOpacity,
-                                borderColor: '#1c1c1e',
+                                borderColor: mapDefaultBorder,
                                 borderWidth: 2
                             },
                             emphasis: {
                                 itemStyle: {
-                                    areaColor: '#7a9374',
+                                    areaColor: rootStyles.getPropertyValue('--chart-color-0').trim() || '#7a9374',
                                     opacity: Math.min(fillOpacity + 0.2, 1)
                                 },
                                 label: { show: false }
@@ -531,7 +595,7 @@
                             type: 'scatter',
                             symbolSize: 14,
                             itemStyle: {
-                                color: '#7a9374',
+                                color: rootStyles.getPropertyValue('--chart-color-0').trim() || '#7a9374',
                                 opacity: fillOpacity,
                                 borderColor: 'white',
                                 borderWidth: 3,
@@ -552,7 +616,7 @@
                         type: 'scatter',
                         symbolSize: 14,
                         itemStyle: {
-                            color: '#7a9374',
+                            color: rootStyles.getPropertyValue('--chart-color-0').trim() || '#7a9374',
                             opacity: fillOpacity,
                             borderColor: 'white',
                             borderWidth: 3,

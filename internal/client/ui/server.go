@@ -15,10 +15,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
@@ -65,6 +67,8 @@ func NewUIClient(grpcTarget string) (*UIClient, error) {
 	conn, err := grpc.NewClient(
 		grpcTarget,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithChainUnaryInterceptor(uiMetadataUnaryInterceptor),
+		grpc.WithChainStreamInterceptor(uiMetadataStreamInterceptor),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial gRPC target %s: %w", grpcTarget, err)
@@ -75,6 +79,41 @@ func NewUIClient(grpcTarget string) (*UIClient, error) {
 	return &UIClient{
 		grpcClient: client,
 	}, nil
+}
+
+type traceKeyType struct{}
+
+func getTraceID(ctx context.Context) string {
+	if tid, ok := ctx.Value(traceKeyType{}).(string); ok && tid != "" {
+		return tid
+	}
+	return strings.ReplaceAll(uuid.New().String(), "-", "")
+}
+
+func uiMetadataUnaryInterceptor(
+	ctx context.Context,
+	method string,
+	req, reply any,
+	cc *grpc.ClientConn,
+	invoker grpc.UnaryInvoker,
+	opts ...grpc.CallOption,
+) error {
+	traceID := getTraceID(ctx)
+	ctx = metadata.AppendToOutgoingContext(ctx, "traceid", traceID, "appid", "dp-ui")
+	return invoker(ctx, method, req, reply, cc, opts...)
+}
+
+func uiMetadataStreamInterceptor(
+	ctx context.Context,
+	desc *grpc.StreamDesc,
+	cc *grpc.ClientConn,
+	method string,
+	streamer grpc.Streamer,
+	opts ...grpc.CallOption,
+) (grpc.ClientStream, error) {
+	traceID := getTraceID(ctx)
+	ctx = metadata.AppendToOutgoingContext(ctx, "traceid", traceID, "appid", "dp-ui")
+	return streamer(ctx, desc, cc, method, opts...)
 }
 
 type gzipResponseWriter struct {
@@ -103,6 +142,14 @@ func withGzip(next http.Handler) http.Handler {
 	})
 }
 
+func withTraceID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+		ctx := context.WithValue(r.Context(), traceKeyType{}, traceID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func (ui *UIClient) Start(port string) error {
 	mux := http.NewServeMux()
 
@@ -114,7 +161,7 @@ func (ui *UIClient) Start(port string) error {
 	mux.HandleFunc("/dashboard/", ui.handleDashboardCountry)
 	mux.HandleFunc("/api/dashboard/map-snapshot", ui.handleDashboardMapSnapshot)
 
-	return http.ListenAndServe(port, withGzip(mux))
+	return http.ListenAndServe(port, withTraceID(withGzip(mux)))
 }
 
 func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
