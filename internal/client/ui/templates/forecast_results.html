@@ -9,15 +9,6 @@
             No forecast data found for this configuration.
         </div>
     {{ else }}
-        <div class="flex-row wrap gap-md mb-sm text-small">
-            {{ range $i, $s := .Series }}
-            <span class="flex-row align-center gap-sm">
-                <div class="chart-legend-color" style="background-color: var(--chart-color-{{ $i }});"></div>
-                {{ $s.Name }}
-            </span>
-            {{ end }}
-        </div>
-
         <figure class="m-0 flex-grow flex-col min-h-0">
             <div id="forecastChart" class="flex-grow min-h-0 w-full"></div>
         </figure>
@@ -55,9 +46,7 @@
                         smooth: 0.2,
                         showSymbol: false,
                         lineStyle: { color: color, width: 2 },
-                        itemStyle: { color: color },
-                        emphasis: { focus: 'series' },
-                        blur: { lineStyle: { opacity: 0.3 } }
+                        itemStyle: { color: color }
                     };
 
                     if (s.isObservation) {
@@ -74,9 +63,7 @@
                             lineStyle: { opacity: 0 },
                             stack: "band_" + i,
                             showSymbol: false,
-                            tooltip: { show: false },
-                            emphasis: { focus: 'series' },
-                            blur: { lineStyle: { opacity: 0 } }
+                            tooltip: { show: false }
                         });
                         seriesData.push({
                             id: s.name + "_Band",
@@ -87,15 +74,15 @@
                             areaStyle: { color: color, opacity: 0.2 },
                             stack: "band_" + i,
                             showSymbol: false,
-                            tooltip: { show: false },
-                            emphasis: { focus: 'series' },
-                            blur: { areaStyle: { opacity: 0.1 }, lineStyle: { opacity: 0 } }
+                            tooltip: { show: false }
                         });
                     }
                 });
 
                 var gridColor = window.getCssVar('--nc-bg-3', '#ebebeb');
                 var textColor = window.getCssVar('--nc-text-2', '#8e8e93');
+                var panelBgColor = window.getCssVar('--nc-bg-2', '#ffffff');
+                var textPrimaryColor = window.getCssVar('--nc-text-1', '#1c1c1e');
 
                 var now = new Date();
                 var currentYear = now.getFullYear();
@@ -131,6 +118,15 @@
 
                 var option = {
                     backgroundColor: 'transparent',
+                    legend: {
+                        data: seriesConfig.map(s => s.name),
+                        icon: 'circle',
+                        itemWidth: 10,
+                        itemHeight: 10,
+                        textStyle: { color: textPrimaryColor, fontSize: 13 },
+                        left: 0,
+                        top: 0
+                    },
                     tooltip: {
                         trigger: 'axis',
                         axisPointer: { type: 'line', lineStyle: { type: 'dotted', color: textColor, opacity: 0.5 } },
@@ -168,25 +164,44 @@
                         }
                     },
                     grid: {
-                        left: 20, right: 40, top: 20, bottom: 20, containLabel: true
+                        left: 20, right: 40, top: 40, bottom: 40, containLabel: true
                     },
+                    dataZoom: [
+                        { type: 'inside', xAxisIndex: 0, filterMode: 'none', minValueSpan: 12 },
+                        { 
+                            type: 'slider', 
+                            xAxisIndex: 0, 
+                            filterMode: 'none', 
+                            bottom: 5, 
+                            height: 20,
+                            minValueSpan: 12,
+                            borderColor: 'transparent',
+                            backgroundColor: 'transparent',
+                            fillerColor: textPrimaryColor.replace(')', ', 0.1)').replace('rgb', 'rgba').replace('#1c1c1e', 'rgba(28, 28, 30, 0.1)').replace('#ffffff', 'rgba(255, 255, 255, 0.1)'),
+                            handleStyle: { color: panelBgColor, borderColor: textPrimaryColor, borderWidth: 1 },
+                            moveHandleStyle: { color: textPrimaryColor, opacity: 0.5 },
+                            dataBackground: { 
+                                lineStyle: { color: gridColor, opacity: 0.8 }, 
+                                areaStyle: { color: gridColor, opacity: 0.5 } 
+                            },
+                            selectedDataBackground: { 
+                                lineStyle: { color: textColor, opacity: 0.8 }, 
+                                areaStyle: { color: textColor, opacity: 0.2 } 
+                            }
+                        }
+                    ],
                     xAxis: {
                         type: 'category',
                         data: labels,
                         axisLabel: {
                             color: textColor,
+                            hideOverlap: true,
+                            showMinLabel: true,
+                            showMaxLabel: true,
                             formatter: function(value, index) {
                                 if (!value) return '';
                                 var match = value.match(/\s(\d{2}):\d{2}$/);
                                 if (!match) return value;
-                                var hour = parseInt(match[1], 10);
-                                if (hour !== 0 && hour !== 12) return '';
-                                
-                                var prevValue = index > 0 ? labels[index-1] : null;
-                                if (prevValue) {
-                                    var prevMatch = prevValue.match(/\s(\d{2}):\d{2}$/);
-                                    if (prevMatch && parseInt(prevMatch[1],10) === hour) return '';
-                                }
                                 return value;
                             }
                         },
@@ -266,7 +281,11 @@
                     }
                 });
 
-                var ro = new ResizeObserver(() => { myChart.resize(); });
+                var ro = new ResizeObserver(() => { 
+                    if (myChart && chartDom.clientWidth > 0 && chartDom.clientHeight > 0) {
+                        myChart.resize(); 
+                    }
+                });
                 ro.observe(chartDom);
             })();
         </script>
@@ -531,7 +550,11 @@
 
             {{ end }}
 
-            var ro = new ResizeObserver(() => { myMap.resize(); });
+            var ro = new ResizeObserver(() => { 
+                if (myMap && mapDom.clientWidth > 0 && mapDom.clientHeight > 0) {
+                    myMap.resize(); 
+                }
+            });
             ro.observe(mapDom);
         })();
     </script>

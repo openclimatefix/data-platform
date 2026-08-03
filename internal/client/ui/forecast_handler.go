@@ -133,7 +133,6 @@ func fetchForecasterData(
 	ctx context.Context,
 	client pb.DataPlatformDataServiceClient,
 	p *forecastParams,
-	capacity float32,
 ) []ForecasterResult {
 	results := make([]ForecasterResult, len(p.Forecasters))
 	g, gCtx := errgroup.WithContext(ctx)
@@ -170,19 +169,13 @@ func fetchForecasterData(
 				t := v.GetTargetTimestampUtc().AsTime()
 				unix := t.Unix()
 				res.UniqueT[unix] = t
-				res.SeriesMap[unix] = float32(
-					math.Round(float64(v.GetP50ValueFraction()*capacity)*100) / 100,
-				)
+				res.SeriesMap[unix] = v.GetP50ValueFraction()
 
 				if stats := v.GetOtherStatisticsFractions(); stats != nil {
 					if p10, ok := stats["p10"]; ok {
 						if p90, ok := stats["p90"]; ok {
-							res.BandLowerMap[unix] = float32(
-								math.Round(float64(p10*capacity)*100) / 100,
-							)
-							res.BandUpperMap[unix] = float32(
-								math.Round(float64(p90*capacity)*100) / 100,
-							)
+							res.BandLowerMap[unix] = p10
+							res.BandUpperMap[unix] = p90
 						}
 					}
 				}
@@ -206,7 +199,6 @@ func fetchObserverData(
 	ctx context.Context,
 	client pb.DataPlatformDataServiceClient,
 	p *forecastParams,
-	capacity float32,
 ) []ForecasterResult {
 	results := make([]ForecasterResult, len(p.Observers))
 	g, gCtx := errgroup.WithContext(ctx)
@@ -240,9 +232,7 @@ func fetchObserverData(
 				t := v.GetTimestampUtc().AsTime()
 				unix := t.Unix()
 				res.UniqueT[unix] = t
-				res.SeriesMap[unix] = float32(
-					math.Round(float64(v.GetValueFraction()*capacity)*100) / 100,
-				)
+				res.SeriesMap[unix] = v.GetValueFraction()
 			}
 
 			results[i] = res
@@ -261,6 +251,7 @@ func buildChartSeries(
 	obsResults []ForecasterResult,
 	forecasters []ForecasterInput,
 	observers []ObserverInput,
+	capacity float32,
 ) ([]SeriesData, []string, []int64, float32) {
 	var allSeries []SeriesData
 	uniqueTimes := make(map[int64]time.Time)
@@ -320,7 +311,7 @@ func buildChartSeries(
 
 		for _, k := range timeKeys {
 			if val, ok := forecasterResults[f.Raw][k]; ok {
-				v := val
+				v := float32(math.Round(float64(val*capacity)*100) / 100)
 				sd.Data = append(sd.Data, &v)
 			} else {
 				sd.Data = append(sd.Data, nil)
@@ -331,7 +322,7 @@ func buildChartSeries(
 				hasLow, hasUp := false, false
 
 				if val, ok := forecasterBandsLower[f.Raw][k]; ok {
-					bLow = val
+					bLow = float32(math.Round(float64(val*capacity)*100) / 100)
 					hasLow = true
 
 					sd.BandLower = append(sd.BandLower, &bLow)
@@ -340,7 +331,7 @@ func buildChartSeries(
 				}
 
 				if val, ok := forecasterBandsUpper[f.Raw][k]; ok {
-					bUp = val
+					bUp = float32(math.Round(float64(val*capacity)*100) / 100)
 					hasUp = true
 				}
 
@@ -360,7 +351,7 @@ func buildChartSeries(
 		sd := SeriesData{Name: o.Name + " [Obs]", IsObservation: true}
 		for _, k := range timeKeys {
 			if val, ok := forecasterResults[o.Raw][k]; ok {
-				v := val
+				v := float32(math.Round(float64(val*capacity)*100) / 100)
 				sd.Data = append(sd.Data, &v)
 			} else {
 				sd.Data = append(sd.Data, nil)
@@ -388,67 +379,89 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	locReq := &pb.GetLocationRequest{
-		LocationUuid: p.LocUUID,
-		EnergySource: pb.EnergySource(p.EnergySource),
-	}
-
-	locResp, err := ui.grpcClient.GetLocation(ctx, locReq)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to get location for map")
-		http.Error(
-			w,
-			fmt.Sprintf("Failed to get location: %v", err),
-			http.StatusInternalServerError,
-		)
-
-		return
-	}
-
-	capacity := float32(locResp.GetEffectiveCapacityWatts())
-
-	results := fetchForecasterData(ctx, ui.grpcClient, p, capacity)
-	obsResults := fetchObserverData(ctx, ui.grpcClient, p, capacity)
-
 	var (
+		locResp    *pb.GetLocationResponse
+		locErr     error
+		results    []ForecasterResult
+		obsResults []ForecasterResult
+
 		geoJSONStr       template.JS = "null"
 		isInteractiveMap bool
 	)
 
+	g, gCtx := errgroup.WithContext(ctx)
+
+	// Fetch Location
+	g.Go(func() error {
+		locReq := &pb.GetLocationRequest{
+			LocationUuid: p.LocUUID,
+			EnergySource: pb.EnergySource(p.EnergySource),
+		}
+		locResp, locErr = ui.grpcClient.GetLocation(gCtx, locReq)
+		if locErr != nil {
+			log.Error().Err(locErr).Msg("Failed to get location")
+			return fmt.Errorf("failed to get location: %w", locErr)
+		}
+		return nil
+	})
+
+	// Fetch Forecasters
+	g.Go(func() error {
+		results = fetchForecasterData(gCtx, ui.grpcClient, p)
+		return nil
+	})
+
+	// Fetch Observers
+	g.Go(func() error {
+		obsResults = fetchObserverData(gCtx, ui.grpcClient, p)
+		return nil
+	})
+
+	// Fetch Map GeoJSON concurrently if not skipped
 	if !p.SkipMap {
-		locTypeGSP := pb.LocationType_LOCATION_TYPE_GSP
-		gspResp, err := ui.grpcClient.ListLocations(ctx, &pb.ListLocationsRequest{
-			EnclosingLocationUuidFilter: &p.LocUUID,
-			LocationTypeFilter:          &locTypeGSP,
-		})
+		g.Go(func() error {
+			locTypeGSP := pb.LocationType_LOCATION_TYPE_GSP
+			gspResp, err := ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{
+				EnclosingLocationUuidFilter: &p.LocUUID,
+				LocationTypeFilter:          &locTypeGSP,
+			})
 
-		var fetchUUIDs []string
-		if err == nil && len(gspResp.GetLocations()) > 0 {
-			isInteractiveMap = true
-
-			for _, l := range gspResp.GetLocations() {
-				fetchUUIDs = append(fetchUUIDs, l.GetLocationUuid())
+			var fetchUUIDs []string
+			if err == nil && len(gspResp.GetLocations()) > 0 {
+				isInteractiveMap = true
+				for _, l := range gspResp.GetLocations() {
+					fetchUUIDs = append(fetchUUIDs, l.GetLocationUuid())
+				}
+			} else {
+				fetchUUIDs = []string{p.LocUUID}
 			}
-		} else {
-			fetchUUIDs = []string{p.LocUUID}
-		}
 
-		geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(ctx, &pb.GetLocationsAsGeoJSONRequest{
-			LocationUuids: fetchUUIDs,
-			Unsimplified:  false,
+			geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(gCtx, &pb.GetLocationsAsGeoJSONRequest{
+				LocationUuids: fetchUUIDs,
+				Unsimplified:  false,
+			})
+			if err == nil && geoResp != nil && geoResp.GetGeojson() != "" {
+				geoJSONStr = template.JS(geoResp.GetGeojson())
+			} else if err != nil {
+				log.Warn().Err(err).Msg("Failed to get GeoJSON for map")
+			}
+			return nil
 		})
-		if err == nil && geoResp != nil && geoResp.GetGeojson() != "" {
-			geoJSONStr = template.JS(geoResp.GetGeojson())
-		} else if err != nil {
-			log.Warn().Err(err).Msg("Failed to get GeoJSON for map")
-		}
 	}
+
+	if err := g.Wait(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	capacity := float32(locResp.GetEffectiveCapacityWatts())
 
 	allSeries, labels, timeKeys, avgFraction := buildChartSeries(
 		results,
 		obsResults,
 		p.Forecasters,
 		p.Observers,
+		capacity,
 	)
 
 	firstForecaster := ""
