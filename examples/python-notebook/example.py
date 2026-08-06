@@ -7,7 +7,7 @@
 #     "xarray==2025.7.1",
 # ]
 # [tool.uv.sources]
-# dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.30.0/dp_sdk-0.30.0-py3-none-any.whl" }
+# dp-sdk = { url = "https://github.com/openclimatefix/data-platform/releases/download/v0.34.0/dp_sdk-0.34.0-py3-none-any.whl" }
 # ///
 """Example script for pulling data from the data platform.
 
@@ -121,7 +121,7 @@ async def main() -> None:
             location_uuids=[uk_location.location_uuid],
             energy_source=common_pb2.EnergySource.ENERGY_SOURCE_SOLAR,
             forecasters=[f for f in lfresp.forecasters if "blend" in f.forecaster_name][:2],
-            time_window=messages_pb2.StreamForecastDataRequest.TimeWindow(
+            time_window=messages_pb2.TimeWindow(
                 start_timestamp_utc=time_window.start_timestamp_utc,
                 end_timestamp_utc=time_window.end_timestamp_utc,
             ),
@@ -146,6 +146,9 @@ async def main() -> None:
         print(":: That's it!")
         print("   Remeber: When using protobuf's `MessageToDict()` function,") 
         print("    ALWAYS set `always_print_fields_with_no_presence=True`")
+
+        print("\n:: For reference, here are all the functions available on the DataPlatformDataServiceStub:")
+        print("\n".join([f"\t{m}" for m in dir(dpc) if not m.startswith("_")]))
 
 
     finally:

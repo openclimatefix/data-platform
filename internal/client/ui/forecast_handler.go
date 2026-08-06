@@ -19,13 +19,21 @@ import (
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
+type BandLayer struct {
+	Level     int        `json:"level"`
+	LowerName string     `json:"lowerName"`
+	UpperName string     `json:"upperName"`
+	Lower     []*float32 `json:"lower"`
+	Diff      []*float32 `json:"diff"`
+}
+
 type SeriesData struct {
-	Name          string     `json:"name"`
-	Data          []*float32 `json:"data"`
-	HasBands      bool       `json:"hasBands"`
-	BandLower     []*float32 `json:"bandLower"`
-	BandDiff      []*float32 `json:"bandDiff"`
-	IsObservation bool       `json:"isObservation"`
+	Name          string                `json:"name"`
+	Data          []*float32            `json:"data"`
+	HasBands      bool                  `json:"hasBands"`
+	Bands         []BandLayer           `json:"bands"`
+	BandMap       []map[string]*float32 `json:"bandMap"`
+	IsObservation bool                  `json:"isObservation"`
 }
 
 type forecastParams struct {
@@ -55,13 +63,12 @@ type ObserverInput struct {
 }
 
 type ForecasterResult struct {
-	Raw          string
-	SeriesMap    map[int64]float32
-	BandLowerMap map[int64]float32
-	BandUpperMap map[int64]float32
-	UniqueT      map[int64]time.Time
-	FractionSum  float32
-	Count        int
+	Raw         string
+	SeriesMap   map[int64]float32
+	StatsMap    map[int64]map[string]float32
+	UniqueT     map[int64]time.Time
+	FractionSum float32
+	Count       int
 }
 
 func parseForecastRequest(r *http.Request) (*forecastParams, error) {
@@ -158,11 +165,10 @@ func fetchForecasterData(
 			}
 
 			res := ForecasterResult{
-				Raw:          f.Raw,
-				SeriesMap:    make(map[int64]float32),
-				BandLowerMap: make(map[int64]float32),
-				BandUpperMap: make(map[int64]float32),
-				UniqueT:      make(map[int64]time.Time),
+				Raw:       f.Raw,
+				SeriesMap: make(map[int64]float32),
+				StatsMap:  make(map[int64]map[string]float32),
+				UniqueT:   make(map[int64]time.Time),
 			}
 
 			for _, v := range resp.GetValues() {
@@ -172,10 +178,10 @@ func fetchForecasterData(
 				res.SeriesMap[unix] = v.GetP50ValueFraction()
 
 				if stats := v.GetOtherStatisticsFractions(); stats != nil {
-					if p10, ok := stats["p10"]; ok {
-						if p90, ok := stats["p90"]; ok {
-							res.BandLowerMap[unix] = p10
-							res.BandUpperMap[unix] = p90
+					res.StatsMap[unix] = make(map[string]float32)
+					for k, val := range stats {
+						if strings.HasPrefix(k, "p") {
+							res.StatsMap[unix][k] = val
 						}
 					}
 				}
@@ -256,8 +262,7 @@ func buildChartSeries(
 	var allSeries []SeriesData
 	uniqueTimes := make(map[int64]time.Time)
 	forecasterResults := make(map[string]map[int64]float32)
-	forecasterBandsLower := make(map[string]map[int64]float32)
-	forecasterBandsUpper := make(map[string]map[int64]float32)
+	forecasterStats := make(map[string]map[int64]map[string]float32)
 
 	var (
 		totalFraction float32
@@ -270,9 +275,8 @@ func buildChartSeries(
 		}
 
 		forecasterResults[res.Raw] = res.SeriesMap
-		forecasterBandsLower[res.Raw] = res.BandLowerMap
+		forecasterStats[res.Raw] = res.StatsMap
 
-		forecasterBandsUpper[res.Raw] = res.BandUpperMap
 		for unix, t := range res.UniqueT {
 			uniqueTimes[unix] = t
 		}
@@ -305,11 +309,65 @@ func buildChartSeries(
 	}
 
 	for _, f := range forecasters {
-		sd := SeriesData{Name: fmt.Sprintf("%s (v%s)", f.Name, f.Version)}
-		hasBands := len(forecasterBandsLower[f.Raw]) > 0
-		sd.HasBands = hasBands
+		sd := SeriesData{
+			Name:    fmt.Sprintf("%s (v%s)", f.Name, f.Version),
+			BandMap: make([]map[string]*float32, len(timeKeys)),
+		}
 
+		// Discover all complimentary p-levels (e.g. p10 + p90 = 100)
+		pPairs := make(map[string]struct{})
 		for _, k := range timeKeys {
+			if stats, ok := forecasterStats[f.Raw][k]; ok {
+				for pKey := range stats {
+					if len(pKey) > 1 {
+						pVal, err := strconv.Atoi(pKey[1:])
+						if err == nil && pVal < 50 {
+							complement := fmt.Sprintf("p%d", 100-pVal)
+							if _, hasComplement := stats[complement]; hasComplement {
+								pPairs[fmt.Sprintf("%d", pVal)] = struct{}{}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		type PLevelPair struct {
+			Level     int
+			LowerName string
+			UpperName string
+		}
+
+		var activePairs []PLevelPair
+		for k := range pPairs {
+			pVal, _ := strconv.Atoi(k)
+			activePairs = append(activePairs, PLevelPair{
+				Level:     100 - (pVal * 2), // e.g. p10+p90 = 80 level
+				LowerName: fmt.Sprintf("p%d", pVal),
+				UpperName: fmt.Sprintf("p%d", 100-pVal),
+			})
+		}
+
+		slices.SortFunc(activePairs, func(a, b PLevelPair) int {
+			return b.Level - a.Level // Widest first
+		})
+
+		if len(activePairs) > 0 {
+			sd.HasBands = true
+			for _, pair := range activePairs {
+				sd.Bands = append(sd.Bands, BandLayer{
+					Level:     pair.Level,
+					LowerName: pair.LowerName,
+					UpperName: pair.UpperName,
+					Lower:     make([]*float32, len(timeKeys)),
+					Diff:      make([]*float32, len(timeKeys)),
+				})
+			}
+		}
+
+		for idx, k := range timeKeys {
+			sd.BandMap[idx] = make(map[string]*float32)
+
 			if val, ok := forecasterResults[f.Raw][k]; ok {
 				v := float32(math.Round(float64(val*capacity)*100) / 100)
 				sd.Data = append(sd.Data, &v)
@@ -317,29 +375,29 @@ func buildChartSeries(
 				sd.Data = append(sd.Data, nil)
 			}
 
-			if hasBands {
-				var bLow, bUp float32
-				hasLow, hasUp := false, false
-
-				if val, ok := forecasterBandsLower[f.Raw][k]; ok {
-					bLow = float32(math.Round(float64(val*capacity)*100) / 100)
-					hasLow = true
-
-					sd.BandLower = append(sd.BandLower, &bLow)
-				} else {
-					sd.BandLower = append(sd.BandLower, nil)
+			if stats, ok := forecasterStats[f.Raw][k]; ok {
+				for sKey, sVal := range stats {
+					v := float32(math.Round(float64(sVal*capacity)*100) / 100)
+					sd.BandMap[idx][sKey] = &v
 				}
 
-				if val, ok := forecasterBandsUpper[f.Raw][k]; ok {
-					bUp = float32(math.Round(float64(val*capacity)*100) / 100)
-					hasUp = true
-				}
-
-				if hasLow && hasUp {
-					diff := float32(math.Round(float64(bUp-bLow)*100) / 100)
-					sd.BandDiff = append(sd.BandDiff, &diff)
-				} else {
-					sd.BandDiff = append(sd.BandDiff, nil)
+				if sd.HasBands {
+					for bIdx, pair := range activePairs {
+						if bLow, hasLow := sd.BandMap[idx][pair.LowerName]; hasLow {
+							if bUp, hasUp := sd.BandMap[idx][pair.UpperName]; hasUp {
+								
+								// Echarts Stack logic:
+								// When stacking lines, the new 'Lower' line starts from 0 (if it is the first in the stack)
+								// or it starts from the previous layer's 'Upper' line if stacked. 
+								// But since we want concentric overlapping areas, we DO NOT stack them against each other!
+								// By explicitly not linking their stacks together (stack: "band_i_bIndex"), they render independently.
+								
+								sd.Bands[bIdx].Lower[idx] = bLow
+								diff := float32(math.Round(float64(*bUp-*bLow)*100) / 100)
+								sd.Bands[bIdx].Diff[idx] = &diff
+							}
+						}
+					}
 				}
 			}
 		}

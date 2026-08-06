@@ -1,12 +1,12 @@
 <form id="query-form" hx-get="/components/forecast" hx-target="#chart-panel" hx-indicator="#loading" class="m-0">
     <div class="panel-header mb-md">
         <strong>Query Configuration</strong>
-        {{ if .DashboardMode }}
+        {{ if .DashboardCountry }}
         <a href="javascript:void(0)" onclick="document.getElementById('config-body').style.display = document.getElementById('config-body').style.display === 'none' ? 'block' : 'none'" class="text-small" style="color: var(--nc-ac-1); text-decoration: none;">[Expand/Collapse]</a>
         {{ end }}
     </div>
 
-    <div id="config-body" {{ if .DashboardMode }}style="display: none;"{{ end }}>
+    <div id="config-body" {{ if .DashboardCountry }}style="display: none;"{{ end }}>
         <div class="form-grid">
         <div class="form-group">
             <label for="location_search">Location</label>
@@ -179,7 +179,7 @@
                 }
             });
 
-            {{ if .DashboardMode }}
+            {{ if .DashboardCountry }}
             setTimeout(function() {
                 var locSearchInput = document.getElementById('location_search');
                 var locUuidInput = document.getElementById('location_uuid');

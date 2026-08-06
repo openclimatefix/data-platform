@@ -2,14 +2,14 @@
 
 {{ define "selectors" }}
 <div class="panel" id="selectors-panel" hx-get="/components/selectors?mode={{ .Country }}" hx-trigger="load">
-    <p style="color: var(--nc-text-2);"><i>Loading dashboard configuration...</i></p>
+    <p style="color: var(--nc-text-2);"><i>Loading forecast configuration...</i></p>
 </div>
 {{ end }}
 
 {{ define "chart" }}
 <div class="panel" id="chart-panel">
     <div class="panel-header">
-        <strong style="text-transform: capitalize;">{{ .Country }} View</strong>
+        <strong style="text-transform: capitalize;">Forecast View</strong>
         <small>Loading timeseries data...</small>
     </div>
     <div class="empty-state" style="min-height: 320px;">

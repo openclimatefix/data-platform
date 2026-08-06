@@ -31,9 +31,8 @@
                     
                     var dataObjects = s.data.map(function(val, idx) {
                         var obj = { value: val };
-                        if (s.hasBands && s.bandLower && s.bandDiff && s.bandLower[idx] !== null && s.bandDiff[idx] !== null) {
-                            obj.p10 = s.bandLower[idx];
-                            obj.p90 = s.bandLower[idx] + s.bandDiff[idx];
+                        if (s.hasBands && s.bandMap && s.bandMap[idx]) {
+                            obj.bandMap = s.bandMap[idx];
                         }
                         return obj;
                     });
@@ -54,27 +53,34 @@
                     }
                     seriesData.push(item);
 
-                    if (s.hasBands) {
-                        seriesData.push({
-                            id: s.name + "_Band_Lower",
-                            name: s.name,
-                            type: 'line',
-                            data: s.bandLower,
-                            lineStyle: { opacity: 0 },
-                            stack: "band_" + i,
-                            showSymbol: false,
-                            tooltip: { show: false }
-                        });
-                        seriesData.push({
-                            id: s.name + "_Band",
-                            name: s.name,
-                            type: 'line',
-                            data: s.bandDiff,
-                            lineStyle: { opacity: 0 },
-                            areaStyle: { color: color, opacity: 0.2 },
-                            stack: "band_" + i,
-                            showSymbol: false,
-                            tooltip: { show: false }
+                    if (s.hasBands && s.bands) {
+                        var baseOpacity = 0.15;
+                        s.bands.forEach(function(band, bIndex) {
+                            var opacity = baseOpacity + (bIndex * 0.1); 
+                            
+                            seriesData.push({
+                                id: s.name + "_Band_" + band.lowerName,
+                                name: s.name,
+                                type: 'line',
+                                data: band.lower,
+                                lineStyle: { opacity: 0 },
+                                stack: "band_" + i + "_" + bIndex,
+                                showSymbol: false,
+                                tooltip: { show: false }
+                            });
+                            
+                            seriesData.push({
+                                id: s.name + "_Band_" + band.upperName,
+                                name: s.name,
+                                type: 'line',
+                                data: band.diff,
+                                lineStyle: { opacity: 0 },
+                                areaStyle: { color: color, opacity: opacity },
+                                stack: "band_" + i + "_" + bIndex,
+                                showSymbol: false,
+                                tooltip: { show: false },
+                                z: 0 - bIndex // Ensure wider bands are drawn underneath narrower bands
+                            });
                         });
                     }
                 });
@@ -141,14 +147,30 @@
                                 var name = param.seriesName;
                                 
                                 var extraStr = '';
-                                if (param.data && param.data.p10 !== undefined && param.data.p90 !== undefined) {
-                                    var p10Str = window.formatEnergyValue(param.data.p10);
-                                    var p90Str = window.formatEnergyValue(param.data.p90);
-                                    var p90Unit = p90Str.replace(/[\d\.\s]/g, '');
-                                    if (p90Unit && p10Str.endsWith(p90Unit)) {
-                                        p10Str = p10Str.replace(' ' + p90Unit, '');
+                                if (param.data && param.data.bandMap) {
+                                    var bm = param.data.bandMap;
+                                    
+                                    var levels = [];
+                                    var vals = [];
+                                    
+                                    Object.keys(bm).sort(function(a, b) {
+                                        return parseInt(a.substring(1)) - parseInt(b.substring(1));
+                                    }).forEach(function(k) {
+                                        levels.push(k.substring(1)); // strip the 'p'
+                                        var vStr = window.formatEnergyValue(bm[k]);
+                                        vals.push(vStr);
+                                    });
+                                    
+                                    if (levels.length > 0) {
+                                        var pUnit = vals[vals.length-1].replace(/[\d\.\s]/g, '');
+                                        var cleanVals = vals.map((v, idx) => {
+                                            if (idx < vals.length - 1 && pUnit && v.endsWith(pUnit)) {
+                                                return v.replace(' ' + pUnit, '');
+                                            }
+                                            return v;
+                                        });
+                                        extraStr = ' (P' + levels.join('/') + ': ' + cleanVals.join('/') + ')';
                                     }
-                                    extraStr = ' (P10/90: ' + p10Str + '/' + p90Str + ')';
                                 }
                                 
                                 tooltipStr += '<div style="margin-top: 6px;">';

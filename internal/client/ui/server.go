@@ -160,7 +160,6 @@ func (ui *UIClient) Start(port string) error {
 	mux.HandleFunc("/components/selectors", ui.handleSelectors)
 	mux.HandleFunc("/components/forecast", ui.handleForecast)
 
-	mux.HandleFunc("/dashboard/", ui.handleDashboardCountry)
 	mux.HandleFunc("/api/dashboard/map-snapshot", ui.handleDashboardMapSnapshot)
 
 	return http.ListenAndServe(port, withTraceID(withGzip(mux)))
@@ -172,29 +171,15 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := tpl.ExecuteTemplate(w, "analysis.html", nil)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to execute analysis template")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func (ui *UIClient) handleDashboardCountry(w http.ResponseWriter, r *http.Request) {
-	country := strings.TrimPrefix(r.URL.Path, "/dashboard/")
-	if country == "" {
-		http.Redirect(w, r, "/dashboard/uk", http.StatusFound)
-		return
-	}
-
 	data := struct {
 		Country string
 	}{
-		Country: country,
+		Country: "uk",
 	}
 
-	err := tpl.ExecuteTemplate(w, "dashboard.html", data)
+	err := tpl.ExecuteTemplate(w, "forecasts.html", data)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to execute dashboard template")
+		log.Error().Err(err).Msg("Failed to execute forecasts template")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -257,11 +242,8 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dashboardMode := false
-
 	var dashboardCountry, defaultLocationUUID string
 	if mode != "" {
-		dashboardMode = true
 		dashboardCountry = mode
 		// find location uuid for country
 		for _, loc := range locResp.GetLocations() {
@@ -277,7 +259,6 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		Forecasters         []*pb.Forecaster
 		Observers           []*pb.ListObserversResponse_ObserverSummary
 		DefaultTimeWindow   string
-		DashboardMode       bool
 		DashboardCountry    string
 		DefaultLocationUUID string
 	}{
@@ -288,7 +269,6 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 			time.Now().UTC().Add(-48*time.Hour).Format("2006-01-02 15:04"),
 			time.Now().UTC().Add(36*time.Hour).Format("2006-01-02 15:04"),
 		),
-		DashboardMode:       dashboardMode,
 		DashboardCountry:    dashboardCountry,
 		DefaultLocationUUID: defaultLocationUUID,
 	}
