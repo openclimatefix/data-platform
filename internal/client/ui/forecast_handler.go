@@ -39,7 +39,6 @@ type SeriesData struct {
 type forecastParams struct {
 	LocUUID      string
 	EnergySource int
-	HorizonMins  int
 	StartTs      time.Time
 	EndTs        time.Time
 	Forecasters  []ForecasterInput
@@ -47,7 +46,6 @@ type forecastParams struct {
 	SkipMap      bool
 
 	RawEnergySource string
-	RawHorizonMins  string
 	RawTimeWindow   string
 }
 
@@ -55,6 +53,7 @@ type ForecasterInput struct {
 	Raw     string
 	Name    string
 	Version string
+	HorizonMins  int
 }
 
 type ObserverInput struct {
@@ -75,7 +74,6 @@ func parseForecastRequest(r *http.Request) (*forecastParams, error) {
 	params := &forecastParams{
 		LocUUID:         r.URL.Query().Get("location_uuid"),
 		RawEnergySource: r.URL.Query().Get("energy_source"),
-		RawHorizonMins:  r.URL.Query().Get("horizon_mins"),
 		RawTimeWindow:   r.URL.Query().Get("time_window"),
 		SkipMap:         r.URL.Query().Get("skip_map") == "true",
 	}
@@ -84,17 +82,13 @@ func parseForecastRequest(r *http.Request) (*forecastParams, error) {
 	observersRaw := r.URL.Query()["observer"]
 
 	if params.LocUUID == "" || (len(forecastersRaw) == 0 && len(observersRaw) == 0) ||
-		params.RawEnergySource == "" || params.RawHorizonMins == "" || params.RawTimeWindow == "" {
+		params.RawEnergySource == "" || params.RawTimeWindow == "" {
 		return nil, errors.New("missing required query parameters")
 	}
 
 	var err error
 	if params.EnergySource, err = strconv.Atoi(params.RawEnergySource); err != nil {
 		return nil, errors.New("invalid energy_source format")
-	}
-
-	if params.HorizonMins, err = strconv.Atoi(params.RawHorizonMins); err != nil {
-		return nil, errors.New("invalid horizon_mins format")
 	}
 
 	parts := strings.Split(params.RawTimeWindow, " to ")
@@ -120,11 +114,23 @@ func parseForecastRequest(r *http.Request) (*forecastParams, error) {
 
 	for _, fRaw := range forecastersRaw {
 		parts := strings.Split(fRaw, "|")
-		if len(parts) == 2 {
+		if len(parts) == 3 {
+			horizonMins, err := strconv.Atoi(parts[2])
+			if err == nil {
+				params.Forecasters = append(params.Forecasters, ForecasterInput{
+					Raw:         fRaw,
+					Name:        parts[0],
+					Version:     parts[1],
+					HorizonMins: horizonMins,
+				})
+			}
+		} else if len(parts) == 2 {
+			// Fallback for legacy format with default 0 horizon
 			params.Forecasters = append(params.Forecasters, ForecasterInput{
-				Raw:     fRaw,
-				Name:    parts[0],
-				Version: parts[1],
+				Raw:         fRaw,
+				Name:        parts[0],
+				Version:     parts[1],
+				HorizonMins: 0,
 			})
 		}
 	}
@@ -150,7 +156,7 @@ func fetchForecasterData(
 			req := &pb.GetForecastAsTimeseriesRequest{
 				LocationUuid: p.LocUUID,
 				EnergySource: pb.EnergySource(p.EnergySource),
-				HorizonMins:  uint32(p.HorizonMins),
+				HorizonMins:  uint32(f.HorizonMins),
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(p.StartTs),
 					EndTimestampUtc:   timestamppb.New(p.EndTs),
@@ -310,7 +316,7 @@ func buildChartSeries(
 
 	for _, f := range forecasters {
 		sd := SeriesData{
-			Name:    fmt.Sprintf("%s (v%s)", f.Name, f.Version),
+			Name:    fmt.Sprintf("%s (v%s) @ %dm", f.Name, f.Version, f.HorizonMins),
 			BandMap: make([]map[string]*float32, len(timeKeys)),
 		}
 
@@ -540,7 +546,6 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		EnergySource     string
 		FirstForecaster  string
 		TimeWindow       string
-		HorizonMins      string
 	}{
 		Location:         locResp,
 		GeoJSON:          geoJSONStr,
@@ -555,7 +560,6 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		EnergySource:    p.RawEnergySource,
 		FirstForecaster: firstForecaster,
 		TimeWindow:      p.RawTimeWindow,
-		HorizonMins:     p.RawHorizonMins,
 	}
 
 	if err := tpl.ExecuteTemplate(w, "forecast_results.html", data); err != nil {

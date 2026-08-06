@@ -468,8 +468,7 @@
 
                         var url = '/components/forecast?location_uuid=' + targetUuid + 
                                   '&skip_map=true&energy_source={{ .EnergySource }}' + 
-                                  '&time_window=' + encodeURIComponent("{{ .TimeWindow }}") + 
-                                  '&horizon_mins={{ .HorizonMins }}';
+                                  '&time_window=' + encodeURIComponent("{{ .TimeWindow }}");
                                   
                         var qf = document.getElementById('query-form');
                         if (qf) {
