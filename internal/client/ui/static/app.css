@@ -16,18 +16,40 @@
     --chart-slider-fill: rgba(28, 28, 30, 0.1);
 
     --radius-sm: 8px;
-    --radius-md: 16px;
+    --radius-md: 12px;
     --spacing-sm: 8px;
-    --spacing-md: 24px;
+    --spacing-md: 16px;
 }
 
+/* Modern CSS Reset */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+* {
+    margin: 0;
+    padding: 0;
+}
 body {
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
     background-color: var(--nc-bg-1);
+    color: var(--nc-text-1);
     font-family: system-ui, -apple-system, sans-serif;
-    margin: 0; padding: 0;
-    max-width: 100vw; height: 100vh;
+    max-width: 100vw;
+    height: 100vh;
     overflow: hidden;
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
+}
+input, button, textarea, select {
+    font: inherit;
+}
+a {
+    color: var(--nc-ac-1);
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
 }
 
 /* Site header (nav bar). Scoped to a direct child of body so it doesn't clash with the
@@ -38,17 +60,16 @@ body > header {
     border-bottom: 1px solid rgba(0,0,0,0.04);
     display: flex; gap: var(--spacing-md); align-items: center;
     margin: 0 0 var(--spacing-md) 0;
-    box-sizing: border-box; min-height: 48px;
+    min-height: 48px;
 }
-body > header h1 { margin: 0; padding: 0; font-size: 1.2rem; color: var(--nc-text-1); line-height: 1.2; }
+body > header h1 { font-size: 1.2rem; color: var(--nc-text-1); line-height: 1.2; font-weight: bold; }
 body > header nav { display: flex; gap: 16px; }
-body > header a { color: var(--nc-text-1); text-decoration: none; font-weight: 600; line-height: 1.2; margin: 0; padding: 0; }
+body > header a { color: var(--nc-text-1); font-weight: 600; line-height: 1.2; }
 
 main {
     flex-grow: 1;
     min-height: 0;
-    box-sizing: border-box;
-    padding: 0 32px 32px 32px;
+    padding: 0 var(--spacing-md) var(--spacing-md) var(--spacing-md);
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
@@ -83,12 +104,29 @@ section, aside {
 
 :is(section, aside, form) > header,
 details > summary {
-    margin: 0 0 1.5rem 0; padding: 0; border: 0; background: none; box-shadow: none;
+    margin: 0 0 1.5rem 0;
     display: flex; align-items: baseline; gap: 12px;
     cursor: pointer;
+    list-style: none;
+    font-weight: normal;
 }
+details > summary::-webkit-details-marker {
+    display: none;
+}
+details > summary::before {
+    content: "▶";
+    font-size: 0.9rem;
+    color: var(--nc-text-2);
+    display: inline-block;
+    transition: transform 0.2s ease;
+    align-self: center;
+}
+details[open] > summary::before {
+    transform: rotate(90deg);
+}
+
 :is(section, aside, form) > header strong,
-details > summary strong { font-size: 1.2rem; color: var(--nc-text-1); }
+details > summary strong { font-size: 1.2rem; color: var(--nc-text-1); font-weight: bold; }
 :is(section, aside, form) > header small,
 details > summary small { color: var(--nc-text-2); font-size: 0.85rem; }
 
@@ -101,7 +139,6 @@ details:not([open]) > summary {
 
 form > footer {
     margin-top: 16px;
-    padding: 0; border: 0; background: none;
     display: flex; align-items: center; gap: 1rem;
 }
 
@@ -135,7 +172,6 @@ figure { margin: 0; flex: 1; display: flex; flex-direction: column; min-height: 
     flex: 1;
     min-height: 0;
     width: 100%;
-    box-sizing: border-box;
 }
 #capacityChart { min-height: 300px; }
 
@@ -182,7 +218,6 @@ input, select {
     color: var(--nc-text-1);
     padding: 10px 12px;
     width: 100%;
-    box-sizing: border-box;
 }
 
 label {
@@ -240,7 +275,6 @@ button[type="button"] {
     max-height: 250px;
     overflow-y: auto;
     padding: 12px;
-    margin: 0;
     border: 1px solid var(--nc-bg-3);
     border-radius: var(--radius-sm);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -251,11 +285,12 @@ button[type="button"] {
     z-index: 50;
 }
 .chips.show { display: flex; }
-.chips fieldset { flex: 1; border: none; padding: 0; margin: 0; }
+.chips fieldset { flex: 1; border: none; }
 .chips legend {
     width: 100%;
     font-size: 0.85rem; color: var(--nc-text-2); margin-bottom: 8px; padding: 0 0 4px 0;
     border-bottom: 1px solid var(--nc-bg-3);
+    font-weight: bold;
 }
 .chips fieldset > div { display: flex; flex-direction: column; gap: var(--spacing-sm); }
 

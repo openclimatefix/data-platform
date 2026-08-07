@@ -18,7 +18,12 @@
             xAxis: {
                 type: 'category',
                 data: config.labels,
-                axisLabel: { color: theme.text },
+                axisLabel: {
+                    color: theme.text,
+                    hideOverlap: true,
+                    showMinLabel: true,
+                    showMaxLabel: true
+                },
                 axisLine: { show: false },
                 axisTick: { show: false }
             },

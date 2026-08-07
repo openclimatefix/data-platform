@@ -279,9 +279,9 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		DefaultForecasterName string
 		DefaultObserverNames  []string
 	}{
-		Locations:   locResp.GetLocations(),
-		Forecasters: fcResp.GetForecasters(),
-		Observers:   obsResp.GetObservers(),
+		Locations:     locResp.GetLocations(),
+		Forecasters:   fcResp.GetForecasters(),
+		Observers:     obsResp.GetObservers(),
 		EnergySources: getEnergySourceOptions(),
 		DefaultTimeWindow: fmt.Sprintf("%s to %s",
 			time.Now().UTC().Add(-48*time.Hour).Format("2006-01-02 15:04"),

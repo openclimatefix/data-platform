@@ -24,7 +24,7 @@ func (ui *UIClient) handleLocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defaultLocUUID := r.URL.Query().Get("location_uuid")
-	
+
 	defaultEnergy := r.URL.Query().Get("energy_source")
 	if defaultEnergy == "" {
 		defaultEnergy = "1"
@@ -99,7 +99,7 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 
 	if err == nil && tsResp != nil && len(tsResp.GetValues()) > 0 {
 		for _, v := range tsResp.GetValues() {
-			historyLabels = append(historyLabels, v.GetTimestampUtc().AsTime().Format(time.RFC3339))
+			historyLabels = append(historyLabels, v.GetTimestampUtc().AsTime().Format("Jan 02 15:04"))
 			historyValues = append(historyValues, float64(v.GetEffectiveCapacityWatts()))
 		}
 	} else {
@@ -108,7 +108,7 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 		}
 		
 		// If history is empty, fallback to current capacity so ECharts doesn't crash on empty arrays
-		historyLabels = []string{time.Now().UTC().AddDate(0, 0, -31).Format(time.RFC3339)}
+		historyLabels = []string{time.Now().UTC().AddDate(0, 0, -31).Format("Jan 02 15:04")}
 		historyValues = []float64{float64(locResp.GetEffectiveCapacityWatts())}
 	}
 
@@ -148,10 +148,10 @@ func (ui *UIClient) handleLocationEdit(w http.ResponseWriter, r *http.Request) {
 	energySourceStr := r.FormValue("energy_source")
 	validFromStr := r.FormValue("valid_from_utc")
 	capacityStr := r.FormValue("capacity")
-	
-	// We do not have geometry update in the proto right now, but we will leave the template 
+
+	// We do not have geometry update in the proto right now, but we will leave the template
 	// for future implementation or for use in another method. For now, we update capacity.
-	
+
 	energySource, _ := strconv.Atoi(energySourceStr)
 
 	validFrom, err := time.Parse("2006-01-02 15:04", validFromStr)
