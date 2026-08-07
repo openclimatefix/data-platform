@@ -1,4 +1,23 @@
-{{ template "layout.html" . }}
+{{ template "header" . }}
+
+<main class="dashboard-grid">
+    <div class="left-column">
+        {{ template "selectors" . }}
+        {{ template "chart" . }}
+    </div>
+
+    <div class="panel right-column" id="map-panel">
+        <div class="panel-header">
+            <strong>Generation Map</strong>
+            <small>Snapshot</small>
+        </div>
+        <div class="map-container empty-state">
+            Loading map...
+        </div>
+    </div>
+</main>
+
+{{ template "footer" . }}
 
 {{ define "selectors" }}
 <div class="panel" id="selectors-panel" hx-get="/components/selectors?mode={{ .Country }}" hx-trigger="load">

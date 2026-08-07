@@ -493,6 +493,7 @@ message GetLocationResponse {
   uint64 effective_capacity_watts = 4;
   google.protobuf.Struct metadata = 5;
   optional bytes geometry_wkb = 6;
+  LocationType location_type = 7;
 }
 
 message GetLocationAsTimeseriesRequest {

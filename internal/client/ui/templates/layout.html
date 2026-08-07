@@ -1,3 +1,4 @@
+{{ define "header" }}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -224,24 +225,12 @@
         <h1>Data Platform UI</h1>
         <nav>
             <a href="/">Forecasts</a>
+            <a href="/locations">Locations</a>
         </nav>
     </header>
-    <main class="dashboard-grid">
-        <div class="left-column">
-            {{ template "selectors" . }}
-            {{ template "chart" . }}
-        </div>
+{{ end }}
 
-        <div class="panel right-column" id="map-panel">
-            <div class="panel-header">
-                <strong>Generation Map</strong>
-                <small>Snapshot</small>
-            </div>
-            <div class="map-container empty-state">
-                Loading map...
-            </div>
-        </div>
-    </main>
+{{ define "footer" }}
     <script>
         document.body.addEventListener('htmx:configRequest', function(evt) {
             var uuid = (typeof crypto !== 'undefined' && crypto.randomUUID) 
@@ -252,3 +241,4 @@
     </script>
 </body>
 </html>
+{{ end }}

@@ -157,9 +157,11 @@ func (ui *UIClient) Start(port string) error {
 
 	mux.Handle("/static/", http.FileServer(http.FS(templateFiles)))
 	mux.HandleFunc("/", ui.handleIndex)
+	mux.HandleFunc("/locations", ui.handleLocations)
 	mux.HandleFunc("/components/selectors", ui.handleSelectors)
 	mux.HandleFunc("/components/forecast", ui.handleForecast)
-
+	mux.HandleFunc("/components/location_details", ui.handleLocationDetails)
+	mux.HandleFunc("/components/location_edit", ui.handleLocationEdit)
 	mux.HandleFunc("/api/dashboard/map-snapshot", ui.handleDashboardMapSnapshot)
 
 	return http.ListenAndServe(port, withTraceID(withGzip(mux)))

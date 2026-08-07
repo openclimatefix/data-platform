@@ -1,0 +1,109 @@
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); min-height: 400px; margin-bottom: var(--spacing-md);">
+    <div class="panel">
+        <div class="panel-header">
+            <strong>Overview</strong>
+            <small>{{ .Location.LocationName }} ({{ .Location.LocationUuid }})</small>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--nc-bg-3); padding-bottom: 8px;">
+                <span style="color: var(--nc-text-2);">Type</span>
+                <strong>{{ .LocationTypeString }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--nc-bg-3); padding-bottom: 8px;">
+                <span style="color: var(--nc-text-2);">Energy Source</span>
+                <strong>{{ .EnergySourceName }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--nc-bg-3); padding-bottom: 8px;">
+                <span style="color: var(--nc-text-2);">Current Capacity</span>
+                <strong>{{ formatCapacity .Location.EffectiveCapacityWatts }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--nc-bg-3); padding-bottom: 8px;">
+                <span style="color: var(--nc-text-2);">Coordinates</span>
+                <strong>{{ if .Location.Latlng }}{{ printf "%.4f" .Location.Latlng.Latitude }}, {{ printf "%.4f" .Location.Latlng.Longitude }}{{ else }}N/A{{ end }}</strong>
+            </div>
+        </div>
+
+        <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--nc-bg-3);">
+            <strong style="display: block; margin-bottom: 12px;">Modify Capacity</strong>
+            <form hx-post="/components/location_edit" hx-swap="none" style="display: flex; gap: 12px; align-items: flex-end;" id="form_edit_capacity">
+                <input type="hidden" name="location_uuid" value="{{ .Location.LocationUuid }}">
+                <input type="hidden" name="energy_source" value="{{ .EnergySource }}">
+                <div style="flex-grow: 1;">
+                    <label for="capacity" style="display: block; font-size: 0.85rem; color: var(--nc-text-2); margin-bottom: 4px;">New Capacity (Watts)</label>
+                    <input type="number" id="capacity" name="capacity" min="0" required placeholder="e.g. 5000000" style="width: 100%;">
+                </div>
+                <div style="flex-grow: 1;">
+                    <label for="valid_from_utc" style="display: block; font-size: 0.85rem; color: var(--nc-text-2); margin-bottom: 4px;">Valid From (UTC)</label>
+                    <input type="text" id="valid_from_utc" name="valid_from_utc" required placeholder="YYYY-MM-DD HH:mm" style="width: 100%;">
+                </div>
+                <button type="submit" class="btn">Update</button>
+            </form>
+            <script>
+                flatpickr("#valid_from_utc", {
+                    enableTime: true,
+                    time_24hr: true,
+                    dateFormat: "Y-m-d H:i",
+                    defaultDate: new Date()
+                });
+            </script>
+        </div>
+    </div>
+    <div class="panel flex-col min-h-0">
+        {{ template "map_component" . }}
+    </div>
+</div>
+
+<div class="panel flex-col flex-grow min-h-0" style="min-height: 400px;">
+    <div class="panel-header">
+        <strong>Capacity History</strong>
+        <small>Step Graph</small>
+    </div>
+    <div id="capacityChart" class="flex-grow min-h-0 w-full" style="min-height: 300px;"></div>
+    <script>
+        (function() {
+            var dom = document.getElementById('capacityChart');
+            if (window.capChartInst) window.capChartInst.dispose();
+            var myChart = echarts.init(dom);
+            window.capChartInst = myChart;
+            
+            var option = {
+                tooltip: { 
+                    trigger: 'axis', 
+                    axisPointer: { type: 'line', lineStyle: { type: 'dashed' } },
+                    formatter: function(params) {
+                        return params[0].axisValue + '<br/><strong>' + window.formatEnergyValue(params[0].value) + '</strong>';
+                    }
+                },
+                xAxis: { 
+                    type: 'category', 
+                    data: {{ .HistoryLabels | toJSON }},
+                    axisLabel: { color: window.getCssVar('--nc-text-2', '#8e8e93') },
+                    axisLine: { show: false },
+                    axisTick: { show: false }
+                },
+                yAxis: { 
+                    type: 'value', 
+                    scale: true,
+                    axisLabel: { 
+                        formatter: window.formatEnergyValue,
+                        color: window.getCssVar('--nc-text-2', '#8e8e93')
+                    },
+                    splitLine: { lineStyle: { type: 'dashed', color: window.getCssVar('--nc-bg-3', '#ebebeb') } }
+                },
+                grid: { left: 60, right: 20, top: 20, bottom: 20, containLabel: false },
+                series: [{
+                    name: 'Capacity',
+                    type: 'line',
+                    step: 'end',
+                    data: {{ .HistoryValues | toJSON }},
+                    itemStyle: { color: window.getCssVar('--chart-color-0', '#7a9374') },
+                    areaStyle: { opacity: 0.1, color: window.getCssVar('--chart-color-0', '#7a9374') },
+                    lineStyle: { width: 3 }
+                }]
+            };
+            myChart.setOption(option);
+            var ro = new ResizeObserver(() => { if (dom.clientWidth > 0 && dom.clientHeight > 0) myChart.resize(); });
+            ro.observe(dom);
+        })();
+    </script>
+</div>

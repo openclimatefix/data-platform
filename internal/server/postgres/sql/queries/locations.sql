@@ -103,6 +103,7 @@ SELECT
     s.source_type_id,
     s.geometry_uuid,
     s.geometry_name,
+    s.geometry_type_id,
     s.sys_period,
     s.longitude,
     s.latitude,

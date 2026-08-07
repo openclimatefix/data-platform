@@ -1,0 +1,278 @@
+{{ define "map_component" }}
+    <div class="panel-header">
+        {{ if .IsInteractiveMap }}
+        <strong>GSP Generation Map</strong>
+        <small id="{{ .MapID }}-time-label">{{ index .Labels 0 }}</small>
+        {{ else }}
+        <strong>Location Map</strong>
+        <small id="{{ .MapID }}-time-label">{{ if .Location.Latlng }}{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }}{{ else }}Geometry{{ end }}</small>
+        {{ end }}
+    </div>
+    <div id="{{ .MapID }}" class="map-container"></div>
+    <script>
+        (function() {
+            var mapDom = document.getElementById('{{ .MapID }}');
+            if (window.mapInstances && window.mapInstances['{{ .MapID }}']) {
+                window.mapInstances['{{ .MapID }}'].dispose();
+            }
+            if (!window.mapInstances) window.mapInstances = {};
+            
+            if (window.mapTimeSelectedListeners && window.mapTimeSelectedListeners['{{ .MapID }}']) {
+                document.removeEventListener('timeSelected', window.mapTimeSelectedListeners['{{ .MapID }}']);
+            }
+            if (!window.mapTimeSelectedListeners) window.mapTimeSelectedListeners = {};
+
+            var myMap = echarts.init(mapDom);
+            window.mapInstances['{{ .MapID }}'] = myMap;
+
+            var geojsonData = {{ .GeoJSON }};
+            var panelBgColor = window.getCssVar('--nc-bg-2', '#ffffff');
+            var mapEmptyColor = window.getCssVar('--nc-bg-3', '#f0f1f3');
+            var mapHoverColor = window.getCssVar('--chart-color-1', '#1095c1');
+            var mapHighlightBorder = window.getCssVar('--nc-text-1', '#1c1c1e');
+            var mapDefaultBorder = window.getCssVar('--nc-text-1', '#1c1c1e');
+            
+            {{ if .IsInteractiveMap }}
+            if (geojsonData && geojsonData.features) {
+                window.uuidToName = {};
+                geojsonData.features.forEach(function(f) {
+                    if (!f.properties) f.properties = {};
+                    var uuid = f.id || f.properties.geometry_uuid || f.properties.uuid;
+                    if (!uuid && f.properties.name) uuid = f.properties.name;
+                    var name = f.properties.geometry_name || f.properties.location_name || uuid || 'Unknown GSP';
+                    if (uuid) {
+                        window.uuidToName[uuid] = name;
+                        f.properties.name = uuid; 
+                    }
+                });
+                echarts.registerMap('gspMap_{{ .MapID }}', geojsonData);
+                
+                var option = {
+                    tooltip: {
+                        trigger: 'item',
+                        showDelay: 0,
+                        transitionDuration: 0.2,
+                        formatter: function(params) {
+                            var title = 'Unknown GSP';
+                            if (params.name && window.uuidToName && window.uuidToName[params.name]) {
+                                title = window.uuidToName[params.name];
+                            } else if (params.name) {
+                                title = params.name;
+                            }
+
+                            if (!params.data) return '<strong>' + title + '</strong><br/>No Data';
+                            var val = params.data.value;
+                            if (isNaN(val) || val === null) return '<strong>' + title + '</strong><br/>No Data';
+                            
+                            var cap = params.data.capacity || 0;
+                            var gen = val * cap;
+                            
+                            return '<strong>' + title + '</strong><br/>' +
+                                   'Generation: <strong>' + window.formatEnergyValue(gen) + '</strong> (' + (val * 100).toFixed(1) + '%)<br/>' +
+                                   'Capacity: <strong>' + window.formatEnergyValue(cap) + '</strong>';
+                        }
+                    },
+                    visualMap: {
+                        left: 'right',
+                        bottom: 'bottom',
+                        min: 0, max: 1.0,
+                        text: ['Max (100%)', 'Min (0%)'],
+                        realtime: true, calculable: true,
+                        inRange: { color: [ mapEmptyColor, '#f2a900' ] },
+                        formatter: function (value) { return (value * 100).toFixed(0) + '%'; }
+                    },
+                    series: [{
+                        id: 'gspSeries',
+                        name: 'GSP Generation',
+                        type: 'map', map: 'gspMap_{{ .MapID }}',
+                        roam: true, layoutCenter: ['50%', '50%'], layoutSize: '100%',
+                        scaleLimit: { min: 1, max: 10 },
+                        selectedMode: 'single',
+                        label: { show: false },
+                        select: { 
+                            label: { show: false },
+                            itemStyle: { borderColor: mapHighlightBorder, borderWidth: 2, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 }
+                        },
+                        itemStyle: { areaColor: mapEmptyColor, borderColor: panelBgColor, borderWidth: 0.5 },
+                        emphasis: {
+                            label: { show: false },
+                            itemStyle: { areaColor: mapHoverColor, borderColor: mapDefaultBorder, borderWidth: 1 }
+                        },
+                        data: []
+                    }]
+                };
+                myMap.setOption(option);
+
+                window.currentSelectedGsp = null;
+                var resetTimeout = null;
+                var isResettingMap = false;
+
+                myMap.on('georoam', function(params) {
+                    if (isResettingMap) return;
+
+                    var opt = myMap.getOption();
+                    if (opt && opt.series && opt.series.length > 0) {
+                        var s = opt.series[0];
+                        if (s.zoom <= 1.001) {
+                            var needsReset = false;
+                            if (s.center) {
+                                needsReset = true;
+                            } else if (params.dx || params.dy) {
+                                needsReset = true;
+                            }
+                            
+                            if (needsReset) {
+                                if (resetTimeout) clearTimeout(resetTimeout);
+                                resetTimeout = setTimeout(function() {
+                                    isResettingMap = true;
+                                    myMap.setOption({
+                                        series: [{
+                                            id: 'gspSeries',
+                                            zoom: 1,
+                                            center: null,
+                                            animationDurationUpdate: 300,
+                                            animationEasingUpdate: 'cubicOut'
+                                        }]
+                                    });
+                                    setTimeout(function() { isResettingMap = false; }, 350);
+                                }, 100);
+                            }
+                        }
+                    }
+                });
+
+                myMap.on('click', function(params) {
+                    if (params.name) {
+                        var clickedUuid = params.name;
+                        var targetUuid = clickedUuid;
+
+                        if (window.currentSelectedGsp === clickedUuid) {
+                            targetUuid = "{{ .Location.LocationUuid }}";
+                            window.currentSelectedGsp = null;
+                        } else {
+                            window.currentSelectedGsp = clickedUuid;
+                        }
+
+                        var url = '/components/forecast?location_uuid=' + targetUuid + 
+                                  '&skip_map=true&energy_source={{ .EnergySource }}' + 
+                                  '&time_window=' + encodeURIComponent("{{ .TimeWindow }}");
+                                  
+                        var qf = document.getElementById('query-form');
+                        if (qf) {
+                            var fd = new FormData(qf);
+                            for (var pair of fd.entries()) {
+                                if (pair[0] === 'forecaster' || pair[0] === 'observer') {
+                                    url += '&' + pair[0] + '=' + encodeURIComponent(pair[1]);
+                                }
+                            }
+                        }
+                        
+                        htmx.ajax('GET', url, '#chart-panel').catch(function(err) { console.error(err); });
+                    }
+                });
+                
+                var updateMapData = function(timestamp) {
+                    if (!timestamp) return;
+                    fetch('/api/dashboard/map-snapshot?timestamp=' + timestamp + '&nation_uuid={{ .Location.LocationUuid }}&energy_source={{ .EnergySource }}&forecaster=' + encodeURIComponent("{{ .FirstForecaster }}"))
+                        .then(r => r.json())
+                        .then(data => {
+                            if (window.mapInstances['{{ .MapID }}']) {
+                                var mOpt = window.mapInstances['{{ .MapID }}'].getOption();
+                                if (mOpt && mOpt.series && mOpt.series.length > 0) {
+                                    mOpt.series[0].data = data;
+                                    window.mapInstances['{{ .MapID }}'].setOption(mOpt);
+                                }
+                            }
+                        }).catch(err => console.error(err));
+                };
+
+                window.mapTimeSelectedListeners['{{ .MapID }}'] = function(e) {
+                    var mapEl = document.getElementById('{{ .MapID }}-time-label');
+                    if (mapEl) mapEl.innerHTML = e.detail.label;
+                    updateMapData(e.detail.timestamp);
+                };
+                document.addEventListener('timeSelected', window.mapTimeSelectedListeners['{{ .MapID }}']);
+
+                {{ if .Timestamps }}
+                var timestamps = {{ .Timestamps | toJSON }};
+                if (timestamps && timestamps.length > 0) {
+                    updateMapData(timestamps[0]);
+                }
+                {{ end }}
+
+            } else {
+                mapDom.innerHTML = '<div class="empty-state">No GSP boundary data found.</div>';
+            }
+            {{ else }}
+            {{ if .Location.Latlng }}
+            var lat = {{ .Location.Latlng.Latitude }};
+            var lng = {{ .Location.Latlng.Longitude }};
+            {{ else }}
+            var lat = 0;
+            var lng = 0;
+            {{ end }}
+            var fillOpacity = {{ if .AvgFraction }}{{ printf "%.2f" .AvgFraction }}{{ else }}1.0{{ end }};
+            if (fillOpacity < 0.15) fillOpacity = 0.15;
+            
+            var option = {};
+            
+            if (geojsonData) {
+                var hasArea = {{ if .IsPolygon }}{{ .IsPolygon }}{{ else }}false{{ end }};
+                
+                var locMapColor = window.getCssVar('--chart-color-0', '#7a9374');
+                if (hasArea) {
+                    echarts.registerMap('locMap_{{ .MapID }}', geojsonData);
+                    option = {
+                        geo: {
+                            map: 'locMap_{{ .MapID }}', roam: false,
+                            itemStyle: { areaColor: locMapColor, opacity: fillOpacity, borderColor: mapDefaultBorder, borderWidth: 2 },
+                            emphasis: { itemStyle: { areaColor: locMapColor, opacity: Math.min(fillOpacity + 0.2, 1) }, label: { show: false } },
+                            layoutCenter: ['50%', '50%'], layoutSize: '80%'
+                        }
+                    };
+                } else {
+                    option = {
+                        xAxis: { type: 'value', show: false, min: lng - 0.1, max: lng + 0.1 },
+                        yAxis: { type: 'value', show: false, min: lat - 0.1, max: lat + 0.1 },
+                        grid: { left: 0, right: 0, top: 0, bottom: 0 },
+                        series: [{
+                            type: 'scatter', symbolSize: 14,
+                            itemStyle: { color: locMapColor, opacity: fillOpacity, borderColor: 'white', borderWidth: 3, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 4, shadowOffsetY: 2 },
+                            data: [[lng, lat]]
+                        }]
+                    };
+                }
+            }
+            myMap.setOption(option);
+
+            window.mapTimeSelectedListeners['{{ .MapID }}'] = function(e) {
+                var mapEl = document.getElementById('{{ .MapID }}-time-label');
+                {{ if .Location.Latlng }}
+                if (mapEl) mapEl.innerHTML = '{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }} | ' + e.detail.label;
+                {{ end }}
+                
+                if (window.mapInstances['{{ .MapID }}']) {
+                    var mapOpt = window.mapInstances['{{ .MapID }}'].getOption();
+                    if (mapOpt.geo && mapOpt.geo.length > 0) {
+                        mapOpt.geo[0].itemStyle.opacity = e.detail.fraction;
+                        mapOpt.geo[0].emphasis.itemStyle.opacity = Math.min(e.detail.fraction + 0.2, 1);
+                        window.mapInstances['{{ .MapID }}'].setOption(mapOpt);
+                    } else if (mapOpt.series && mapOpt.series.length > 0) {
+                        mapOpt.series[0].itemStyle.opacity = e.detail.fraction;
+                        window.mapInstances['{{ .MapID }}'].setOption(mapOpt);
+                    }
+                }
+            };
+            document.addEventListener('timeSelected', window.mapTimeSelectedListeners['{{ .MapID }}']);
+
+            {{ end }}
+
+            var ro = new ResizeObserver(() => { 
+                if (myMap && mapDom.clientWidth > 0 && mapDom.clientHeight > 0) {
+                    myMap.resize(); 
+                }
+            });
+            ro.observe(mapDom);
+        })();
+    </script>
+{{ end }}

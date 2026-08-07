@@ -546,6 +546,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		EnergySource     string
 		FirstForecaster  string
 		TimeWindow       string
+		MapID            string
 	}{
 		Location:         locResp,
 		GeoJSON:          geoJSONStr,
@@ -560,6 +561,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		EnergySource:    p.RawEnergySource,
 		FirstForecaster: firstForecaster,
 		TimeWindow:      p.RawTimeWindow,
+		MapID:           "map",
 	}
 
 	if err := tpl.ExecuteTemplate(w, "forecast_results.html", data); err != nil {

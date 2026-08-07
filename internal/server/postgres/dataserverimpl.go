@@ -917,6 +917,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 	return &pb.GetLocationResponse{
 		LocationUuid: dbSource.GeometryUuid.String(),
 		LocationName: dbSource.GeometryName,
+		LocationType: pb.LocationType(dbSource.GeometryTypeID),
 		Latlng: &pb.LatLng{
 			Latitude:  dbSource.Latitude,
 			Longitude: dbSource.Longitude,
