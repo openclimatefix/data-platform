@@ -59,51 +59,11 @@
         <small>Step Graph</small>
     </div>
     <div id="capacityChart" class="flex-grow min-h-0 w-full" style="min-height: 300px;"></div>
-    <script>
-        (function() {
-            var dom = document.getElementById('capacityChart');
-            if (window.capChartInst) window.capChartInst.dispose();
-            var myChart = echarts.init(dom);
-            window.capChartInst = myChart;
-            
-            var option = {
-                tooltip: { 
-                    trigger: 'axis', 
-                    axisPointer: { type: 'line', lineStyle: { type: 'dashed' } },
-                    formatter: function(params) {
-                        return params[0].axisValue + '<br/><strong>' + window.formatEnergyValue(params[0].value) + '</strong>';
-                    }
-                },
-                xAxis: { 
-                    type: 'category', 
-                    data: {{ .HistoryLabels | toJSON }},
-                    axisLabel: { color: window.getCssVar('--nc-text-2', '#8e8e93') },
-                    axisLine: { show: false },
-                    axisTick: { show: false }
-                },
-                yAxis: { 
-                    type: 'value', 
-                    scale: true,
-                    axisLabel: { 
-                        formatter: window.formatEnergyValue,
-                        color: window.getCssVar('--nc-text-2', '#8e8e93')
-                    },
-                    splitLine: { lineStyle: { type: 'dashed', color: window.getCssVar('--nc-bg-3', '#ebebeb') } }
-                },
-                grid: { left: 60, right: 20, top: 20, bottom: 20, containLabel: false },
-                series: [{
-                    name: 'Capacity',
-                    type: 'line',
-                    step: 'end',
-                    data: {{ .HistoryValues | toJSON }},
-                    itemStyle: { color: window.getCssVar('--chart-color-0', '#7a9374') },
-                    areaStyle: { opacity: 0.1, color: window.getCssVar('--chart-color-0', '#7a9374') },
-                    lineStyle: { width: 3 }
-                }]
-            };
-            myChart.setOption(option);
-            var ro = new ResizeObserver(() => { if (dom.clientWidth > 0 && dom.clientHeight > 0) myChart.resize(); });
-            ro.observe(dom);
-        })();
+    <script type="application/json" id="capacityChartConfig">
+    {
+        "labels": {{ .HistoryLabels | toJSON }},
+        "values": {{ .HistoryValues | toJSON }}
+    }
     </script>
+    <script>window.mountCapacityChart('capacityChart', 'capacityChartConfig');</script>
 </div>

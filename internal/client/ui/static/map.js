@@ -1,0 +1,267 @@
+(function() {
+    function panelColors() {
+        var theme = window.chartTheme();
+        return {
+            panelBg: theme.panelBg,
+            empty: window.getCssVar('--nc-bg-3', '#f0f1f3'),
+            hover: window.getCssVar('--chart-color-1', '#1095c1'),
+            highlightBorder: theme.textPrimary,
+            defaultBorder: theme.textPrimary
+        };
+    }
+
+    window.mountChoroplethMap = function(mapElId, configElId) {
+        var mapDom = document.getElementById(mapElId);
+        var configEl = document.getElementById(configElId);
+        if (!mapDom || !configEl) return;
+
+        if (mapDom.__timeSelectedListener) {
+            document.removeEventListener('timeSelected', mapDom.__timeSelectedListener);
+            mapDom.__timeSelectedListener = null;
+        }
+
+        var config = JSON.parse(configEl.textContent);
+        var geojsonData = config.geojson;
+        var labelElId = mapElId + '-time-label';
+
+        if (!geojsonData || !geojsonData.features) {
+            mapDom.innerHTML = '<div class="empty-state">No GSP boundary data found.</div>';
+            return;
+        }
+
+        var colors = panelColors();
+
+        var uuidToName = {};
+        geojsonData.features.forEach(function(f) {
+            if (!f.properties) f.properties = {};
+            var uuid = f.id || f.properties.geometry_uuid || f.properties.uuid;
+            if (!uuid && f.properties.name) uuid = f.properties.name;
+            var name = f.properties.geometry_name || f.properties.location_name || uuid || 'Unknown GSP';
+            if (uuid) {
+                uuidToName[uuid] = name;
+                f.properties.name = uuid;
+            }
+        });
+
+        var mapName = 'gspMap_' + mapElId;
+        echarts.registerMap(mapName, geojsonData);
+
+        var option = {
+            tooltip: {
+                trigger: 'item',
+                showDelay: 0,
+                transitionDuration: 0.2,
+                formatter: function(params) {
+                    var title = (params.name && uuidToName[params.name]) || params.name || 'Unknown GSP';
+                    if (!params.data) return '<strong>' + title + '</strong><br/>No Data';
+                    var val = params.data.value;
+                    if (isNaN(val) || val === null) return '<strong>' + title + '</strong><br/>No Data';
+
+                    var cap = params.data.capacity || 0;
+                    var gen = val * cap;
+
+                    return '<strong>' + title + '</strong><br/>' +
+                        'Generation: <strong>' + window.formatEnergyValue(gen) + '</strong> (' + (val * 100).toFixed(1) + '%)<br/>' +
+                        'Capacity: <strong>' + window.formatEnergyValue(cap) + '</strong>';
+                }
+            },
+            visualMap: {
+                left: 'right',
+                bottom: 'bottom',
+                min: 0, max: 1.0,
+                text: ['Max (100%)', 'Min (0%)'],
+                realtime: true, calculable: true,
+                inRange: { color: [colors.empty, '#f2a900'] },
+                formatter: function(value) { return (value * 100).toFixed(0) + '%'; }
+            },
+            series: [{
+                id: 'gspSeries',
+                name: 'GSP Generation',
+                type: 'map', map: mapName,
+                roam: true, layoutCenter: ['50%', '50%'], layoutSize: '100%',
+                scaleLimit: { min: 1, max: 10 },
+                selectedMode: 'single',
+                label: { show: false },
+                select: {
+                    label: { show: false },
+                    itemStyle: { borderColor: colors.highlightBorder, borderWidth: 2, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 }
+                },
+                itemStyle: { areaColor: colors.empty, borderColor: colors.panelBg, borderWidth: 0.5 },
+                emphasis: {
+                    label: { show: false },
+                    itemStyle: { areaColor: colors.hover, borderColor: colors.defaultBorder, borderWidth: 1 }
+                },
+                data: []
+            }]
+        };
+
+        var myMap = window.mountChart(mapDom, function() { return option; });
+
+        var currentSelectedGsp = null;
+        var resetTimeout = null;
+        var isResettingMap = false;
+
+        myMap.on('georoam', function(params) {
+            if (isResettingMap) return;
+
+            var opt = myMap.getOption();
+            if (opt && opt.series && opt.series.length > 0) {
+                var s = opt.series[0];
+                if (s.zoom <= 1.001) {
+                    var needsReset = false;
+                    if (s.center) {
+                        needsReset = true;
+                    } else if (params.dx || params.dy) {
+                        needsReset = true;
+                    }
+
+                    if (needsReset) {
+                        if (resetTimeout) clearTimeout(resetTimeout);
+                        resetTimeout = setTimeout(function() {
+                            isResettingMap = true;
+                            myMap.setOption({
+                                series: [{
+                                    id: 'gspSeries',
+                                    zoom: 1,
+                                    center: null,
+                                    animationDurationUpdate: 300,
+                                    animationEasingUpdate: 'cubicOut'
+                                }]
+                            });
+                            setTimeout(function() { isResettingMap = false; }, 350);
+                        }, 100);
+                    }
+                }
+            }
+        });
+
+        myMap.on('click', function(params) {
+            if (!params.name) return;
+
+            var clickedUuid = params.name;
+            var targetUuid = clickedUuid;
+
+            if (currentSelectedGsp === clickedUuid) {
+                targetUuid = config.locationUuid;
+                currentSelectedGsp = null;
+            } else {
+                currentSelectedGsp = clickedUuid;
+            }
+
+            var url = '/components/forecast?location_uuid=' + targetUuid +
+                '&skip_map=true&energy_source=' + config.energySource +
+                '&time_window=' + encodeURIComponent(config.timeWindow);
+
+            var qf = document.getElementById('query-form');
+            if (qf) {
+                var fd = new FormData(qf);
+                for (var pair of fd.entries()) {
+                    if (pair[0] === 'forecaster' || pair[0] === 'observer') {
+                        url += '&' + pair[0] + '=' + encodeURIComponent(pair[1]);
+                    }
+                }
+            }
+
+            htmx.ajax('GET', url, '#chart-panel').catch(function(err) { console.error(err); });
+        });
+
+        var updateMapData = function(timestamp) {
+            if (!timestamp) return;
+            fetch('/api/dashboard/map-snapshot?timestamp=' + timestamp +
+                '&nation_uuid=' + config.locationUuid +
+                '&energy_source=' + config.energySource +
+                '&forecaster=' + encodeURIComponent(config.firstForecaster))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var mOpt = myMap.getOption();
+                    if (mOpt && mOpt.series && mOpt.series.length > 0) {
+                        mOpt.series[0].data = data;
+                        myMap.setOption(mOpt);
+                    }
+                }).catch(function(err) { console.error(err); });
+        };
+
+        mapDom.__timeSelectedListener = function(e) {
+            var labelEl = document.getElementById(labelElId);
+            if (labelEl) labelEl.innerHTML = e.detail.label;
+            updateMapData(e.detail.timestamp);
+        };
+        document.addEventListener('timeSelected', mapDom.__timeSelectedListener);
+
+        if (config.timestamps && config.timestamps.length > 0) {
+            updateMapData(config.timestamps[0]);
+        }
+    };
+
+    window.mountLocationMap = function(mapElId, configElId) {
+        var mapDom = document.getElementById(mapElId);
+        var configEl = document.getElementById(configElId);
+        if (!mapDom || !configEl) return;
+
+        if (mapDom.__timeSelectedListener) {
+            document.removeEventListener('timeSelected', mapDom.__timeSelectedListener);
+            mapDom.__timeSelectedListener = null;
+        }
+
+        var config = JSON.parse(configEl.textContent);
+        var geojsonData = config.geojson;
+        var labelElId = mapElId + '-time-label';
+        var colors = panelColors();
+
+        var lat = config.lat || 0;
+        var lng = config.lng || 0;
+        var fillOpacity = config.avgFraction || 1.0;
+        if (fillOpacity < 0.15) fillOpacity = 0.15;
+
+        var option = {};
+
+        if (geojsonData) {
+            var hasArea = !!config.isPolygon;
+            var locMapColor = window.getCssVar('--chart-color-0', '#7a9374');
+
+            if (hasArea) {
+                var mapName = 'locMap_' + mapElId;
+                echarts.registerMap(mapName, geojsonData);
+                option = {
+                    geo: {
+                        map: mapName, roam: false,
+                        itemStyle: { areaColor: locMapColor, opacity: fillOpacity, borderColor: colors.defaultBorder, borderWidth: 2 },
+                        emphasis: { itemStyle: { areaColor: locMapColor, opacity: Math.min(fillOpacity + 0.2, 1) }, label: { show: false } },
+                        layoutCenter: ['50%', '50%'], layoutSize: '80%'
+                    }
+                };
+            } else {
+                option = {
+                    xAxis: { type: 'value', show: false, min: lng - 0.1, max: lng + 0.1 },
+                    yAxis: { type: 'value', show: false, min: lat - 0.1, max: lat + 0.1 },
+                    grid: { left: 0, right: 0, top: 0, bottom: 0 },
+                    series: [{
+                        type: 'scatter', symbolSize: 14,
+                        itemStyle: { color: locMapColor, opacity: fillOpacity, borderColor: 'white', borderWidth: 3, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 4, shadowOffsetY: 2 },
+                        data: [[lng, lat]]
+                    }]
+                };
+            }
+        }
+
+        var myMap = window.mountChart(mapDom, function() { return option; });
+
+        mapDom.__timeSelectedListener = function(e) {
+            var labelEl = document.getElementById(labelElId);
+            if (labelEl && config.hasLatlng) {
+                labelEl.innerHTML = config.latlngLabel + ' | ' + e.detail.label;
+            }
+
+            var mapOpt = myMap.getOption();
+            if (mapOpt.geo && mapOpt.geo.length > 0) {
+                mapOpt.geo[0].itemStyle.opacity = e.detail.fraction;
+                mapOpt.geo[0].emphasis.itemStyle.opacity = Math.min(e.detail.fraction + 0.2, 1);
+                myMap.setOption(mapOpt);
+            } else if (mapOpt.series && mapOpt.series.length > 0) {
+                mapOpt.series[0].itemStyle.opacity = e.detail.fraction;
+                myMap.setOption(mapOpt);
+            }
+        };
+        document.addEventListener('timeSelected', mapDom.__timeSelectedListener);
+    };
+})();
