@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -26,13 +25,13 @@ func (ui *UIClient) handleDashboardMapSnapshot(w http.ResponseWriter, r *http.Re
 	energySourceRaw := r.URL.Query().Get("energy_source")
 
 	if tsRaw == "" || fRaw == "" || energySourceRaw == "" || nationUUID == "" {
-		http.Error(w, "Missing required query parameters", http.StatusBadRequest)
+		httpError(w, r, "Missing required query parameters", http.StatusBadRequest, nil)
 		return
 	}
 
 	tsUnix, err := strconv.ParseInt(tsRaw, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid timestamp format", http.StatusBadRequest)
+		httpError(w, r, "Invalid timestamp format", http.StatusBadRequest, err)
 		return
 	}
 
@@ -55,7 +54,7 @@ func (ui *UIClient) handleDashboardMapSnapshot(w http.ResponseWriter, r *http.Re
 		LocationTypeFilter:          &locTypeGSP,
 	})
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to list GSPs: %v", err), http.StatusInternalServerError)
+		httpError(w, r, "Failed to list GSPs", http.StatusInternalServerError, err)
 		return
 	}
 

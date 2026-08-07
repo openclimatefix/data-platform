@@ -5,7 +5,6 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -20,8 +19,7 @@ func (ui *UIClient) handleLocations(w http.ResponseWriter, r *http.Request) {
 
 	locResp, err := ui.grpcClient.ListLocations(ctx, &pb.ListLocationsRequest{})
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to list locations")
-		http.Error(w, "Failed to load locations", http.StatusInternalServerError)
+		httpError(w, r, "Failed to load locations", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -42,9 +40,7 @@ func (ui *UIClient) handleLocations(w http.ResponseWriter, r *http.Request) {
 		DefaultEnergySource: defaultEnergy,
 	}
 
-	if err := tpl.ExecuteTemplate(w, "locations.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	render(w, r, "locations.html", data)
 }
 
 func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +49,7 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 
 	locUUID := r.URL.Query().Get("location_uuid")
 	if locUUID == "" {
-		http.Error(w, "Missing location_uuid", http.StatusBadRequest)
+		httpError(w, r, "Missing location_uuid", http.StatusBadRequest, nil)
 		return
 	}
 
@@ -71,8 +67,7 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 
 	locResp, err := ui.grpcClient.GetLocation(ctx, locReq)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get location")
-		http.Error(w, "Failed to load location details", http.StatusInternalServerError)
+		httpError(w, r, "Failed to load location details", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -117,44 +112,27 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 		historyValues = []float64{float64(locResp.GetEffectiveCapacityWatts())}
 	}
 
-	esName := "Solar"
-	if energySource == pb.EnergySource_ENERGY_SOURCE_WIND {
-		esName = "Wind"
-	}
+	esName := energySourceName(int32(energySource.Number()))
 
-	data := struct {
-		Location           *pb.GetLocationResponse
-		LocationTypeString string
-		EnergySource       int32
-		EnergySourceName   string
-		GeoJSON            template.JS
-		IsPolygon          bool
-		IsInteractiveMap   bool
-		AvgFraction        float32
-		Labels             []string
-		Timestamps         []int64
-		MapID              string
-		HistoryLabels      []string
-		HistoryValues      []float64
-	}{
-		Location:           locResp,
+	data := locationView{
+		mapView: mapView{
+			Location:         locResp,
+			GeoJSON:          geoJSONStr,
+			IsPolygon:        isPolygon(geoJSONStr),
+			IsInteractiveMap: false,
+			AvgFraction:      1.0,
+			Labels:           nil,
+			Timestamps:       nil,
+			MapID:            "map_locations",
+			EnergySource:     strconv.Itoa(int(energySource.Number())),
+		},
 		LocationTypeString: locResp.GetLocationType().String(),
-		EnergySource:       int32(energySource.Number()),
 		EnergySourceName:   esName,
-		GeoJSON:            geoJSONStr,
-		IsPolygon:          strings.Contains(string(geoJSONStr), `"Polygon"`) || strings.Contains(string(geoJSONStr), `"MultiPolygon"`),
-		IsInteractiveMap:   false,
-		AvgFraction:        1.0,
-		Labels:             nil,
-		Timestamps:         nil,
-		MapID:              "map_locations",
 		HistoryLabels:      historyLabels,
 		HistoryValues:      historyValues,
 	}
 
-	if err := tpl.ExecuteTemplate(w, "location_details.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	render(w, r, "location_details.html", data)
 }
 
 func (ui *UIClient) handleLocationEdit(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +140,7 @@ func (ui *UIClient) handleLocationEdit(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		httpError(w, r, "Failed to parse form", http.StatusBadRequest, err)
 		return
 	}
 
@@ -192,6 +170,9 @@ func (ui *UIClient) handleLocationEdit(w http.ResponseWriter, r *http.Request) {
 		if capWatts, err := strconv.ParseUint(capacityStr, 10, 64); err == nil {
 			req.NewEffectiveCapacityWatts = &capWatts
 			hasUpdate = true
+		} else {
+			httpError(w, r, "Invalid capacity format", http.StatusBadRequest, err)
+			return
 		}
 	}
 
@@ -202,8 +183,7 @@ func (ui *UIClient) handleLocationEdit(w http.ResponseWriter, r *http.Request) {
 
 	_, err = ui.grpcClient.UpdateLocation(ctx, req)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to update location")
-		http.Error(w, "Failed to update location: "+err.Error(), http.StatusInternalServerError)
+		httpError(w, r, "Failed to update location", http.StatusInternalServerError, err)
 		return
 	}
 

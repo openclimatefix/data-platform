@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"embed"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"net/http"
 	"strings"
 	"time"
@@ -160,10 +162,38 @@ func withTraceID(next http.Handler) http.Handler {
 	})
 }
 
+func httpError(w http.ResponseWriter, r *http.Request, msg string, code int, err error) {
+	if err != nil {
+		log.Error().Err(err).Str("method", r.Method).Str("path", r.URL.Path).Msg(msg)
+	} else {
+		log.Warn().Str("method", r.Method).Str("path", r.URL.Path).Msg(msg)
+	}
+	http.Error(w, msg, code)
+}
+
+func render(w http.ResponseWriter, r *http.Request, name string, data any) {
+	var buf bytes.Buffer
+	if err := tpl.ExecuteTemplate(&buf, name, data); err != nil {
+		httpError(w, r, "Template rendering failed", http.StatusInternalServerError, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = buf.WriteTo(w)
+}
+
 func (ui *UIClient) Start(port string) error {
 	mux := http.NewServeMux()
 
-	mux.Handle("/static/", http.FileServer(http.FS(templateFiles)))
+	staticFS, err := fs.Sub(templateFiles, "static")
+	if err != nil {
+		return err
+	}
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))
+	mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "max-age=0, must-revalidate")
+		staticHandler.ServeHTTP(w, r)
+	}))
+
 	mux.HandleFunc("/", ui.handleIndex)
 	mux.HandleFunc("/locations", ui.handleLocations)
 	mux.HandleFunc("/components/selectors", ui.handleSelectors)
@@ -172,7 +202,15 @@ func (ui *UIClient) Start(port string) error {
 	mux.HandleFunc("/components/location_edit", ui.handleLocationEdit)
 	mux.HandleFunc("/api/dashboard/map-snapshot", ui.handleDashboardMapSnapshot)
 
-	return http.ListenAndServe(port, withTraceID(withGzip(mux)))
+	srv := &http.Server{
+		Addr:         port,
+		Handler:      withTraceID(withGzip(mux)),
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	return srv.ListenAndServe()
 }
 
 func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -181,11 +219,7 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := tpl.ExecuteTemplate(w, "forecasts.html", nil)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to execute forecasts template")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	render(w, r, "forecasts.html", nil)
 }
 
 func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
@@ -201,48 +235,21 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		var locErr error
-
-		locResp, locErr = ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{})
-		if locErr != nil {
-			log.Error().Err(locErr).Msg("Failed to list locations")
-		}
-
-		return locErr
+		locResp, _ = ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{})
+		return nil
 	})
 
 	g.Go(func() error {
-		var fcErr error
-
-		fcResp, fcErr = ui.grpcClient.ListForecasters(gCtx, &pb.ListForecastersRequest{})
-		if fcErr != nil {
-			log.Error().Err(fcErr).Msg("Failed to list forecasters")
-		}
-
-		return fcErr
+		fcResp, _ = ui.grpcClient.ListForecasters(gCtx, &pb.ListForecastersRequest{})
+		return nil
 	})
 
 	g.Go(func() error {
-		var obsErr error
-
-		obsResp, obsErr = ui.grpcClient.ListObservers(gCtx, &pb.ListObserversRequest{})
-		if obsErr != nil {
-			log.Error().Err(obsErr).Msg("Failed to list observers")
-		}
-
-		return obsErr
+		obsResp, _ = ui.grpcClient.ListObservers(gCtx, &pb.ListObserversRequest{})
+		return nil
 	})
 
-	if err := g.Wait(); err != nil {
-		log.Error().Err(err).Msg("Failed to list required resources for selectors")
-		http.Error(
-			w,
-			fmt.Sprintf("Failed to list required resources: %v", err),
-			http.StatusInternalServerError,
-		)
-
-		return
-	}
+	_ = g.Wait()
 
 	var defaultLocationUUID, defaultLocationLabel string
 	for _, loc := range locResp.GetLocations() {
@@ -265,6 +272,7 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		Locations             []*pb.ListLocationsResponse_LocationSummary
 		Forecasters           []*pb.Forecaster
 		Observers             []*pb.ListObserversResponse_ObserverSummary
+		EnergySources         []energySourceOption
 		DefaultTimeWindow     string
 		DefaultLocationUUID   string
 		DefaultLocationLabel  string
@@ -274,6 +282,7 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		Locations:   locResp.GetLocations(),
 		Forecasters: fcResp.GetForecasters(),
 		Observers:   obsResp.GetObservers(),
+		EnergySources: getEnergySourceOptions(),
 		DefaultTimeWindow: fmt.Sprintf("%s to %s",
 			time.Now().UTC().Add(-48*time.Hour).Format("2006-01-02 15:04"),
 			time.Now().UTC().Add(36*time.Hour).Format("2006-01-02 15:04"),
@@ -284,9 +293,5 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		DefaultObserverNames:  []string{defaultObserverNamePrimary, defaultObserverNameSecondary},
 	}
 
-	err := tpl.ExecuteTemplate(w, "selectors.html", data)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to execute selectors template")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	render(w, r, "selectors.html", data)
 }

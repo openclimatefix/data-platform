@@ -8,8 +8,9 @@
         <div>
             <label for="energy_source">Energy Source</label>
             <select id="energy_source" name="energy_source" required>
-                <option value="1" selected>Solar</option>
-                <option value="2">Wind</option>
+                {{ range .EnergySources }}
+                <option value="{{ .Value }}">{{ .Name }}</option>
+                {{ end }}
             </select>
         </div>
 

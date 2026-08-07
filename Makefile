@@ -15,7 +15,7 @@ PROTOC_GEN_GRPC  := $(LOCAL_BIN)/protoc-gen-go-grpc
 
 # --- Sources & Stamps ---
 GO_SOURCES          := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
-UI_SOURCES          := $(shell find internal/client/ui/templates -name '*.html')
+UI_SOURCES          := $(shell find internal/client/ui/templates -name '*.html') $(shell find internal/client/ui/static -type f)
 PROTO_SOURCES       := $(shell find proto/ocf/dp -name '*.proto')
 PROTO_GO_STAMP_FILE := internal/gen/.protoc.stamp
 SQLC_SOURCES        := $(shell find internal/server/postgres/sql -name '*.sql')
