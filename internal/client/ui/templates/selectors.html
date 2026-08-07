@@ -1,269 +1,227 @@
-<form id="query-form" hx-get="/components/forecast" hx-target="#chart-panel" hx-indicator="#loading" class="m-0">
-    <div class="panel-header mb-md">
-        <strong>Query Configuration</strong>
-        {{ if .DashboardCountry }}
-        <a href="javascript:void(0)" onclick="document.getElementById('config-body').style.display = document.getElementById('config-body').style.display === 'none' ? 'block' : 'none'" class="text-small" style="color: var(--nc-ac-1); text-decoration: none;">[Expand/Collapse]</a>
-        {{ end }}
+<form id="query-form" hx-get="/components/forecast" hx-target="#chart-panel" hx-indicator="#loading" hx-validate="true" hx-trigger="load, submit">
+    <details>
+        <summary>
+		<strong>Query Configuration</strong>
+        </summary>
+
+        <div class="params-grid">
+        <div>
+            <label for="energy_source">Energy Source</label>
+            <select id="energy_source" name="energy_source" required>
+                <option value="1" selected>Solar</option>
+                <option value="2">Wind</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="location_search">Location</label>
+            <input type="text" list="location_options" id="location_search" autocomplete="off"
+                placeholder="Search by name, type, or capacity..." required
+                value="{{ .DefaultLocationLabel }}">
+            <input type="hidden" id="location_uuid" name="location_uuid" value="{{ .DefaultLocationUUID }}">
+            <datalist id="location_options">
+                {{ range .Locations }}
+                <option data-uuid="{{ .LocationUuid }}" value="{{ .LocationName }} ({{ .LocationType }}, {{ formatCapacity .EffectiveCapacityWatts }})"></option>
+                {{ end }}
+            </datalist>
+        </div>
+
+        <div>
+            <label for="time_window">Time Window (UTC)</label>
+            <input type="text" id="time_window" name="time_window" value="{{ .DefaultTimeWindow }}" required>
+        </div>
     </div>
 
-    <div id="config-body" {{ if .DashboardCountry }}style="display: none;"{{ end }}>
-        
-        <div class="params-grid">
-            <div class="form-group">
-                <label for="energy_source">Energy Source</label>
-                <select id="energy_source" name="energy_source" required>
-                    <option value="1" selected>Solar</option>
-                    <option value="2">Wind</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label for="location_search">Location</label>
-                <input type="text" list="location_options" id="location_search" autocomplete="off" placeholder="Search by name, type, or capacity..." required>
-                <input type="hidden" id="location_uuid" name="location_uuid" required>
-                <datalist id="location_options">
-                    {{ range .Locations }}
-                    <option data-uuid="{{ .LocationUuid }}" value="{{ .LocationName }} ({{ .LocationType }}, {{ formatCapacity .EffectiveCapacityWatts }})"></option>
-                    {{ end }}
-                </datalist>
-            </div>
+    <div class="source-picker">
+        <div>
+            <label for="source_search">Data Sources</label>
+            <input type="text" list="source_options" id="source_search" autocomplete="off" placeholder="Add a forecaster or observer...">
+            <datalist id="source_options">
+                {{ range .Forecasters }}
+                <option data-type="forecaster" data-val="{{ .ForecasterName }}|{{ .ForecasterVersion }}" value="{{ .ForecasterName }} (v{{ .ForecasterVersion }}) [Forecaster]"></option>
+                {{ end }}
+                {{ range .Observers }}
+                <option data-type="observer" data-val="{{ .ObserverName }}" value="{{ .ObserverName }} [Observer]"></option>
+                {{ end }}
+            </datalist>
+        </div>
 
-            <div class="form-group">
-                <label for="time_window">Time Window (UTC)</label>
-                <input type="text" id="time_window" name="time_window" value="{{ .DefaultTimeWindow }}" required>
+        <div>
+            <label for="source_horizon">Horizon (mins)</label>
+            <input type="number" id="source_horizon" value="0" min="0" step="5" title="Horizon (mins) - Forecasters only">
+        </div>
+
+        <div class="source-picker-actions">
+            <button type="button" id="btn_add_source">Add</button>
+            <div class="pos-rel">
+                <button type="button" id="source_badge" onclick="document.getElementById('source_chips').classList.toggle('show')">0 Selected</button>
+                <div class="chips" id="source_chips">
+                    <fieldset>
+                        <legend>Forecasters</legend>
+                        <div id="fc_chips_container"></div>
+                    </fieldset>
+                    <fieldset>
+                        <legend>Observers</legend>
+                        <div id="obs_chips_container"></div>
+                    </fieldset>
+                </div>
             </div>
         </div>
 
-        <div class="form-group" style="display: flex; gap: 12px;">
-            <div style="flex-grow: 1;">
-                <label for="source_search">Data Sources</label>
-                <div class="flex-row gap-sm pos-rel align-center">
-                    <div class="pos-rel flex-grow">
-                        <input type="text" list="source_options" id="source_search" autocomplete="off" placeholder="Add a forecaster or observer...">
-                        <datalist id="source_options">
-                            {{ range .Forecasters }}
-                            <option data-type="forecaster" data-val="{{ .ForecasterName }}|{{ .ForecasterVersion }}" value="{{ .ForecasterName }} (v{{ .ForecasterVersion }}) [Forecaster]"></option>
-                            {{ end }}
-                            {{ range .Observers }}
-                            <option data-type="observer" data-val="{{ .ObserverName }}" value="{{ .ObserverName }} [Observer]"></option>
-                            {{ end }}
-                        </datalist>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="width: 100px;">
-                <label for="source_horizon" style="font-size: 0.8rem; white-space: nowrap;">Horizon (mins)</label>
-                <input type="number" id="source_horizon" value="0" min="0" step="5" title="Horizon (mins) - Forecasters only" style="height: 40px; padding: 0 12px; margin-top: 2px;">
-            </div>
-
-            <div style="display: flex; align-items: flex-end; gap: 8px;">
-                <button type="button" id="btn_add_source" class="btn btn-outline" style="height: 40px; padding: 0 16px;">Add</button>
-                <div class="pos-rel">
-                    <button type="button" id="source_badge" class="btn btn-outline" onclick="document.getElementById('source_chips').classList.toggle('show')" style="height: 40px; padding: 0 16px;">0 Selected</button>
-                    <div id="source_chips" class="custom-dropdown">
-                        <div class="flex-1">
-                            <strong class="dropdown-section-title">Forecasters</strong>
-                            <div id="fc_chips_container" class="flex-col gap-sm"></div>
-                        </div>
-                        <div class="flex-1">
-                            <strong class="dropdown-section-title">Observers</strong>
-                            <div id="obs_chips_container" class="flex-col gap-sm"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div id="source_hidden_inputs"></div>
-        </div>
+        <div id="source_hidden_inputs"></div>
+    </div>
 
     <template id="chip_template">
         <div class="chip">
-            <span class="chip-text" style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;"></span>
-            <span class="chip-close" style="cursor:pointer; font-weight:bold; opacity:0.8; flex-shrink: 0;">&times;</span>
+            <span class="chip-text"></span>
+            <span class="chip-close">&times;</span>
         </div>
     </template>
 
-    <script>
-        (function() {
-            // --- Location Datalist Mapper ---
-            var locSearch = document.getElementById('location_search');
-            var locUuid = document.getElementById('location_uuid');
-
-            locSearch.addEventListener('input', e => {
-                locUuid.value = ''; // Reset actual value when typing
-                var options = Array.from(document.getElementById(e.target.getAttribute('list')).options);
-                var opt = options.find(o => o.value === e.target.value);
-                if (opt) {
-                    locUuid.value = opt.getAttribute('data-uuid');
-                }
-            });
-
-            // --- Multi-Select Chips from Datalist ---
-            var sourceSearch = document.getElementById('source_search');
-            var fcChipsContainer = document.getElementById('fc_chips_container');
-            var obsChipsContainer = document.getElementById('obs_chips_container');
-            var sourceHiddenInputs = document.getElementById('source_hidden_inputs');
-            var sourceBadge = document.getElementById('source_badge');
-            var chipTemplate = document.getElementById('chip_template');
-            var selectedSources = { forecaster: [], observer: [] };
-
-            function updateSourceBadge() {
-                var total = selectedSources.forecaster.length + selectedSources.observer.length;
-                sourceBadge.textContent = total + ' Selected';
-                if (total === 0) {
-                    document.getElementById('source_chips').classList.remove('show');
-                }
-            }
-
-            function addSource(type, val, text, optNode) {
-                var safeId = val.replace(/[^a-zA-Z0-9]/g, '_');
-                if (!selectedSources[type].find(f => f.val === val)) {
-                    selectedSources[type].push({val, text, type});
-                    
-                    var chipFrag = chipTemplate.content.cloneNode(true);
-                    var chip = chipFrag.querySelector('.chip');
-                    chip.id = 'chip_' + type + '_' + safeId;
-                    
-                    var chipText = chip.querySelector('.chip-text');
-                    chipText.textContent = text.replace(' [' + (type === 'forecaster' ? 'Forecaster' : 'Observer') + ']', '');
-                    chipText.title = text;
-                    
-                    var chipClose = chip.querySelector('.chip-close');
-                    chipClose.onclick = function(event) { window.removeSource(type, val, event, optNode); };
-                    
-                    if (type === 'forecaster') {
-                        fcChipsContainer.appendChild(chipFrag);
-                    } else {
-                        obsChipsContainer.appendChild(chipFrag);
-                    }
-
-                    var hid = document.createElement('input');
-                    hid.type = 'hidden'; hid.name = type; hid.value = val;
-                    hid.id = 'hidden_' + type + '_' + safeId;
-                    sourceHiddenInputs.appendChild(hid);
-
-                    updateSourceBadge();
-                    if (type === 'observer' && optNode) {
-                        optNode.remove();
-                    }
-                }
-            }
-
-            document.getElementById('btn_add_source').addEventListener('click', function() {
-                var inputVal = sourceSearch.value;
-                var horizonVal = document.getElementById('source_horizon').value || "0";
-                var listEl = document.getElementById(sourceSearch.getAttribute('list'));
-                if (!listEl || !inputVal) return;
-                
-                var options = Array.from(listEl.options);
-                var opt = options.find(o => o.value === inputVal);
-                
-                if (opt) {
-                    var type = opt.getAttribute('data-type');
-                    var baseVal = opt.getAttribute('data-val');
-                    var text = opt.value;
-                    
-                    if (type === 'forecaster') {
-                        var val = baseVal + "|" + horizonVal;
-                        var newText = text.replace(' [Forecaster]', '') + " @ " + horizonVal + "m";
-                        addSource(type, val, newText, opt);
-                    } else {
-                        addSource(type, baseVal, text, opt);
-                    }
-                    sourceSearch.value = '';
-                }
-            });
-
-            window.removeSource = function(type, val, event, optNode) {
-                if (event) event.stopPropagation();
-                var safeId = val.replace(/[^a-zA-Z0-9]/g, '_');
-                var removedItem = selectedSources[type].find(f => f.val === val);
-                
-                if (removedItem && type === 'observer' && optNode) {
-                    document.getElementById('source_options').appendChild(optNode);
-                }
-                
-                selectedSources[type] = selectedSources[type].filter(f => f.val !== val);
-                document.getElementById('chip_' + type + '_' + safeId).remove();
-                document.getElementById('hidden_' + type + '_' + safeId).remove();
-                updateSourceBadge();
-            };
-
-            if (!window.dropdownClickListenerAdded) {
-                document.addEventListener('click', e => {
-                    var badge = document.getElementById('source_badge');
-                    var chips = document.getElementById('source_chips');
-                    if (!badge || !chips) return;
-                    if (!e.target.closest('#source_badge') && !e.target.closest('#source_chips')) {
-                        chips.classList.remove('show');
-                    }
-                });
-                window.dropdownClickListenerAdded = true;
-            }
-
-            document.getElementById('source_badge').addEventListener('click', e => e.stopPropagation());
-
-            document.getElementById('query-form').addEventListener('htmx:beforeRequest', function(e) {
-                if (!document.getElementById('location_uuid').value) {
-                    e.preventDefault();
-                    alert('Please select a valid location from the list.');
-                    return;
-                }
-                if (selectedSources.forecaster.length === 0 && selectedSources.observer.length === 0) {
-                    e.preventDefault();
-                    alert('Please select at least one forecaster or observer.');
-                }
-            });
-
-            {{ if .DashboardCountry }}
-            setTimeout(function() {
-                var locSearchInput = document.getElementById('location_search');
-                var locUuidInput = document.getElementById('location_uuid');
-                var listEl = document.getElementById('location_options');
-                if (listEl) {
-                    var options = Array.from(listEl.options);
-                    var opt = options.find(o => o.getAttribute('data-uuid') === "{{ .DefaultLocationUUID }}");
-                    if (opt) {
-                        locSearchInput.value = opt.value;
-                        locUuidInput.value = opt.getAttribute('data-uuid');
-                    }
-                }
-
-                var soList = document.getElementById('source_options');
-                if (soList) {
-                    var sOptions = Array.from(soList.options);
-                    var fOpt = sOptions.find(o => o.getAttribute('data-type') === 'forecaster' && o.getAttribute('data-val').startsWith('blend'));
-                    if (fOpt) {
-                        var val = fOpt.getAttribute('data-val') + "|0";
-                        var text = fOpt.value.replace(' [Forecaster]', '') + " @ 0m";
-                        addSource('forecaster', val, text, fOpt);
-                    }
-                    
-                    var oOpt1 = sOptions.find(o => o.getAttribute('data-type') === 'observer' && o.getAttribute('data-val') === 'pvlive_in_day');
-                    if (oOpt1) addSource('observer', oOpt1.getAttribute('data-val'), oOpt1.value, oOpt1);
-                    
-                    var oOpt2 = sOptions.find(o => o.getAttribute('data-type') === 'observer' && o.getAttribute('data-val') === 'pvlive_day_after');
-                    if (oOpt2) addSource('observer', oOpt2.getAttribute('data-val'), oOpt2.value, oOpt2);
-                }
-                
-                htmx.trigger('#query-form', 'submit');
-            }, 50);
-            {{ end }}
-        })();
-    </script>
-
-    <div class="mt-md">
-        <button type="submit" class="btn">View Forecast</button>
-        <span id="loading" class="htmx-indicator text-muted" style="margin-left: 1rem;"><i>Fetching data...</i></span>
-    </div>
-</div>
+    <footer>
+        <button type="submit">View Forecast</button>
+        <span id="loading" class="htmx-indicator"><em>Fetching data...</em></span>
+    </footer>
+    </details>
 </form>
 
 <script>
-    flatpickr("#time_window", {
-        mode: "range",
-        enableTime: true,
-        time_24hr: true,
-        dateFormat: "Y-m-d H:i",
+(function() {
+    var locSearch = document.getElementById('location_search');
+    var locUuid = document.getElementById('location_uuid');
+    var sourceSearch = document.getElementById('source_search');
+    var sourceHorizon = document.getElementById('source_horizon');
+    var sourceBadge = document.getElementById('source_badge');
+    var sourceChips = document.getElementById('source_chips');
+    var fcContainer = document.getElementById('fc_chips_container');
+    var obsContainer = document.getElementById('obs_chips_container');
+    var hiddenInputs = document.getElementById('source_hidden_inputs');
+    var chipTemplate = document.getElementById('chip_template');
+
+    function findOption(listId, value) {
+        var list = document.getElementById(listId);
+        if (!list) return null;
+        return Array.from(list.options).find(function(o) { return o.value === value; });
+    }
+
+    // --- Location ---
+    function updateLocationValidity() {
+        locSearch.setCustomValidity(locUuid.value ? '' : 'Please select a valid location from the list.');
+    }
+
+    locSearch.addEventListener('input', function(e) {
+        locUuid.value = '';
+        var opt = findOption('location_options', e.target.value);
+        if (opt) locUuid.value = opt.getAttribute('data-uuid');
+        updateLocationValidity();
     });
+
+    // --- Sources ---
+    // Uniqueness rule: a source is identified by its (type, value) pair. A forecaster's
+    // value already encodes the horizon ("name|version|horizon"), so the same forecaster
+    // picked at two different horizons is treated as two distinct sources.
+    function sourceExists(type, value) {
+        return !!hiddenInputs.querySelector('input[data-type="' + type + '"][data-value="' + CSS.escape(value) + '"]');
+    }
+
+    function updateSourceBadge() {
+        var total = hiddenInputs.children.length;
+        sourceBadge.textContent = total + ' Selected';
+        sourceSearch.setCustomValidity(total > 0 ? '' : 'Please select at least one forecaster or observer.');
+    }
+
+    function addSource(type, value, label) {
+        if (sourceExists(type, value)) return;
+
+        var chip = chipTemplate.content.firstElementChild.cloneNode(true);
+        chip.dataset.type = type;
+        chip.dataset.value = value;
+        chip.querySelector('.chip-text').textContent = label;
+        chip.querySelector('.chip-text').title = label;
+        (type === 'forecaster' ? fcContainer : obsContainer).appendChild(chip);
+
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = type;
+        hidden.value = value;
+        hidden.dataset.type = type;
+        hidden.dataset.value = value;
+        hiddenInputs.appendChild(hidden);
+
+        updateSourceBadge();
+    }
+
+    function removeSource(type, value) {
+        var container = type === 'forecaster' ? fcContainer : obsContainer;
+        var chip = container.querySelector('[data-value="' + CSS.escape(value) + '"]');
+        if (chip) chip.remove();
+
+        var hidden = hiddenInputs.querySelector('input[data-type="' + type + '"][data-value="' + CSS.escape(value) + '"]');
+        if (hidden) hidden.remove();
+
+        updateSourceBadge();
+    }
+
+    document.getElementById('btn_add_source').addEventListener('click', function() {
+        var opt = findOption('source_options', sourceSearch.value);
+        if (!opt) return;
+
+        var type = opt.dataset.type;
+        var label = opt.value;
+
+        if (type === 'forecaster') {
+            var horizon = sourceHorizon.value || '0';
+            addSource(type, opt.dataset.val + '|' + horizon, label.replace(' [Forecaster]', '') + ' @ ' + horizon + 'm');
+        } else {
+            addSource(type, opt.dataset.val, label);
+        }
+
+        sourceSearch.value = '';
+    });
+
+    // Chip-close buttons are created dynamically, so a single delegated listener on the
+    // (static) chips container handles all of them.
+    sourceChips.addEventListener('click', function(e) {
+        var closeBtn = e.target.closest('.chip-close');
+        if (!closeBtn) return;
+        var chip = closeBtn.closest('.chip');
+        removeSource(chip.dataset.type, chip.dataset.value);
+    });
+
+    if (!window.dropdownClickListenerAdded) {
+        document.addEventListener('click', function(e) {
+            var badge = document.getElementById('source_badge');
+            var chips = document.getElementById('source_chips');
+            if (!badge || !chips) return;
+            if (!e.target.closest('#source_badge') && !e.target.closest('#source_chips')) {
+                chips.classList.remove('show');
+            }
+        });
+        window.dropdownClickListenerAdded = true;
+    }
+
+    updateLocationValidity();
+    updateSourceBadge();
+
+    // There is only one dashboard view, so the default sources are always pre-selected
+    // and the first chart load is always kicked off — no mode to opt out of.
+    var defaultForecasterName = {{ .DefaultForecasterName | toJSON }};
+    var defaultObserverNames = {{ .DefaultObserverNames | toJSON }};
+
+    var fOpt = Array.from(document.getElementById('source_options').options).find(function(o) {
+        return o.dataset.type === 'forecaster' && o.dataset.val.indexOf(defaultForecasterName) === 0;
+    });
+    if (fOpt) {
+        addSource('forecaster', fOpt.dataset.val + '|0', fOpt.value.replace(' [Forecaster]', '') + ' @ 0m');
+    }
+
+    defaultObserverNames.forEach(function(name) {
+        var oOpt = Array.from(document.getElementById('source_options').options).find(function(o) {
+            return o.dataset.type === 'observer' && o.dataset.val === name;
+        });
+        if (oOpt) addSource('observer', oOpt.dataset.val, oOpt.value);
+    });
+
+    // Initial load is now handled declaratively by hx-trigger="load, submit" on the form.
+})();
 </script>

@@ -30,44 +30,46 @@ body {
     display: flex; flex-direction: column;
 }
 
-/* Layout & Utilities */
-.flex-row { display: flex; flex-direction: row; }
-.flex-col { display: flex; flex-direction: column; }
-.gap-sm { gap: var(--spacing-sm); }
-.gap-md { gap: 16px; }
-.wrap { flex-wrap: wrap; }
-.align-center { align-items: center; }
-.flex-1 { flex: 1; min-width: 0; }
-.flex-grow { flex-grow: 1; }
-.min-h-0 { min-height: 0; }
-.min-h-320 { min-height: 320px; }
-.m-0 { margin: 0; }
-.mb-sm { margin-bottom: var(--spacing-sm); }
-.mb-md { margin-bottom: 16px; }
-.mt-md { margin-top: 16px; }
-.pos-rel { position: relative; }
-.w-full { width: 100%; box-sizing: border-box; }
-.text-muted { color: var(--nc-text-2); }
-.text-small { font-size: 0.85rem; }
-.chart-legend-color { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+/* Site header (nav bar). Scoped to a direct child of body so it doesn't clash with the
+   <header> element used inside panels below. */
+body > header {
+    background: var(--nc-bg-2);
+    padding: 12px var(--spacing-md);
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    display: flex; gap: var(--spacing-md); align-items: center;
+    margin: 0 0 var(--spacing-md) 0;
+    box-sizing: border-box; min-height: 48px;
+}
+body > header h1 { margin: 0; padding: 0; font-size: 1.2rem; color: var(--nc-text-1); line-height: 1.2; }
+body > header nav { display: flex; gap: 16px; }
+body > header a { color: var(--nc-text-1); text-decoration: none; font-weight: 600; line-height: 1.2; margin: 0; padding: 0; }
 
-.dashboard-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: var(--spacing-md);
-    margin: 0 auto;
-    padding: 0 32px 32px 32px;
-    align-items: stretch;
+main {
     flex-grow: 1;
-    width: 100%;
-    box-sizing: border-box;
     min-height: 0;
+    box-sizing: border-box;
+    padding: 0 32px 32px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
 }
 
-.left-column { display: flex; flex-direction: column; gap: var(--spacing-md); min-height: 0; }
-.right-column { display: flex; flex-direction: column; min-height: 0; }
+/* The single dashboard layout: query panel and chart panel stacked in the left column,
+   the map spanning both rows on the right. */
+main.dashboard {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "query map"
+        "chart map";
+}
+#selectors-panel { grid-area: query; }
+#chart-panel { grid-area: chart; }
+#map-panel { grid-area: map; }
 
-.panel {
+/* Panels: every top-level section/aside is a white "card". */
+section, aside {
     background: var(--nc-bg-2);
     border-radius: var(--radius-md);
     padding: var(--spacing-md);
@@ -79,6 +81,48 @@ body {
     min-height: 0;
 }
 
+:is(section, aside, form) > header,
+details > summary {
+    margin: 0 0 1.5rem 0; padding: 0; border: 0; background: none; box-shadow: none;
+    display: flex; align-items: baseline; gap: 12px;
+    cursor: pointer;
+}
+:is(section, aside, form) > header strong,
+details > summary strong { font-size: 1.2rem; color: var(--nc-text-1); }
+:is(section, aside, form) > header small,
+details > summary small { color: var(--nc-text-2); font-size: 0.85rem; }
+
+details[open] > summary {
+    margin-bottom: 1.5rem;
+}
+details:not([open]) > summary {
+    margin-bottom: 0;
+}
+
+form > footer {
+    margin-top: 16px;
+    padding: 0; border: 0; background: none;
+    display: flex; align-items: center; gap: 1rem;
+}
+
+/* Overview section's "modify capacity" form, pinned to the bottom of its panel. */
+section > footer {
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--nc-bg-3);
+}
+
+.location-overview {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-md);
+    min-height: 400px;
+}
+
+#capacity-history { flex: 1; min-height: 400px; }
+
+figure { margin: 0; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
 .map-container {
     flex-grow: 1;
     border-radius: var(--radius-sm);
@@ -87,7 +131,50 @@ body {
     min-height: 0;
 }
 
-/* Forms & Inputs */
+#forecastChart, #capacityChart {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+#capacityChart { min-height: 300px; }
+
+/* Definition lists used for key/value overview panels. */
+dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 16px;
+    margin: 16px 0 0 0;
+}
+dt, dd {
+    border-bottom: 1px solid var(--nc-bg-3);
+    padding-bottom: 8px;
+}
+dt { color: var(--nc-text-2); grid-column: 1; }
+dd { margin: 0; grid-column: 2; text-align: right; font-weight: 600; }
+
+#location-results { display: contents; }
+
+.view-details {
+    margin-left: 8px;
+    color: var(--nc-ac-1);
+    text-decoration: none;
+}
+.view-details:hover { text-decoration: underline; }
+
+/* Modify Capacity Section Header */
+.modify-capacity-title {
+    display: block;
+    margin-bottom: 12px;
+}
+
+.capacity-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    align-items: flex-end;
+}
+
 input, select {
     border-radius: var(--radius-sm);
     border: 1px solid var(--nc-bg-3);
@@ -98,9 +185,12 @@ input, select {
     box-sizing: border-box;
 }
 
-.btn {
-    background-color: var(--nc-text-1);
-    color: var(--nc-bg-2);
+label {
+    display: block; font-size: 0.9rem; font-weight: 600;
+    color: var(--nc-text-2); margin-bottom: 6px;
+}
+
+button {
     border-radius: var(--radius-sm);
     padding: 10px 24px;
     font-weight: 600;
@@ -108,40 +198,18 @@ input, select {
     cursor: pointer;
     white-space: nowrap;
 }
-.btn:hover { opacity: 0.9; }
+button:hover { opacity: 0.9; }
 
-.btn-outline {
+/* Submit buttons are the primary action; type="button" is always a secondary/utility one
+   (add-source, the source-count badge). */
+button[type="submit"] {
+    background-color: var(--nc-text-1);
+    color: var(--nc-bg-2);
+}
+button[type="button"] {
     background-color: var(--nc-bg-3);
     color: var(--nc-text-1);
-    border: 1px solid var(--nc-bg-3);
     padding: 10px 16px;
-}
-
-.custom-dropdown {
-    position: absolute; top: calc(100% + 4px); right: 0; width: 450px;
-    background: var(--nc-bg-2); border: 1px solid var(--nc-bg-3);
-    border-radius: var(--radius-sm); box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    max-height: 250px; overflow-y: auto; z-index: 50;
-    display: none; padding: 12px; gap: 16px; flex-direction: row;
-}
-.custom-dropdown.show { display: flex; }
-
-.dropdown-section-title {
-    font-size: 0.85rem; color: var(--nc-text-2); margin-bottom: 8px;
-    display: block; border-bottom: 1px solid var(--nc-bg-3); padding-bottom: 4px;
-}
-
-.chip {
-    background: var(--nc-text-1); color: var(--nc-bg-2);
-    padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;
-    display: flex; align-items: center; justify-content: space-between; gap: 6px;
-}
-
-.form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-bottom: 20px;
 }
 
 .params-grid {
@@ -151,38 +219,62 @@ input, select {
     margin-bottom: 20px;
 }
 
+.source-picker {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+}
+.source-picker > div:first-child { flex: 1; }
+.source-picker-actions { display: flex; gap: 8px; }
+#source_horizon { width: 100px; }
+
+.pos-rel { position: relative; }
+
+/* The forecaster/observer multi-select dropdown. */
+.chips {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    width: 450px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 12px;
+    margin: 0;
+    border: 1px solid var(--nc-bg-3);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    background: var(--nc-bg-2);
+    color: var(--nc-text-1);
+    display: none;
+    gap: 16px;
+    z-index: 50;
+}
+.chips.show { display: flex; }
+.chips fieldset { flex: 1; border: none; padding: 0; margin: 0; }
+.chips legend {
+    width: 100%;
+    font-size: 0.85rem; color: var(--nc-text-2); margin-bottom: 8px; padding: 0 0 4px 0;
+    border-bottom: 1px solid var(--nc-bg-3);
+}
+.chips fieldset > div { display: flex; flex-direction: column; gap: var(--spacing-sm); }
+
+.chip {
+    background: var(--nc-text-1); color: var(--nc-bg-2);
+    padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+}
+.chip-text { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+.chip-close { cursor: pointer; font-weight: bold; opacity: 0.8; flex-shrink: 0; }
+
 .empty-state {
     display: flex; align-items: center; justify-content: center;
     color: var(--nc-text-2); flex-grow: 1;
 }
 
-.form-group label {
-    display: block; font-size: 0.9rem; font-weight: 600;
-    color: var(--nc-text-2); margin-bottom: 6px;
-}
-
-.dashboard-header {
-    background: var(--nc-bg-2);
-    padding: 12px var(--spacing-md);
-    border-bottom: 1px solid rgba(0,0,0,0.04);
-    display: flex; gap: var(--spacing-md); align-items: center;
-    margin: 0 0 var(--spacing-md) 0;
-    box-sizing: border-box; min-height: 48px;
-}
-
-.dashboard-header h1 { margin: 0; padding: 0; font-size: 1.2rem; color: var(--nc-text-1); line-height: 1.2; }
-.dashboard-header nav { display: flex; gap: 16px; }
-.dashboard-header a { color: var(--nc-text-1); text-decoration: none; font-weight: 600; line-height: 1.2; margin: 0; padding: 0; }
-
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator { display: inline; }
 .htmx-request.htmx-indicator { display: inline; }
-
-#chart-panel { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; }
-
-.panel-header { margin-bottom: 1.5rem; display: flex; align-items: baseline; gap: 12px; }
-.panel-header strong { font-size: 1.2rem; color: var(--nc-text-1); }
-.panel-header small { color: var(--nc-text-2); font-size: 0.85rem; }
 
 @media (prefers-color-scheme: dark) {
     :root {

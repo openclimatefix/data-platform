@@ -1,19 +1,19 @@
 {{ template "header" . }}
 
-<main class="dashboard-grid" style="grid-template-columns: 1fr;">
-    <div id="location-results" style="display: contents;"
+<main>
+    <div id="location-results"
         {{ if .DefaultLocationUUID }}
         hx-get="/components/location_details?location_uuid={{ .DefaultLocationUUID }}&energy_source={{ .DefaultEnergySource }}"
         hx-trigger="load, locationUpdated from:body"
         {{ end }}>
         
-        <div class="panel empty-state" style="min-height: 400px;">
+        <section class="empty-state">
             {{ if .DefaultLocationUUID }}
-            <span class="htmx-indicator text-muted" style="display: inline;"><i>Loading location details...</i></span>
+            <span class="htmx-indicator"><em>Loading location details...</em></span>
             {{ else }}
             Please select a location and energy source on the Forecasts page first.
             {{ end }}
-        </div>
+        </section>
     </div>
 </main>
 

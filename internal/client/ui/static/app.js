@@ -53,3 +53,30 @@ document.addEventListener('htmx:configRequest', function(evt) {
         : 'req' + Math.random().toString(36).substring(2) + Date.now().toString(36);
     evt.detail.headers['X-Request-Id'] = uuid.replace(/-/g, '');
 });
+
+// flatpickr targets are always brought into the DOM via an HTMX swap (there is no
+// server-rendered-only path), so initialising them on htmx:afterSettle covers every case.
+document.addEventListener('htmx:afterSettle', function(evt) {
+    var root = evt.target;
+    if (!root || typeof root.querySelector !== 'function') return;
+
+    var rangeEl = root.querySelector('#time_window');
+    if (rangeEl && !rangeEl._flatpickr) {
+        flatpickr(rangeEl, {
+            mode: 'range',
+            enableTime: true,
+            time_24hr: true,
+            dateFormat: 'Y-m-d H:i'
+        });
+    }
+
+    var singleEl = root.querySelector('#valid_from_utc');
+    if (singleEl && !singleEl._flatpickr) {
+        flatpickr(singleEl, {
+            enableTime: true,
+            time_24hr: true,
+            dateFormat: 'Y-m-d H:i',
+            defaultDate: new Date()
+        });
+    }
+});

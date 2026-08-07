@@ -1,5 +1,5 @@
 {{ define "map_component" }}
-    <div class="panel-header">
+    <header>
         {{ if .IsInteractiveMap }}
         <strong>GSP Generation Map</strong>
         <small id="{{ .MapID }}-time-label">{{ index .Labels 0 }}</small>
@@ -7,7 +7,7 @@
         <strong>Location Map</strong>
         <small id="{{ .MapID }}-time-label">{{ if .Location.Latlng }}{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }}{{ else }}Geometry{{ end }}</small>
         {{ end }}
-    </div>
+    </header>
     <div id="{{ .MapID }}" class="map-container"></div>
     <script type="application/json" id="{{ .MapID }}-config">
     {{ if .IsInteractiveMap }}

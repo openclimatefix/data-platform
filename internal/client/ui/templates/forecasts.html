@@ -1,38 +1,35 @@
 {{ template "header" . }}
 
-<main class="dashboard-grid">
-    <div class="left-column">
-        {{ template "selectors" . }}
-        {{ template "chart" . }}
-    </div>
-
-    <div class="panel right-column" id="map-panel">
-        <div class="panel-header">
+<main class="dashboard">
+    {{ template "selectors" . }}
+    {{ template "chart" . }}
+    <aside id="map-panel">
+        <header>
             <strong>Generation Map</strong>
             <small>Snapshot</small>
-        </div>
+        </header>
         <div class="map-container empty-state">
             Loading map...
         </div>
-    </div>
+    </aside>
 </main>
 
 {{ template "footer" . }}
 
 {{ define "selectors" }}
-<div class="panel" id="selectors-panel" hx-get="/components/selectors?mode={{ .Country }}" hx-trigger="load">
-    <p style="color: var(--nc-text-2);"><i>Loading forecast configuration...</i></p>
-</div>
+<section id="selectors-panel" hx-get="/components/selectors" hx-trigger="load">
+    <div class="empty-state">Loading forecast configuration...</div>
+</section>
 {{ end }}
 
 {{ define "chart" }}
-<div class="panel" id="chart-panel">
-    <div class="panel-header">
-        <strong style="text-transform: capitalize;">Forecast View</strong>
+<section id="chart-panel">
+    <header>
+        <strong>Forecast View</strong>
         <small>Loading timeseries data...</small>
-    </div>
-    <div class="empty-state" style="min-height: 320px;">
+    </header>
+    <div class="empty-state">
         Waiting for input...
     </div>
-</div>
+</section>
 {{ end }}

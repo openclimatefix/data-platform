@@ -27,6 +27,14 @@ var templateFiles embed.FS
 
 var tpl *template.Template
 
+// Defaults for the single dashboard view.
+const (
+	defaultDashboardLocationName = "uk"
+	defaultForecasterNamePrefix  = "blend"
+	defaultObserverNamePrimary   = "pvlive_in_day"
+	defaultObserverNameSecondary = "pvlive_day_after"
+)
+
 func init() {
 	funcs := template.FuncMap{
 		"calcWatts": func(frac float32, cap uint64) float32 {
@@ -173,13 +181,7 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := struct {
-		Country string
-	}{
-		Country: "uk",
-	}
-
-	err := tpl.ExecuteTemplate(w, "forecasts.html", data)
+	err := tpl.ExecuteTemplate(w, "forecasts.html", nil)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to execute forecasts template")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -189,8 +191,6 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-
-	mode := r.URL.Query().Get("mode")
 
 	var (
 		locResp *pb.ListLocationsResponse
@@ -244,25 +244,32 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var dashboardCountry, defaultLocationUUID string
-	if mode != "" {
-		dashboardCountry = mode
-		// find location uuid for country
-		for _, loc := range locResp.GetLocations() {
-			if strings.EqualFold(loc.GetLocationName(), dashboardCountry) {
-				defaultLocationUUID = loc.GetLocationUuid()
-				break
+	var defaultLocationUUID, defaultLocationLabel string
+	for _, loc := range locResp.GetLocations() {
+		if strings.EqualFold(loc.GetLocationName(), defaultDashboardLocationName) {
+			defaultLocationUUID = loc.GetLocationUuid()
+			capStr := ""
+			if capWatts := loc.GetEffectiveCapacityWatts(); capWatts >= 1_000_000 {
+				capStr = fmt.Sprintf("%.1fMW", float64(capWatts)/1_000_000.0)
+			} else if capWatts >= 1_000 {
+				capStr = fmt.Sprintf("%.1fkW", float64(capWatts)/1_000.0)
+			} else {
+				capStr = fmt.Sprintf("%dW", capWatts)
 			}
+			defaultLocationLabel = fmt.Sprintf("%s (%s, %s)", loc.GetLocationName(), loc.GetLocationType().String(), capStr)
+			break
 		}
 	}
 
 	data := struct {
-		Locations           []*pb.ListLocationsResponse_LocationSummary
-		Forecasters         []*pb.Forecaster
-		Observers           []*pb.ListObserversResponse_ObserverSummary
-		DefaultTimeWindow   string
-		DashboardCountry    string
-		DefaultLocationUUID string
+		Locations             []*pb.ListLocationsResponse_LocationSummary
+		Forecasters           []*pb.Forecaster
+		Observers             []*pb.ListObserversResponse_ObserverSummary
+		DefaultTimeWindow     string
+		DefaultLocationUUID   string
+		DefaultLocationLabel  string
+		DefaultForecasterName string
+		DefaultObserverNames  []string
 	}{
 		Locations:   locResp.GetLocations(),
 		Forecasters: fcResp.GetForecasters(),
@@ -271,8 +278,10 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 			time.Now().UTC().Add(-48*time.Hour).Format("2006-01-02 15:04"),
 			time.Now().UTC().Add(36*time.Hour).Format("2006-01-02 15:04"),
 		),
-		DashboardCountry:    dashboardCountry,
-		DefaultLocationUUID: defaultLocationUUID,
+		DefaultLocationUUID:   defaultLocationUUID,
+		DefaultLocationLabel:  defaultLocationLabel,
+		DefaultForecasterName: defaultForecasterNamePrefix,
+		DefaultObserverNames:  []string{defaultObserverNamePrimary, defaultObserverNameSecondary},
 	}
 
 	err := tpl.ExecuteTemplate(w, "selectors.html", data)

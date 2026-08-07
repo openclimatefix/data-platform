@@ -1,34 +1,33 @@
-<article class="flex-col flex-grow min-h-0">
-    <div class="panel-header">
-        <strong>Forecast Generation</strong> 
-        <small>
-            {{ .Location.LocationName }} ({{ .Location.LocationUuid }}) 
-            <a href="/locations?location_uuid={{ .Location.LocationUuid }}&energy_source={{ .EnergySource }}" style="margin-left: 8px; color: var(--nc-ac-1); text-decoration: none;">View Details &rarr;</a>
-        </small>
+<header>
+    <strong>Forecast Generation</strong> 
+    <small>
+        {{ .Location.LocationName }} ({{ .Location.LocationUuid }}) 
+        <a href="/locations?location_uuid={{ .Location.LocationUuid }}&energy_source={{ .EnergySource }}" class="view-details">View Details &rarr;</a>
+    </small>
+</header>
+
+{{ if not .Series }}
+    <div class="empty-state">
+        No forecast data found for this configuration.
     </div>
-    
-    {{ if not .Series }}
-        <div class="empty-state min-h-320">
-            No forecast data found for this configuration.
-        </div>
-    {{ else }}
-        <figure class="m-0 flex-grow flex-col min-h-0">
-            <div id="forecastChart" class="flex-grow min-h-0 w-full"></div>
-        </figure>
-        <script type="application/json" id="forecastChartConfig">
-        {
-            "labels": {{ .Labels | toJSON }},
-            "series": {{ .Series | toJSON }},
-            "capacityWatts": {{ .Location.EffectiveCapacityWatts }},
-            "timestamps": {{ .Timestamps | toJSON }}
-        }
-        </script>
-        <script>window.mountForecastChart('forecastChart', 'forecastChartConfig');</script>
-    {{ end }}
+{{ else }}
+    <figure>
+        <div id="forecastChart"></div>
+    </figure>
+    <script type="application/json" id="forecastChartConfig">
+    {
+        "labels": {{ .Labels | toJSON }},
+        "series": {{ .Series | toJSON }},
+        "capacityWatts": {{ .Location.EffectiveCapacityWatts }},
+        "timestamps": {{ .Timestamps | toJSON }}
+    }
+    </script>
+    <script>window.mountForecastChart('forecastChart', 'forecastChartConfig');</script>
+{{ end }}
 
 {{ if not .SkipMap }}
-<div id="map-panel" hx-swap-oob="innerHTML">
-{{ template "map_component" . }}
-</div>
+<aside id="map-panel" hx-swap-oob="innerHTML">
+    {{ template "map_component" . }}
+</aside>
 {{ end }}
 
