@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -220,6 +219,11 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := parseForecastQuery(r, false); err != nil {
+		httpError(w, r, err.Error(), http.StatusBadRequest, nil)
+		return
+	}
+
 	if r.URL.RawQuery == "" {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
@@ -248,8 +252,8 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 			}
-			
-			// Fallback if "uk" doesn't exist (e.g. dummy dataset)
+
+			// Fallback if "uk" doesn't exist (e.g. dummy dataset).
 			if defaultLocationUUID == "" && len(locResp.GetLocations()) > 0 {
 				defaultLocationUUID = locResp.GetLocations()[0].GetLocationUuid()
 			}
@@ -266,17 +270,17 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if defaultLocationUUID != "" {
-				now := time.Now().UTC()
-				v := url.Values{}
-				v.Set("location_uuid", defaultLocationUUID)
-				v.Set("energy_source", "1")
-				v.Set("start", now.Add(-48*time.Hour).Format("2006-01-02 15:04"))
-				v.Set("end", now.Add(36*time.Hour).Format("2006-01-02 15:04"))
-				v.Add("forecaster", defaultForecasterNamePrefix+"|"+defaultFcVersion+"|0")
-				v.Add("observer", defaultObserverNamePrimary)
-				v.Add("observer", defaultObserverNameSecondary)
+				q := defaultForecastQuery(time.Now().UTC())
+				q.LocUUID = defaultLocationUUID
+				q.Forecasters = []ForecasterInput{
+					{Raw: defaultForecasterNamePrefix + "|" + defaultFcVersion + "|0"},
+				}
+				q.Observers = []ObserverInput{
+					{Raw: defaultObserverNamePrimary},
+					{Raw: defaultObserverNameSecondary},
+				}
 
-				http.Redirect(w, r, "/?"+v.Encode(), http.StatusFound)
+				http.Redirect(w, r, "/?"+q.Values().Encode(), http.StatusFound)
 				return
 			}
 		}
@@ -390,25 +394,25 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		Locations          []*pb.ListLocationsResponse_LocationSummary
-		Forecasters        []*pb.Forecaster
-		Observers          []*pb.ListObserversResponse_ObserverSummary
-		EnergySources      []energySourceOption
-		SelectedEnergy     string
-		TimeWindow         string
-		LocationUUID       string
-		LocationLabel      string
-		SelectedSources    []selectedSource
+		Locations       []*pb.ListLocationsResponse_LocationSummary
+		Forecasters     []*pb.Forecaster
+		Observers       []*pb.ListObserversResponse_ObserverSummary
+		EnergySources   []energySourceOption
+		SelectedEnergy  string
+		TimeWindow      string
+		LocationUUID    string
+		LocationLabel   string
+		SelectedSources []selectedSource
 	}{
-		Locations:          locResp.GetLocations(),
-		Forecasters:        fcResp.GetForecasters(),
-		Observers:          obsResp.GetObservers(),
-		EnergySources:      getEnergySourceOptions(),
-		SelectedEnergy:     esRaw,
-		TimeWindow:         timeWindow,
-		LocationUUID:       locUUID,
-		LocationLabel:      locLabel,
-		SelectedSources:    selectedSources,
+		Locations:       locResp.GetLocations(),
+		Forecasters:     fcResp.GetForecasters(),
+		Observers:       obsResp.GetObservers(),
+		EnergySources:   getEnergySourceOptions(),
+		SelectedEnergy:  esRaw,
+		TimeWindow:      timeWindow,
+		LocationUUID:    locUUID,
+		LocationLabel:   locLabel,
+		SelectedSources: selectedSources,
 	}
 
 	render(w, r, "selectors.html", data)

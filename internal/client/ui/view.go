@@ -18,7 +18,9 @@ type mapView struct {
 	Timestamps       []int64
 	EnergySource     string
 	FirstForecaster  string
-	TimeWindow       string
+	// TimeWindow is not read by any Go/template code; it is passed through to map.js's
+	// choropleth config, which round-trips it into the GSP drill-down request URL.
+	TimeWindow string
 }
 
 type forecastView struct {

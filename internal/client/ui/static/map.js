@@ -10,15 +10,28 @@
         };
     }
 
+    // The map panel is replaced wholesale on every swap (hx-swap-oob="innerHTML"), so a
+    // listener stashed on the map element itself is unreachable on the next mount - the old
+    // element is detached and a fresh one takes its id. Track the single active listener at
+    // module scope instead, so mounting always tears down whatever came before it.
+    var activeTimeSelectedListener = null;
+
+    function setTimeSelectedListener(fn) {
+        if (activeTimeSelectedListener) {
+            document.removeEventListener('timeSelected', activeTimeSelectedListener);
+        }
+        activeTimeSelectedListener = fn;
+        if (fn) {
+            document.addEventListener('timeSelected', fn);
+        }
+    }
+
     window.mountChoroplethMap = function(mapElId, configElId) {
+        setTimeSelectedListener(null);
+
         var mapDom = document.getElementById(mapElId);
         var configEl = document.getElementById(configElId);
         if (!mapDom || !configEl) return;
-
-        if (mapDom.__timeSelectedListener) {
-            document.removeEventListener('timeSelected', mapDom.__timeSelectedListener);
-            mapDom.__timeSelectedListener = null;
-        }
 
         var config = JSON.parse(configEl.textContent);
         var geojsonData = config.geojson;
@@ -181,12 +194,11 @@
                 }).catch(function(err) { console.error(err); });
         };
 
-        mapDom.__timeSelectedListener = function(e) {
+        setTimeSelectedListener(function(e) {
             var labelEl = document.getElementById(labelElId);
             if (labelEl) labelEl.innerHTML = e.detail.label;
             updateMapData(e.detail.timestamp);
-        };
-        document.addEventListener('timeSelected', mapDom.__timeSelectedListener);
+        });
 
         if (config.timestamps && config.timestamps.length > 0) {
             updateMapData(config.timestamps[0]);
@@ -194,14 +206,11 @@
     };
 
     window.mountLocationMap = function(mapElId, configElId) {
+        setTimeSelectedListener(null);
+
         var mapDom = document.getElementById(mapElId);
         var configEl = document.getElementById(configElId);
         if (!mapDom || !configEl) return;
-
-        if (mapDom.__timeSelectedListener) {
-            document.removeEventListener('timeSelected', mapDom.__timeSelectedListener);
-            mapDom.__timeSelectedListener = null;
-        }
 
         var config = JSON.parse(configEl.textContent);
         var geojsonData = config.geojson;
@@ -246,7 +255,7 @@
 
         var myMap = window.mountChart(mapDom, function() { return option; });
 
-        mapDom.__timeSelectedListener = function(e) {
+        setTimeSelectedListener(function(e) {
             var labelEl = document.getElementById(labelElId);
             if (labelEl && config.hasLatlng) {
                 labelEl.innerHTML = config.latlngLabel + ' | ' + e.detail.label;
@@ -261,7 +270,6 @@
                 mapOpt.series[0].itemStyle.opacity = e.detail.fraction;
                 myMap.setOption(mapOpt);
             }
-        };
-        document.addEventListener('timeSelected', mapDom.__timeSelectedListener);
+        });
     };
 })();

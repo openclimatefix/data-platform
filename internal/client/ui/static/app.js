@@ -62,12 +62,22 @@ document.addEventListener('htmx:afterSettle', function(evt) {
 
     var rangeEl = root.querySelector('#time_window');
     if (rangeEl && !rangeEl._flatpickr) {
-        flatpickr(rangeEl, {
+        // Range mode writes just the first date to the input until a second date is picked,
+        // which is a validly non-empty (so `required` doesn't catch it) but incomplete value.
+        var checkRangeValidity = function(selectedDates) {
+            rangeEl.setCustomValidity(
+                selectedDates.length === 2 ? '' : 'Please select both a start and end date.'
+            );
+        };
+
+        var rangePicker = flatpickr(rangeEl, {
             mode: 'range',
             enableTime: true,
             time_24hr: true,
-            dateFormat: 'Y-m-d H:i'
+            dateFormat: 'Y-m-d H:i',
+            onClose: checkRangeValidity
         });
+        checkRangeValidity(rangePicker.selectedDates);
     }
 
     var singleEl = root.querySelector('#valid_from_utc');

@@ -45,7 +45,7 @@ func fetchConcurrently[T any](ctx context.Context, items []T, fetchFn func(conte
 	return results
 }
 
-func fetchForecasters(ctx context.Context, client pb.DataPlatformDataServiceClient, p *forecastParams) []seriesResult {
+func fetchForecasters(ctx context.Context, client pb.DataPlatformDataServiceClient, p *forecastQuery) []seriesResult {
 	return fetchConcurrently(ctx, p.Forecasters, func(gCtx context.Context, f ForecasterInput) (seriesResult, error) {
 		req := &pb.GetForecastAsTimeseriesRequest{
 			LocationUuid: p.LocUUID,
@@ -92,7 +92,7 @@ func fetchForecasters(ctx context.Context, client pb.DataPlatformDataServiceClie
 	})
 }
 
-func fetchObservers(ctx context.Context, client pb.DataPlatformDataServiceClient, p *forecastParams) []seriesResult {
+func fetchObservers(ctx context.Context, client pb.DataPlatformDataServiceClient, p *forecastQuery) []seriesResult {
 	return fetchConcurrently(ctx, p.Observers, func(gCtx context.Context, o ObserverInput) (seriesResult, error) {
 		req := &pb.GetObservationsAsTimeseriesRequest{
 			LocationUuid: p.LocUUID,

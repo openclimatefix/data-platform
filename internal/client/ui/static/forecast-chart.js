@@ -88,16 +88,12 @@
             }
         });
 
-        var now = new Date();
-        var currentYear = now.getFullYear();
-
+        var nowMs = Date.now();
         var closestIndex = 0;
         var minDiff = Infinity;
 
-        labels.forEach(function(lbl, idx) {
-            var dateStr = currentYear + " " + lbl;
-            var d = new Date(dateStr);
-            var diff = Math.abs(now.getTime() - d.getTime());
+        timestamps.forEach(function(ts, idx) {
+            var diff = Math.abs(nowMs - ts * 1000);
             if (diff < minDiff) {
                 minDiff = diff;
                 closestIndex = idx;
@@ -245,7 +241,7 @@
                 var count = 0;
 
                 seriesData.forEach(function(s) {
-                    if (s.type === 'line' && !s.name.includes('Band')) {
+                    if (s.type === 'line' && (!s.id || !s.id.includes('_Band'))) {
                         var d = s.data[xIndex];
                         var val = (d && typeof d === 'object') ? d.value : d;
                         if (val !== null && val !== undefined && val !== 'null' && !isNaN(val)) {

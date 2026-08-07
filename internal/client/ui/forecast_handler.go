@@ -18,7 +18,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	p, err := parseForecastRequest(r)
+	p, err := parseForecastQuery(r, true)
 	if err != nil {
 		httpError(w, r, err.Error(), http.StatusBadRequest, nil)
 		return
@@ -131,6 +131,6 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 		SkipMap: p.SkipMap,
 	}
 
-	w.Header().Set("HX-Push-URL", "/?"+p.URLValues().Encode())
+	w.Header().Set("HX-Push-URL", "/?"+p.Values().Encode())
 	render(w, r, "forecast_results.html", data)
 }

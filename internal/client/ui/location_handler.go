@@ -27,7 +27,7 @@ func (ui *UIClient) handleLocations(w http.ResponseWriter, r *http.Request) {
 
 	defaultEnergy := r.URL.Query().Get("energy_source")
 	if defaultEnergy == "" {
-		defaultEnergy = "1"
+		defaultEnergy = strconv.Itoa(int(getEnergySourceOptions()[0].Value))
 	}
 
 	data := struct {
@@ -106,7 +106,7 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to fetch location timeseries history")
 		}
-		
+
 		// If history is empty, fallback to current capacity so ECharts doesn't crash on empty arrays
 		historyLabels = []string{time.Now().UTC().AddDate(0, 0, -31).Format("Jan 02 15:04")}
 		historyValues = []float64{float64(locResp.GetEffectiveCapacityWatts())}
