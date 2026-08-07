@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -219,7 +220,72 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render(w, r, "forecasts.html", nil)
+	if r.URL.RawQuery == "" {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		g, gCtx := errgroup.WithContext(ctx)
+		var locResp *pb.ListLocationsResponse
+		var fcResp *pb.ListForecastersResponse
+
+		g.Go(func() error {
+			var err error
+			locResp, err = ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{})
+			return err
+		})
+
+		g.Go(func() error {
+			var err error
+			fcResp, err = ui.grpcClient.ListForecasters(gCtx, &pb.ListForecastersRequest{})
+			return err
+		})
+
+		if err := g.Wait(); err == nil {
+			var defaultLocationUUID string
+			for _, loc := range locResp.GetLocations() {
+				if strings.EqualFold(loc.GetLocationName(), defaultDashboardLocationName) {
+					defaultLocationUUID = loc.GetLocationUuid()
+					break
+				}
+			}
+			
+			// Fallback if "uk" doesn't exist (e.g. dummy dataset)
+			if defaultLocationUUID == "" && len(locResp.GetLocations()) > 0 {
+				defaultLocationUUID = locResp.GetLocations()[0].GetLocationUuid()
+			}
+
+			var defaultFcVersion string
+			for _, fc := range fcResp.GetForecasters() {
+				if strings.HasPrefix(fc.GetForecasterName(), defaultForecasterNamePrefix) {
+					defaultFcVersion = fc.GetForecasterVersion()
+					break
+				}
+			}
+			if defaultFcVersion == "" {
+				defaultFcVersion = "unknown"
+			}
+
+			if defaultLocationUUID != "" {
+				now := time.Now().UTC()
+				v := url.Values{}
+				v.Set("location_uuid", defaultLocationUUID)
+				v.Set("energy_source", "1")
+				v.Set("start", now.Add(-48*time.Hour).Format("2006-01-02 15:04"))
+				v.Set("end", now.Add(36*time.Hour).Format("2006-01-02 15:04"))
+				v.Add("forecaster", defaultForecasterNamePrefix+"|"+defaultFcVersion+"|0")
+				v.Add("observer", defaultObserverNamePrimary)
+				v.Add("observer", defaultObserverNameSecondary)
+
+				http.Redirect(w, r, "/?"+v.Encode(), http.StatusFound)
+				return
+			}
+		}
+	}
+
+	data := struct{ Query template.URL }{
+		Query: template.URL(r.URL.RawQuery),
+	}
+	render(w, r, "forecasts.html", data)
 }
 
 func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
@@ -251,10 +317,11 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 
 	_ = g.Wait()
 
-	var defaultLocationUUID, defaultLocationLabel string
+	var locLabel string
+	locUUID := r.URL.Query().Get("location_uuid")
+
 	for _, loc := range locResp.GetLocations() {
-		if strings.EqualFold(loc.GetLocationName(), defaultDashboardLocationName) {
-			defaultLocationUUID = loc.GetLocationUuid()
+		if loc.GetLocationUuid() == locUUID {
 			capStr := ""
 			if capWatts := loc.GetEffectiveCapacityWatts(); capWatts >= 1_000_000 {
 				capStr = fmt.Sprintf("%.1fMW", float64(capWatts)/1_000_000.0)
@@ -263,34 +330,85 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 			} else {
 				capStr = fmt.Sprintf("%dW", capWatts)
 			}
-			defaultLocationLabel = fmt.Sprintf("%s (%s, %s)", loc.GetLocationName(), loc.GetLocationType().String(), capStr)
+			locLabel = fmt.Sprintf("%s (%s, %s)", loc.GetLocationName(), loc.GetLocationType().String(), capStr)
 			break
 		}
 	}
 
+	esRaw := r.URL.Query().Get("energy_source")
+	startRaw := r.URL.Query().Get("start")
+	endRaw := r.URL.Query().Get("end")
+
+	timeWindow := ""
+	if startRaw != "" && endRaw != "" {
+		timeWindow = startRaw + " to " + endRaw
+	} else {
+		now := time.Now().UTC()
+		timeWindow = fmt.Sprintf("%s to %s",
+			now.Add(-48*time.Hour).Format("2006-01-02 15:04"),
+			now.Add(36*time.Hour).Format("2006-01-02 15:04"),
+		)
+	}
+
+	type selectedSource struct {
+		Type  string
+		Value string
+		Label string
+	}
+	var selectedSources []selectedSource
+
+	for _, fRaw := range r.URL.Query()["forecaster"] {
+		parts := strings.Split(fRaw, "|")
+		if len(parts) >= 1 {
+			// Find nice label
+			label := parts[0]
+			for _, f := range fcResp.GetForecasters() {
+				if f.GetForecasterName() == parts[0] {
+					label = f.GetForecasterName() + " (v" + f.GetForecasterVersion() + ")"
+					break
+				}
+			}
+			if len(parts) == 3 {
+				label += " @ " + parts[2] + "m"
+			} else {
+				label += " @ 0m"
+			}
+			selectedSources = append(selectedSources, selectedSource{
+				Type:  "forecaster",
+				Value: fRaw,
+				Label: label,
+			})
+		}
+	}
+
+	for _, oRaw := range r.URL.Query()["observer"] {
+		selectedSources = append(selectedSources, selectedSource{
+			Type:  "observer",
+			Value: oRaw,
+			Label: oRaw + " [Observer]",
+		})
+	}
+
 	data := struct {
-		Locations             []*pb.ListLocationsResponse_LocationSummary
-		Forecasters           []*pb.Forecaster
-		Observers             []*pb.ListObserversResponse_ObserverSummary
-		EnergySources         []energySourceOption
-		DefaultTimeWindow     string
-		DefaultLocationUUID   string
-		DefaultLocationLabel  string
-		DefaultForecasterName string
-		DefaultObserverNames  []string
+		Locations          []*pb.ListLocationsResponse_LocationSummary
+		Forecasters        []*pb.Forecaster
+		Observers          []*pb.ListObserversResponse_ObserverSummary
+		EnergySources      []energySourceOption
+		SelectedEnergy     string
+		TimeWindow         string
+		LocationUUID       string
+		LocationLabel      string
+		SelectedSources    []selectedSource
 	}{
-		Locations:     locResp.GetLocations(),
-		Forecasters:   fcResp.GetForecasters(),
-		Observers:     obsResp.GetObservers(),
-		EnergySources: getEnergySourceOptions(),
-		DefaultTimeWindow: fmt.Sprintf("%s to %s",
-			time.Now().UTC().Add(-48*time.Hour).Format("2006-01-02 15:04"),
-			time.Now().UTC().Add(36*time.Hour).Format("2006-01-02 15:04"),
-		),
-		DefaultLocationUUID:   defaultLocationUUID,
-		DefaultLocationLabel:  defaultLocationLabel,
-		DefaultForecasterName: defaultForecasterNamePrefix,
-		DefaultObserverNames:  []string{defaultObserverNamePrimary, defaultObserverNameSecondary},
+		Locations:          locResp.GetLocations(),
+		Forecasters:        fcResp.GetForecasters(),
+		Observers:          obsResp.GetObservers(),
+		EnergySources:      getEnergySourceOptions(),
+		SelectedEnergy:     esRaw,
+		TimeWindow:         timeWindow,
+		LocationUUID:       locUUID,
+		LocationLabel:      locLabel,
+		SelectedSources:    selectedSources,
 	}
 
 	render(w, r, "selectors.html", data)

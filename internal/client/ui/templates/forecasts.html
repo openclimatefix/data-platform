@@ -17,7 +17,7 @@
 {{ template "footer" . }}
 
 {{ define "selectors" }}
-<section id="selectors-panel" hx-get="/components/selectors" hx-trigger="load">
+<section id="selectors-panel" hx-get="/components/selectors{{ if .Query }}?{{ .Query }}{{ end }}" hx-trigger="load">
     <div class="empty-state">Loading forecast configuration...</div>
 </section>
 {{ end }}

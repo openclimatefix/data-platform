@@ -8,8 +8,9 @@
         <div>
             <label for="energy_source">Energy Source</label>
             <select id="energy_source" name="energy_source" required>
+                {{ $selectedEnergy := .SelectedEnergy }}
                 {{ range .EnergySources }}
-                <option value="{{ .Value }}">{{ .Name }}</option>
+                <option value="{{ .Value }}" {{ if eq (printf "%d" .Value) $selectedEnergy }}selected{{ end }}>{{ .Name }}</option>
                 {{ end }}
             </select>
         </div>
@@ -18,8 +19,8 @@
             <label for="location_search">Location</label>
             <input type="text" list="location_options" id="location_search" autocomplete="off"
                 placeholder="Search by name, type, or capacity..." required
-                value="{{ .DefaultLocationLabel }}">
-            <input type="hidden" id="location_uuid" name="location_uuid" value="{{ .DefaultLocationUUID }}">
+                value="{{ .LocationLabel }}">
+            <input type="hidden" id="location_uuid" name="location_uuid" value="{{ .LocationUUID }}">
             <datalist id="location_options">
                 {{ range .Locations }}
                 <option data-uuid="{{ .LocationUuid }}" value="{{ .LocationName }} ({{ .LocationType }}, {{ formatCapacity .EffectiveCapacityWatts }})"></option>
@@ -29,7 +30,7 @@
 
         <div>
             <label for="time_window">Time Window (UTC)</label>
-            <input type="text" id="time_window" name="time_window" value="{{ .DefaultTimeWindow }}" required>
+            <input type="text" id="time_window" name="time_window" value="{{ .TimeWindow }}" required>
         </div>
     </div>
 
@@ -55,21 +56,43 @@
         <div class="source-picker-actions">
             <button type="button" id="btn_add_source">Add</button>
             <div class="pos-rel">
-                <button type="button" id="source_badge" onclick="document.getElementById('source_chips').classList.toggle('show')">0 Selected</button>
+                <button type="button" id="source_badge" onclick="document.getElementById('source_chips').classList.toggle('show')">{{ len .SelectedSources }} Selected</button>
                 <div class="chips" id="source_chips">
                     <fieldset>
                         <legend>Forecasters</legend>
-                        <div id="fc_chips_container"></div>
+                        <div id="fc_chips_container">
+                            {{ range .SelectedSources }}
+                                {{ if eq .Type "forecaster" }}
+                                <div class="chip" data-type="forecaster" data-value="{{ .Value }}">
+                                    <span class="chip-text" title="{{ .Label }}">{{ .Label }}</span>
+                                    <span class="chip-close">&times;</span>
+                                </div>
+                                {{ end }}
+                            {{ end }}
+                        </div>
                     </fieldset>
                     <fieldset>
                         <legend>Observers</legend>
-                        <div id="obs_chips_container"></div>
+                        <div id="obs_chips_container">
+                            {{ range .SelectedSources }}
+                                {{ if eq .Type "observer" }}
+                                <div class="chip" data-type="observer" data-value="{{ .Value }}">
+                                    <span class="chip-text" title="{{ .Label }}">{{ .Label }}</span>
+                                    <span class="chip-close">&times;</span>
+                                </div>
+                                {{ end }}
+                            {{ end }}
+                        </div>
                     </fieldset>
                 </div>
             </div>
         </div>
 
-        <div id="source_hidden_inputs"></div>
+        <div id="source_hidden_inputs">
+            {{ range .SelectedSources }}
+                <input type="hidden" name="{{ .Type }}" value="{{ .Value }}" data-type="{{ .Type }}" data-value="{{ .Value }}">
+            {{ end }}
+        </div>
     </div>
 
     <template id="chip_template">
@@ -203,26 +226,5 @@
 
     updateLocationValidity();
     updateSourceBadge();
-
-    // There is only one dashboard view, so the default sources are always pre-selected
-    // and the first chart load is always kicked off — no mode to opt out of.
-    var defaultForecasterName = {{ .DefaultForecasterName | toJSON }};
-    var defaultObserverNames = {{ .DefaultObserverNames | toJSON }};
-
-    var fOpt = Array.from(document.getElementById('source_options').options).find(function(o) {
-        return o.dataset.type === 'forecaster' && o.dataset.val.indexOf(defaultForecasterName) === 0;
-    });
-    if (fOpt) {
-        addSource('forecaster', fOpt.dataset.val + '|0', fOpt.value.replace(' [Forecaster]', '') + ' @ 0m');
-    }
-
-    defaultObserverNames.forEach(function(name) {
-        var oOpt = Array.from(document.getElementById('source_options').options).find(function(o) {
-            return o.dataset.type === 'observer' && o.dataset.val === name;
-        });
-        if (oOpt) addSource('observer', oOpt.dataset.val, oOpt.value);
-    });
-
-    // Initial load is now handled declaratively by hx-trigger="load, submit" on the form.
 })();
 </script>

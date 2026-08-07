@@ -124,12 +124,13 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			IsPolygon:        isPolygon(geoJSONStr),
 			EnergySource:     strconv.Itoa(int(p.EnergySource)),
 			FirstForecaster:  firstForecaster,
-			TimeWindow:       p.RawTimeWindow,
+			TimeWindow:       p.StartTs.Format("2006-01-02 15:04") + " to " + p.EndTs.Format("2006-01-02 15:04"),
 			MapID:            "map",
 		},
 		Series:  allSeries,
 		SkipMap: p.SkipMap,
 	}
 
+	w.Header().Set("HX-Push-URL", "/?"+p.URLValues().Encode())
 	render(w, r, "forecast_results.html", data)
 }
