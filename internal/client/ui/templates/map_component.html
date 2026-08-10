@@ -8,7 +8,9 @@
         <small id="{{ .MapID }}-time-label">{{ if .Location.Latlng }}{{ .Location.Latlng.Latitude }}, {{ .Location.Latlng.Longitude }}{{ else }}Geometry{{ end }}</small>
         {{ end }}
     </header>
-    <div id="{{ .MapID }}" class="map-container"></div>
+    <div id="{{ .MapID }}" class="map-container"
+        data-chart="{{ if .IsInteractiveMap }}choropleth{{ else }}location{{ end }}"
+        data-chart-config="{{ .MapID }}-config"></div>
     <script type="application/json" id="{{ .MapID }}-config">
     {{ if .IsInteractiveMap }}
     {
@@ -22,7 +24,6 @@
     {{ else }}
     {
         "geojson": {{ .GeoJSON }},
-        "isPolygon": {{ if .IsPolygon }}true{{ else }}false{{ end }},
         "avgFraction": {{ if .AvgFraction }}{{ printf "%.4f" .AvgFraction }}{{ else }}1.0{{ end }},
         "lat": {{ if .Location.Latlng }}{{ .Location.Latlng.Latitude }}{{ else }}0{{ end }},
         "lng": {{ if .Location.Latlng }}{{ .Location.Latlng.Longitude }}{{ else }}0{{ end }},
@@ -30,12 +31,5 @@
         "latlngLabel": {{ if .Location.Latlng }}{{ printf "%v, %v" .Location.Latlng.Latitude .Location.Latlng.Longitude | toJSON }}{{ else }}""{{ end }}
     }
     {{ end }}
-    </script>
-    <script>
-        {{ if .IsInteractiveMap }}
-        window.mountChoroplethMap('{{ .MapID }}', '{{ .MapID }}-config');
-        {{ else }}
-        window.mountLocationMap('{{ .MapID }}', '{{ .MapID }}-config');
-        {{ end }}
     </script>
 {{ end }}

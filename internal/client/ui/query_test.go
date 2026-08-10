@@ -12,7 +12,9 @@ func TestForecastQueryRoundTrip(t *testing.T) {
 
 	q := defaultForecastQuery(now)
 	q.LocUUID = "loc-1"
-	q.Forecasters = []ForecasterInput{{Raw: "blend|v1|0", Name: "blend", Version: "v1", HorizonMins: 0}}
+	q.Forecasters = []ForecasterInput{
+		{Raw: "blend|v1|0", Name: "blend", Version: "v1", HorizonMins: 0},
+	}
 	q.Observers = []ObserverInput{{Raw: "pvlive_in_day", Name: "pvlive_in_day"}}
 
 	if !q.Complete() {
@@ -29,8 +31,15 @@ func TestForecastQueryRoundTrip(t *testing.T) {
 	if parsed.LocUUID != q.LocUUID || parsed.EnergySource != q.EnergySource {
 		t.Errorf("round-trip mismatch: got %+v, want %+v", parsed, q)
 	}
+
 	if !parsed.StartTs.Equal(q.StartTs) || !parsed.EndTs.Equal(q.EndTs) {
-		t.Errorf("time round-trip mismatch: got %v/%v, want %v/%v", parsed.StartTs, parsed.EndTs, q.StartTs, q.EndTs)
+		t.Errorf(
+			"time round-trip mismatch: got %v/%v, want %v/%v",
+			parsed.StartTs,
+			parsed.EndTs,
+			q.StartTs,
+			q.EndTs,
+		)
 	}
 }
 

@@ -37,8 +37,14 @@ func (ui *UIClient) handleDashboardMapSnapshot(w http.ResponseWriter, r *http.Re
 
 	tsObj := time.Unix(tsUnix, 0).UTC()
 
-	energySource, _ := strconv.Atoi(energySourceRaw)
+	energySource, err := strconv.Atoi(energySourceRaw)
+	if err != nil {
+		httpError(w, r, "Invalid energy_source format", http.StatusBadRequest, err)
+		return
+	}
 
+	// Unlike the "name|version|horizon" forecaster values used elsewhere, this comes from
+	// mapView.FirstForecaster ("name|version" only - a snapshot fetch has no horizon).
 	fParts := strings.Split(fRaw, "|")
 
 	fName, fVer := fParts[0], ""

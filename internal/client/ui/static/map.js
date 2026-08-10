@@ -5,8 +5,8 @@
             panelBg: theme.panelBg,
             empty: window.getCssVar('--nc-bg-3', '#f0f1f3'),
             hover: window.getCssVar('--chart-color-1', '#1095c1'),
-            highlightBorder: theme.textPrimary,
-            defaultBorder: theme.textPrimary
+            visualMapHigh: window.getCssVar('--chart-color-2', '#f2a900'),
+            borderColor: theme.textPrimary
         };
     }
 
@@ -84,7 +84,7 @@
                 min: 0, max: 1.0,
                 text: ['Max (100%)', 'Min (0%)'],
                 realtime: true, calculable: true,
-                inRange: { color: [colors.empty, '#f2a900'] },
+                inRange: { color: [colors.empty, colors.visualMapHigh] },
                 formatter: function(value) { return (value * 100).toFixed(0) + '%'; }
             },
             series: [{
@@ -97,12 +97,12 @@
                 label: { show: false },
                 select: {
                     label: { show: false },
-                    itemStyle: { borderColor: colors.highlightBorder, borderWidth: 2, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 }
+                    itemStyle: { borderColor: colors.borderColor, borderWidth: 2, shadowColor: 'rgba(0,0,0,0.5)', shadowBlur: 10 }
                 },
                 itemStyle: { areaColor: colors.empty, borderColor: colors.panelBg, borderWidth: 0.5 },
                 emphasis: {
                     label: { show: false },
-                    itemStyle: { areaColor: colors.hover, borderColor: colors.defaultBorder, borderWidth: 1 }
+                    itemStyle: { areaColor: colors.hover, borderColor: colors.borderColor, borderWidth: 1 }
                 },
                 data: []
             }]
@@ -161,21 +161,26 @@
                 currentSelectedGsp = clickedUuid;
             }
 
-            var url = '/components/forecast?location_uuid=' + targetUuid +
-                '&skip_map=true&energy_source=' + config.energySource +
-                '&time_window=' + encodeURIComponent(config.timeWindow);
+            // location_uuid/energy_source/time_window are pinned to the config that produced
+            // this map (not read from the form), in case the user has an unconfirmed edit
+            // pending in the query form; only forecaster/observer are read live from it.
+            var params = new URLSearchParams();
+            params.set('location_uuid', targetUuid);
+            params.set('skip_map', 'true');
+            params.set('energy_source', config.energySource);
+            params.set('time_window', config.timeWindow);
 
             var qf = document.getElementById('query-form');
             if (qf) {
-                var fd = new FormData(qf);
-                for (var pair of fd.entries()) {
-                    if (pair[0] === 'forecaster' || pair[0] === 'observer') {
-                        url += '&' + pair[0] + '=' + encodeURIComponent(pair[1]);
+                new FormData(qf).forEach(function(value, key) {
+                    if (key === 'forecaster' || key === 'observer') {
+                        params.append(key, value);
                     }
-                }
+                });
             }
 
-            htmx.ajax('GET', url, '#chart-panel').catch(function(err) { console.error(err); });
+            htmx.ajax('GET', '/components/forecast?' + params.toString(), '#chart-panel')
+                .catch(function(err) { console.error(err); });
         });
 
         var updateMapData = function(timestamp) {
@@ -225,7 +230,12 @@
         var option = {};
 
         if (geojsonData) {
-            var hasArea = !!config.isPolygon;
+            // A single-location response always has exactly one feature; its geometry type
+            // decides whether to render an area fill (geo) or a point (scatter).
+            var geomType = geojsonData.features && geojsonData.features[0] && geojsonData.features[0].geometry
+                ? geojsonData.features[0].geometry.type
+                : '';
+            var hasArea = geomType === 'Polygon' || geomType === 'MultiPolygon';
             var locMapColor = window.getCssVar('--chart-color-0', '#7a9374');
 
             if (hasArea) {
@@ -234,7 +244,7 @@
                 option = {
                     geo: {
                         map: mapName, roam: false,
-                        itemStyle: { areaColor: locMapColor, opacity: fillOpacity, borderColor: colors.defaultBorder, borderWidth: 2 },
+                        itemStyle: { areaColor: locMapColor, opacity: fillOpacity, borderColor: colors.borderColor, borderWidth: 2 },
                         emphasis: { itemStyle: { areaColor: locMapColor, opacity: Math.min(fillOpacity + 0.2, 1) }, label: { show: false } },
                         layoutCenter: ['50%', '50%'], layoutSize: '80%'
                     }

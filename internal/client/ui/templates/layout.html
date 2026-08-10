@@ -9,13 +9,15 @@
          target are deferred (see ARCHITECTURE.md). -->
     <link rel="stylesheet" href="/static/flatpickr.min.css">
     <link rel="stylesheet" href="/static/app.css">
-    <script src="/static/htmx.min.js"></script>
-    <script src="/static/flatpickr.min.js"></script>
-    <script src="/static/echarts.min.js"></script>
-    <script src="/static/app.js"></script>
-    <script src="/static/forecast-chart.js"></script>
-    <script src="/static/map.js"></script>
-    <script src="/static/capacity-chart.js"></script>
+    <!-- defer keeps document parsing unblocked (echarts.min.js alone is ~1MB); order among
+         deferred scripts is preserved, and all run before DOMContentLoaded/htmx's own init. -->
+    <script src="/static/htmx.min.js" defer></script>
+    <script src="/static/flatpickr.min.js" defer></script>
+    <script src="/static/echarts.min.js" defer></script>
+    <script src="/static/app.js" defer></script>
+    <script src="/static/forecast-chart.js" defer></script>
+    <script src="/static/map.js" defer></script>
+    <script src="/static/capacity-chart.js" defer></script>
 </head>
 <body hx-boost="true">
     <header>

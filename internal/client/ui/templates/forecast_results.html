@@ -12,7 +12,7 @@
     </div>
 {{ else }}
     <figure>
-        <div id="forecastChart"></div>
+        <div id="forecastChart" data-chart="forecast" data-chart-config="forecastChartConfig"></div>
     </figure>
     <script type="application/json" id="forecastChartConfig">
     {
@@ -22,7 +22,6 @@
         "timestamps": {{ .Timestamps | toJSON }}
     }
     </script>
-    <script>window.mountForecastChart('forecastChart', 'forecastChartConfig');</script>
 {{ end }}
 
 {{ if not .SkipMap }}

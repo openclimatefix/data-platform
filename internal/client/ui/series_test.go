@@ -34,9 +34,11 @@ func TestBuildChartSeries(t *testing.T) {
 		if len(allSeries) != 1 {
 			t.Fatalf("expected 1 series, got %d", len(allSeries))
 		}
+
 		if len(labels) != 2 || len(timeKeys) != 2 {
 			t.Fatalf("expected 2 labels/timeKeys")
 		}
+
 		if avgFraction != 0 {
 			t.Fatalf("expected 0 avgFraction for no forecasters")
 		}
@@ -45,6 +47,7 @@ func TestBuildChartSeries(t *testing.T) {
 		if allSeries[0].Data[0] == nil || *allSeries[0].Data[0] != 500.0 {
 			t.Errorf("expected 500.0, got %v", allSeries[0].Data[0])
 		}
+
 		// Second data point is nil
 		if allSeries[0].Data[1] != nil {
 			t.Errorf("expected nil for gap, got %v", allSeries[0].Data[1])
@@ -102,6 +105,7 @@ func TestBuildChartSeries(t *testing.T) {
 		if band.Level != 80 {
 			t.Errorf("expected band level 80, got %d", band.Level)
 		}
+
 		if band.LowerName != "p10" || band.UpperName != "p90" {
 			t.Errorf("expected p10/p90 pair, got %s/%s", band.LowerName, band.UpperName)
 		}
@@ -109,6 +113,7 @@ func TestBuildChartSeries(t *testing.T) {
 		if *band.Lower[0] != 200.0 {
 			t.Errorf("expected lower 200.0, got %v", *band.Lower[0])
 		}
+
 		if *band.Diff[0] != 600.0 {
 			t.Errorf("expected diff 600.0, got %v", *band.Diff[0])
 		}

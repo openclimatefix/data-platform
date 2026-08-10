@@ -54,10 +54,12 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 	}
 
 	esRaw := r.URL.Query().Get("energy_source")
+
 	es, err := strconv.Atoi(esRaw)
 	if err != nil {
 		es = int(pb.EnergySource_ENERGY_SOURCE_SOLAR)
 	}
+
 	energySource := pb.EnergySource(es)
 
 	locReq := &pb.GetLocationRequest{
@@ -94,12 +96,17 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 	}
 	tsResp, err := ui.grpcClient.GetLocationAsTimeseries(ctx, tsReq)
 
-	var historyLabels []string
-	var historyValues []float64
+	var (
+		historyLabels []string
+		historyValues []float64
+	)
 
 	if err == nil && tsResp != nil && len(tsResp.GetValues()) > 0 {
 		for _, v := range tsResp.GetValues() {
-			historyLabels = append(historyLabels, v.GetTimestampUtc().AsTime().Format("Jan 02 15:04"))
+			historyLabels = append(
+				historyLabels,
+				v.GetTimestampUtc().AsTime().Format("Jan 02 15:04"),
+			)
 			historyValues = append(historyValues, float64(v.GetEffectiveCapacityWatts()))
 		}
 	} else {
@@ -118,7 +125,6 @@ func (ui *UIClient) handleLocationDetails(w http.ResponseWriter, r *http.Request
 		mapView: mapView{
 			Location:         locResp,
 			GeoJSON:          geoJSONStr,
-			IsPolygon:        isPolygon(geoJSONStr),
 			IsInteractiveMap: false,
 			AvgFraction:      1.0,
 			Labels:           nil,
@@ -154,7 +160,7 @@ func (ui *UIClient) handleLocationEdit(w http.ResponseWriter, r *http.Request) {
 
 	energySource, _ := strconv.Atoi(energySourceStr)
 
-	validFrom, err := time.Parse("2006-01-02 15:04", validFromStr)
+	validFrom, err := time.Parse(timeLayout, validFromStr)
 	if err != nil {
 		validFrom = time.Now().UTC()
 	}

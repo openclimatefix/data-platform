@@ -106,9 +106,12 @@ section, aside {
 details > summary {
     margin: 0 0 1.5rem 0;
     display: flex; align-items: baseline; gap: 12px;
+    font-weight: normal;
+}
+/* Only the details/summary variant is actually clickable; a section/aside/form header is not. */
+details > summary {
     cursor: pointer;
     list-style: none;
-    font-weight: normal;
 }
 details > summary::-webkit-details-marker {
     display: none;
@@ -147,6 +150,10 @@ section > footer {
     margin-top: auto;
     padding-top: 16px;
     border-top: 1px solid var(--nc-bg-3);
+}
+section > footer > strong {
+    display: block;
+    margin-bottom: 12px;
 }
 
 .location-overview {
@@ -189,20 +196,12 @@ dt, dd {
 dt { color: var(--nc-text-2); grid-column: 1; }
 dd { margin: 0; grid-column: 2; text-align: right; font-weight: 600; }
 
-#location-results { display: contents; }
-
 .view-details {
     margin-left: 8px;
     color: var(--nc-ac-1);
     text-decoration: none;
 }
 .view-details:hover { text-decoration: underline; }
-
-/* Modify Capacity Section Header */
-.modify-capacity-title {
-    display: block;
-    margin-bottom: 12px;
-}
 
 .capacity-form-grid {
     display: grid;
@@ -264,7 +263,7 @@ button[type="button"] {
 .source-picker-actions { display: flex; gap: 8px; }
 #source_horizon { width: 100px; }
 
-.pos-rel { position: relative; }
+.source-badge-anchor { position: relative; }
 
 /* The forecaster/observer multi-select dropdown. */
 .chips {

@@ -1,20 +1,17 @@
 {{ template "header" . }}
 
-<main>
-    <div id="location-results"
+<main
+    {{ if .DefaultLocationUUID }}
+    hx-get="/components/location_details?location_uuid={{ .DefaultLocationUUID }}&energy_source={{ .DefaultEnergySource }}"
+    hx-trigger="load, locationUpdated from:body"
+    {{ end }}>
+    <section class="empty-state">
         {{ if .DefaultLocationUUID }}
-        hx-get="/components/location_details?location_uuid={{ .DefaultLocationUUID }}&energy_source={{ .DefaultEnergySource }}"
-        hx-trigger="load, locationUpdated from:body"
-        {{ end }}>
-        
-        <section class="empty-state">
-            {{ if .DefaultLocationUUID }}
-            <span class="htmx-indicator"><em>Loading location details...</em></span>
-            {{ else }}
-            Please select a location and energy source on the Forecasts page first.
-            {{ end }}
-        </section>
-    </div>
+        <span class="htmx-indicator"><em>Loading location details...</em></span>
+        {{ else }}
+        Please select a location and energy source on the Forecasts page first.
+        {{ end }}
+    </section>
 </main>
 
 {{ template "footer" . }}

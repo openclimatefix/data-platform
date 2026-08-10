@@ -83,8 +83,9 @@ func parseForecastQuery(r *http.Request, requireComplete bool) (*forecastQuery, 
 		}
 	}
 
-	if requireComplete && (out.LocUUID == "" || (len(forecastersRaw) == 0 && len(observersRaw) == 0) ||
-		esRaw == "" || startRaw == "" || endRaw == "") {
+	if requireComplete &&
+		(out.LocUUID == "" || (len(forecastersRaw) == 0 && len(observersRaw) == 0) ||
+			esRaw == "" || startRaw == "" || endRaw == "") {
 		return nil, errors.New("missing required query parameters")
 	}
 

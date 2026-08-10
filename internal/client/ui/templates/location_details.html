@@ -17,7 +17,7 @@
         </dl>
 
         <footer>
-            <strong class="modify-capacity-title">Modify Capacity</strong>
+            <strong>Modify Capacity</strong>
             <form hx-post="/components/location_edit" hx-swap="none" id="form_edit_capacity">
                 <input type="hidden" name="location_uuid" value="{{ .Location.LocationUuid }}">
                 <input type="hidden" name="energy_source" value="{{ .EnergySource }}">
@@ -49,7 +49,7 @@
         <small>Step Graph</small>
     </header>
     <figure>
-        <div id="capacityChart"></div>
+        <div id="capacityChart" data-chart="capacity" data-chart-config="capacityChartConfig"></div>
     </figure>
     <script type="application/json" id="capacityChartConfig">
     {
@@ -57,5 +57,4 @@
         "values": {{ .HistoryValues | toJSON }}
     }
     </script>
-    <script>window.mountCapacityChart('capacityChart', 'capacityChartConfig');</script>
 </section>

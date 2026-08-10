@@ -42,10 +42,12 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			LocationUuid: p.LocUUID,
 			EnergySource: pb.EnergySource(p.EnergySource),
 		}
+
 		locResp, locErr = ui.grpcClient.GetLocation(gCtx, locReq)
 		if locErr != nil {
 			return fmt.Errorf("failed to get location: %w", locErr)
 		}
+
 		return nil
 	})
 
@@ -73,6 +75,7 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			var fetchUUIDs []string
 			if err == nil && len(gspResp.GetLocations()) > 0 {
 				isInteractiveMap = true
+
 				for _, l := range gspResp.GetLocations() {
 					fetchUUIDs = append(fetchUUIDs, l.GetLocationUuid())
 				}
@@ -80,15 +83,19 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 				fetchUUIDs = []string{p.LocUUID}
 			}
 
-			geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(gCtx, &pb.GetLocationsAsGeoJSONRequest{
-				LocationUuids: fetchUUIDs,
-				Unsimplified:  false,
-			})
+			geoResp, err := ui.grpcClient.GetLocationsAsGeoJSON(
+				gCtx,
+				&pb.GetLocationsAsGeoJSONRequest{
+					LocationUuids: fetchUUIDs,
+					Unsimplified:  false,
+				},
+			)
 			if err == nil && geoResp != nil && geoResp.GetGeojson() != "" {
 				geoJSONStr = template.JS(geoResp.GetGeojson())
 			} else if err != nil {
 				log.Warn().Err(err).Msg("Failed to get GeoJSON for map")
 			}
+
 			return nil
 		})
 	}
@@ -121,10 +128,9 @@ func (ui *UIClient) handleForecast(w http.ResponseWriter, r *http.Request) {
 			Labels:           labels,
 			Timestamps:       timeKeys,
 			IsInteractiveMap: isInteractiveMap,
-			IsPolygon:        isPolygon(geoJSONStr),
 			EnergySource:     strconv.Itoa(int(p.EnergySource)),
 			FirstForecaster:  firstForecaster,
-			TimeWindow:       p.StartTs.Format("2006-01-02 15:04") + " to " + p.EndTs.Format("2006-01-02 15:04"),
+			TimeWindow:       p.StartTs.Format(timeLayout) + " to " + p.EndTs.Format(timeLayout),
 			MapID:            "map",
 		},
 		Series:  allSeries,

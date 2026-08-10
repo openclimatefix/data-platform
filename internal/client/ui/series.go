@@ -25,12 +25,15 @@ type seriesResult struct {
 	Count       int
 }
 
-func fetchConcurrently[T any](ctx context.Context, items []T, fetchFn func(context.Context, T) (seriesResult, error)) []seriesResult {
+func fetchConcurrently[T any](
+	ctx context.Context,
+	items []T,
+	fetchFn func(context.Context, T) (seriesResult, error),
+) []seriesResult {
 	results := make([]seriesResult, len(items))
 	g, gCtx := errgroup.WithContext(ctx)
 
 	for i, item := range items {
-		// 3.3 Drop obsolete loop captures
 		g.Go(func() error {
 			res, err := fetchFn(gCtx, item)
 			if err != nil {
@@ -38,91 +41,116 @@ func fetchConcurrently[T any](ctx context.Context, items []T, fetchFn func(conte
 			} else {
 				results[i] = res
 			}
+
 			return nil
 		})
 	}
+
 	_ = g.Wait()
+
 	return results
 }
 
-func fetchForecasters(ctx context.Context, client pb.DataPlatformDataServiceClient, p *forecastQuery) []seriesResult {
-	return fetchConcurrently(ctx, p.Forecasters, func(gCtx context.Context, f ForecasterInput) (seriesResult, error) {
-		req := &pb.GetForecastAsTimeseriesRequest{
-			LocationUuid: p.LocUUID,
-			EnergySource: pb.EnergySource(p.EnergySource),
-			HorizonMins:  uint32(f.HorizonMins),
-			TimeWindow: &pb.TimeWindow{
-				StartTimestampUtc: timestamppb.New(p.StartTs),
-				EndTimestampUtc:   timestamppb.New(p.EndTs),
-			},
-			Forecaster: &pb.Forecaster{ForecasterName: f.Name, ForecasterVersion: f.Version},
-		}
-
-		resp, err := client.GetForecastAsTimeseries(gCtx, req)
-		if err != nil {
-			return seriesResult{}, fmt.Errorf("failed to get forecast for %s: %w", f.Raw, err)
-		}
-
-		res := seriesResult{
-			Raw:       f.Raw,
-			SeriesMap: make(map[int64]float32),
-			StatsMap:  make(map[int64]map[string]float32),
-			UniqueT:   make(map[int64]time.Time),
-		}
-
-		for _, v := range resp.GetValues() {
-			t := v.GetTargetTimestampUtc().AsTime()
-			unix := t.Unix()
-			res.UniqueT[unix] = t
-			res.SeriesMap[unix] = v.GetP50ValueFraction()
-
-			if stats := v.GetOtherStatisticsFractions(); stats != nil {
-				res.StatsMap[unix] = make(map[string]float32)
-				for k, val := range stats {
-					if strings.HasPrefix(k, "p") {
-						res.StatsMap[unix][k] = val
-					}
-				}
+func fetchForecasters(
+	ctx context.Context,
+	client pb.DataPlatformDataServiceClient,
+	p *forecastQuery,
+) []seriesResult {
+	return fetchConcurrently(
+		ctx,
+		p.Forecasters,
+		func(gCtx context.Context, f ForecasterInput) (seriesResult, error) {
+			req := &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: p.LocUUID,
+				EnergySource: pb.EnergySource(p.EnergySource),
+				HorizonMins:  uint32(f.HorizonMins),
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(p.StartTs),
+					EndTimestampUtc:   timestamppb.New(p.EndTs),
+				},
+				Forecaster: &pb.Forecaster{ForecasterName: f.Name, ForecasterVersion: f.Version},
 			}
 
-			res.FractionSum += v.GetP50ValueFraction()
-			res.Count++
-		}
-		return res, nil
-	})
+			resp, err := client.GetForecastAsTimeseries(gCtx, req)
+			if err != nil {
+				return seriesResult{}, fmt.Errorf("failed to get forecast for %s: %w", f.Raw, err)
+			}
+
+			res := seriesResult{
+				Raw:       f.Raw,
+				SeriesMap: make(map[int64]float32),
+				StatsMap:  make(map[int64]map[string]float32),
+				UniqueT:   make(map[int64]time.Time),
+			}
+
+			for _, v := range resp.GetValues() {
+				t := v.GetTargetTimestampUtc().AsTime()
+				unix := t.Unix()
+				res.UniqueT[unix] = t
+				res.SeriesMap[unix] = v.GetP50ValueFraction()
+
+				if stats := v.GetOtherStatisticsFractions(); stats != nil {
+					res.StatsMap[unix] = make(map[string]float32)
+					for k, val := range stats {
+						if strings.HasPrefix(k, "p") {
+							res.StatsMap[unix][k] = val
+						}
+					}
+				}
+
+				res.FractionSum += v.GetP50ValueFraction()
+				res.Count++
+			}
+
+			return res, nil
+		},
+	)
 }
 
-func fetchObservers(ctx context.Context, client pb.DataPlatformDataServiceClient, p *forecastQuery) []seriesResult {
-	return fetchConcurrently(ctx, p.Observers, func(gCtx context.Context, o ObserverInput) (seriesResult, error) {
-		req := &pb.GetObservationsAsTimeseriesRequest{
-			LocationUuid: p.LocUUID,
-			ObserverName: o.Name,
-			EnergySource: pb.EnergySource(p.EnergySource),
-			TimeWindow: &pb.TimeWindow{
-				StartTimestampUtc: timestamppb.New(p.StartTs),
-				EndTimestampUtc:   timestamppb.New(p.EndTs),
-			},
-		}
+func fetchObservers(
+	ctx context.Context,
+	client pb.DataPlatformDataServiceClient,
+	p *forecastQuery,
+) []seriesResult {
+	return fetchConcurrently(
+		ctx,
+		p.Observers,
+		func(gCtx context.Context, o ObserverInput) (seriesResult, error) {
+			req := &pb.GetObservationsAsTimeseriesRequest{
+				LocationUuid: p.LocUUID,
+				ObserverName: o.Name,
+				EnergySource: pb.EnergySource(p.EnergySource),
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(p.StartTs),
+					EndTimestampUtc:   timestamppb.New(p.EndTs),
+				},
+			}
 
-		resp, err := client.GetObservationsAsTimeseries(gCtx, req)
-		if err != nil {
-			return seriesResult{}, fmt.Errorf("failed to get observations for %s: %w", o.Raw, err)
-		}
+			resp, err := client.GetObservationsAsTimeseries(gCtx, req)
+			if err != nil {
+				return seriesResult{}, fmt.Errorf(
+					"failed to get observations for %s: %w",
+					o.Raw,
+					err,
+				)
+			}
 
-		res := seriesResult{
-			Raw:       o.Raw,
-			SeriesMap: make(map[int64]float32),
-			UniqueT:   make(map[int64]time.Time),
-		}
+			res := seriesResult{
+				Raw:       o.Raw,
+				SeriesMap: make(map[int64]float32),
+				UniqueT:   make(map[int64]time.Time),
+			}
 
-		for _, v := range resp.GetValues() {
-			t := v.GetTimestampUtc().AsTime()
-			unix := t.Unix()
-			res.UniqueT[unix] = t
-			res.SeriesMap[unix] = v.GetValueFraction()
-		}
-		return res, nil
-	})
+			for _, v := range resp.GetValues() {
+				t := v.GetTimestampUtc().AsTime()
+				unix := t.Unix()
+				res.UniqueT[unix] = t
+				res.SeriesMap[unix] = v.GetValueFraction()
+			}
+
+			return res, nil
+		},
+	)
 }
 
 func buildChartSeries(
@@ -196,7 +224,7 @@ func buildChartSeries(
 						if err == nil && pVal < 50 {
 							complement := fmt.Sprintf("p%d", 100-pVal)
 							if _, hasComplement := stats[complement]; hasComplement {
-								pPairs[fmt.Sprintf("%d", pVal)] = struct{}{}
+								pPairs[strconv.Itoa(pVal)] = struct{}{}
 							}
 						}
 					}

@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,15 +43,7 @@ func init() {
 		"calcWatts": func(frac float32, cap uint64) float32 {
 			return frac * float32(cap)
 		},
-		"formatCapacity": func(cap uint64) string {
-			if cap >= 1_000_000 {
-				return fmt.Sprintf("%.1fMW", float64(cap)/1_000_000.0)
-			} else if cap >= 1_000 {
-				return fmt.Sprintf("%.1fkW", float64(cap)/1_000.0)
-			}
-
-			return fmt.Sprintf("%dW", cap)
-		},
+		"formatCapacity": formatCapacityString,
 		"toJSON": func(v interface{}) template.JS {
 			b, _ := json.Marshal(v)
 			return template.JS(b)
@@ -168,6 +161,7 @@ func httpError(w http.ResponseWriter, r *http.Request, msg string, code int, err
 	} else {
 		log.Warn().Str("method", r.Method).Str("path", r.URL.Path).Msg(msg)
 	}
+
 	http.Error(w, msg, code)
 }
 
@@ -177,6 +171,7 @@ func render(w http.ResponseWriter, r *http.Request, name string, data any) {
 		httpError(w, r, "Template rendering failed", http.StatusInternalServerError, err)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = buf.WriteTo(w)
 }
@@ -188,6 +183,7 @@ func (ui *UIClient) Start(port string) error {
 	if err != nil {
 		return err
 	}
+
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))
 	mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=0, must-revalidate")
@@ -229,8 +225,11 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 
 		g, gCtx := errgroup.WithContext(ctx)
-		var locResp *pb.ListLocationsResponse
-		var fcResp *pb.ListForecastersResponse
+
+		var (
+			locResp *pb.ListLocationsResponse
+			fcResp  *pb.ListForecastersResponse
+		)
 
 		g.Go(func() error {
 			var err error
@@ -265,6 +264,7 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 			}
+
 			if defaultFcVersion == "" {
 				defaultFcVersion = "unknown"
 			}
@@ -281,6 +281,7 @@ func (ui *UIClient) handleIndex(w http.ResponseWriter, r *http.Request) {
 				}
 
 				http.Redirect(w, r, "/?"+q.Values().Encode(), http.StatusFound)
+
 				return
 			}
 		}
@@ -302,39 +303,57 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		obsResp *pb.ListObserversResponse
 	)
 
-	g, gCtx := errgroup.WithContext(ctx)
+	// Partial-failure tolerant: a failed RPC leaves its response nil and the corresponding
+	// section of the form empty, rather than failing the whole page. A WaitGroup (not
+	// errgroup) makes that explicit - there is no error to propagate or cancel on.
+	var wg sync.WaitGroup
 
-	g.Go(func() error {
-		locResp, _ = ui.grpcClient.ListLocations(gCtx, &pb.ListLocationsRequest{})
-		return nil
-	})
+	wg.Add(3)
 
-	g.Go(func() error {
-		fcResp, _ = ui.grpcClient.ListForecasters(gCtx, &pb.ListForecastersRequest{})
-		return nil
-	})
+	go func() {
+		defer wg.Done()
 
-	g.Go(func() error {
-		obsResp, _ = ui.grpcClient.ListObservers(gCtx, &pb.ListObserversRequest{})
-		return nil
-	})
+		var err error
+		if locResp, err = ui.grpcClient.ListLocations(ctx, &pb.ListLocationsRequest{}); err != nil {
+			log.Warn().Err(err).Msg("Failed to list locations for selectors")
+		}
+	}()
 
-	_ = g.Wait()
+	go func() {
+		defer wg.Done()
+
+		var err error
+		if fcResp, err = ui.grpcClient.ListForecasters(
+			ctx,
+			&pb.ListForecastersRequest{},
+		); err != nil {
+			log.Warn().Err(err).Msg("Failed to list forecasters for selectors")
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		var err error
+		if obsResp, err = ui.grpcClient.ListObservers(ctx, &pb.ListObserversRequest{}); err != nil {
+			log.Warn().Err(err).Msg("Failed to list observers for selectors")
+		}
+	}()
+
+	wg.Wait()
 
 	var locLabel string
 	locUUID := r.URL.Query().Get("location_uuid")
 
 	for _, loc := range locResp.GetLocations() {
 		if loc.GetLocationUuid() == locUUID {
-			capStr := ""
-			if capWatts := loc.GetEffectiveCapacityWatts(); capWatts >= 1_000_000 {
-				capStr = fmt.Sprintf("%.1fMW", float64(capWatts)/1_000_000.0)
-			} else if capWatts >= 1_000 {
-				capStr = fmt.Sprintf("%.1fkW", float64(capWatts)/1_000.0)
-			} else {
-				capStr = fmt.Sprintf("%dW", capWatts)
-			}
-			locLabel = fmt.Sprintf("%s (%s, %s)", loc.GetLocationName(), loc.GetLocationType().String(), capStr)
+			locLabel = fmt.Sprintf(
+				"%s (%s, %s)",
+				loc.GetLocationName(),
+				loc.GetLocationType().String(),
+				formatCapacityString(loc.GetEffectiveCapacityWatts()),
+			)
+
 			break
 		}
 	}
@@ -347,10 +366,11 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 	if startRaw != "" && endRaw != "" {
 		timeWindow = startRaw + " to " + endRaw
 	} else {
-		now := time.Now().UTC()
-		timeWindow = fmt.Sprintf("%s to %s",
-			now.Add(-48*time.Hour).Format("2006-01-02 15:04"),
-			now.Add(36*time.Hour).Format("2006-01-02 15:04"),
+		defaultQuery := defaultForecastQuery(time.Now().UTC())
+		timeWindow = fmt.Sprintf(
+			"%s to %s",
+			defaultQuery.StartTs.Format(timeLayout),
+			defaultQuery.EndTs.Format(timeLayout),
 		)
 	}
 
@@ -359,6 +379,7 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 		Value string
 		Label string
 	}
+
 	var selectedSources []selectedSource
 
 	for _, fRaw := range r.URL.Query()["forecaster"] {
@@ -372,11 +393,13 @@ func (ui *UIClient) handleSelectors(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 			}
+
 			if len(parts) == 3 {
 				label += " @ " + parts[2] + "m"
 			} else {
 				label += " @ 0m"
 			}
+
 			selectedSources = append(selectedSources, selectedSource{
 				Type:  "forecaster",
 				Value: fRaw,

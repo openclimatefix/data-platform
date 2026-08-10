@@ -25,9 +25,8 @@ window.chartTheme = function() {
     };
 };
 
-// Replaces the copy-pasted dispose -> init -> ResizeObserver chain that used to live in
-// every chart's inline <script>. Chart instances are kept on the element itself so
-// repeated mounts (e.g. after an HTMX swap) don't need a chart-specific global.
+// Chart instances are kept on the element itself so a repeated mount (e.g. after an HTMX
+// swap replaces the element's container but reuses its id) disposes the old instance first.
 window.mountChart = function(el, buildOption) {
     if (el.__chart) {
         el.__chart.dispose();
@@ -54,12 +53,157 @@ document.addEventListener('htmx:configRequest', function(evt) {
     evt.detail.headers['X-Request-Id'] = uuid.replace(/-/g, '');
 });
 
-// flatpickr targets are always brought into the DOM via an HTMX swap (there is no
-// server-rendered-only path), so initialising them on htmx:afterSettle covers every case.
-document.addEventListener('htmx:afterSettle', function(evt) {
-    var root = evt.target;
-    if (!root || typeof root.querySelector !== 'function') return;
+// Closes the forecaster/observer picker dropdown on an outside click. Registered once here
+// (rather than once per widget init) since there is only ever one #source_chips on the page.
+document.addEventListener('click', function(e) {
+    var badge = document.getElementById('source_badge');
+    var chips = document.getElementById('source_chips');
+    if (!badge || !chips) return;
+    if (!e.target.closest('#source_badge') && !e.target.closest('#source_chips')) {
+        chips.classList.remove('show');
+    }
+});
 
+function queryAllIncludingRoot(root, selector) {
+    var matches = root.matches && root.matches(selector) ? [root] : [];
+    return matches.concat(Array.prototype.slice.call(root.querySelectorAll(selector)));
+}
+
+// Templates mark their chart containers with data-chart="<kind>" and data-chart-config="<id
+// of the application/json config script>" instead of an inline <script> calling the mount
+// function directly - the latter meant interpolating server-side ids into JS string literals.
+function mountCharts(root) {
+    var mounts = {
+        forecast: window.mountForecastChart,
+        capacity: window.mountCapacityChart,
+        choropleth: window.mountChoroplethMap,
+        location: window.mountLocationMap
+    };
+
+    queryAllIncludingRoot(root, '[data-chart]').forEach(function(el) {
+        var mount = mounts[el.dataset.chart];
+        if (mount && el.dataset.chartConfig) {
+            mount(el.id, el.dataset.chartConfig);
+        }
+    });
+}
+
+// The forecaster/observer picker on the query form: an add/remove chip widget backed by
+// hidden inputs (one per selected source) so the form submits them without further JS.
+function initSelectorsWidget(form) {
+    var locSearch = form.querySelector('#location_search');
+    var locUuid = form.querySelector('#location_uuid');
+    var sourceSearch = form.querySelector('#source_search');
+    var sourceHorizon = form.querySelector('#source_horizon');
+    var sourceBadge = form.querySelector('#source_badge');
+    var sourceChips = form.querySelector('#source_chips');
+    var fcContainer = form.querySelector('#fc_chips_container');
+    var obsContainer = form.querySelector('#obs_chips_container');
+    var hiddenInputs = form.querySelector('#source_hidden_inputs');
+    var chipTemplate = form.querySelector('#chip_template');
+    var btnAddSource = form.querySelector('#btn_add_source');
+
+    function findOption(listId, value) {
+        var list = form.querySelector('#' + listId);
+        if (!list) return null;
+        return Array.from(list.options).find(function(o) { return o.value === value; });
+    }
+
+    function updateLocationValidity() {
+        locSearch.setCustomValidity(locUuid.value ? '' : 'Please select a valid location from the list.');
+    }
+
+    locSearch.addEventListener('input', function(e) {
+        locUuid.value = '';
+        var opt = findOption('location_options', e.target.value);
+        if (opt) locUuid.value = opt.getAttribute('data-uuid');
+        updateLocationValidity();
+    });
+
+    // Uniqueness rule: a source is identified by its (type, value) pair. A forecaster's
+    // value already encodes the horizon ("name|version|horizon"), so the same forecaster
+    // picked at two different horizons is treated as two distinct sources.
+    function sourceExists(type, value) {
+        return !!hiddenInputs.querySelector('input[data-type="' + type + '"][data-value="' + CSS.escape(value) + '"]');
+    }
+
+    function updateSourceBadge() {
+        var total = hiddenInputs.children.length;
+        sourceBadge.textContent = total + ' Selected';
+        sourceSearch.setCustomValidity(total > 0 ? '' : 'Please select at least one forecaster or observer.');
+    }
+
+    function addSource(type, value, label) {
+        if (sourceExists(type, value)) return;
+
+        var chip = chipTemplate.content.firstElementChild.cloneNode(true);
+        chip.dataset.type = type;
+        chip.dataset.value = value;
+        chip.querySelector('.chip-text').textContent = label;
+        chip.querySelector('.chip-text').title = label;
+        (type === 'forecaster' ? fcContainer : obsContainer).appendChild(chip);
+
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = type;
+        hidden.value = value;
+        hidden.dataset.type = type;
+        hidden.dataset.value = value;
+        hiddenInputs.appendChild(hidden);
+
+        updateSourceBadge();
+    }
+
+    function removeSource(type, value) {
+        var container = type === 'forecaster' ? fcContainer : obsContainer;
+        var chip = container.querySelector('[data-value="' + CSS.escape(value) + '"]');
+        if (chip) chip.remove();
+
+        var hidden = hiddenInputs.querySelector('input[data-type="' + type + '"][data-value="' + CSS.escape(value) + '"]');
+        if (hidden) hidden.remove();
+
+        updateSourceBadge();
+    }
+
+    btnAddSource.addEventListener('click', function() {
+        var opt = findOption('source_options', sourceSearch.value);
+        if (!opt) return;
+
+        var type = opt.dataset.type;
+        var label = opt.value;
+
+        if (type === 'forecaster') {
+            var horizon = sourceHorizon.value || '0';
+            addSource(type, opt.dataset.val + '|' + horizon, label.replace(' [Forecaster]', '') + ' @ ' + horizon + 'm');
+        } else {
+            addSource(type, opt.dataset.val, label);
+        }
+
+        sourceSearch.value = '';
+    });
+
+    // Chip-close buttons are created dynamically, so a single delegated listener on the
+    // (static) chips container handles all of them.
+    sourceChips.addEventListener('click', function(e) {
+        var closeBtn = e.target.closest('.chip-close');
+        if (!closeBtn) return;
+        var chip = closeBtn.closest('.chip');
+        removeSource(chip.dataset.type, chip.dataset.value);
+    });
+
+    sourceBadge.addEventListener('click', function() {
+        sourceChips.classList.toggle('show');
+    });
+
+    updateLocationValidity();
+    updateSourceBadge();
+}
+
+function initWidgets(root) {
+    queryAllIncludingRoot(root, '#query-form').forEach(initSelectorsWidget);
+}
+
+function initFlatpickr(root) {
     var rangeEl = root.querySelector('#time_window');
     if (rangeEl && !rangeEl._flatpickr) {
         // Range mode writes just the first date to the input until a second date is picked,
@@ -89,4 +233,15 @@ document.addEventListener('htmx:afterSettle', function(evt) {
             defaultDate: new Date()
         });
     }
+}
+
+// flatpickr targets, chart containers and the selectors widget are all brought into the DOM
+// via an HTMX swap (there is no server-rendered-only path), so this one listener covers them.
+document.addEventListener('htmx:afterSettle', function(evt) {
+    var root = evt.target;
+    if (!root || typeof root.querySelector !== 'function') return;
+
+    initFlatpickr(root);
+    mountCharts(root);
+    initWidgets(root);
 });
