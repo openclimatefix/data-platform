@@ -16,6 +16,81 @@ sql:
         emit_interface: true
         emit_exported_queries: true
         overrides:
+          - column: "winning_predictions.p02_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "winning_predictions.p10_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "winning_predictions.p25_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "winning_predictions.p75_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "winning_predictions.p90_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "winning_predictions.p98_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "expanded.p02_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "expanded.p10_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "expanded.p25_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "expanded.p50_sip"
+            go_type:
+              type: "int16"
+          - column: "expanded.p75_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "expanded.p90_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "expanded.p98_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "ListPredictionsAtTimeForLocations.p02_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "ListPredictionsAtTimeForLocations.p10_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "ListPredictionsAtTimeForLocations.p25_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "ListPredictionsAtTimeForLocations.p75_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "ListPredictionsAtTimeForLocations.p90_sip"
+            go_type:
+              type: "int16"
+              pointer: true
+          - column: "ListPredictionsAtTimeForLocations.p98_sip"
+            go_type:
+              type: "int16"
+              pointer: true
           - db_type: "uuid"
             go_type:
               import: "github.com/google/uuid"

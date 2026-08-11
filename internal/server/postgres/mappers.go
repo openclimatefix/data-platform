@@ -70,9 +70,85 @@ func extractSIPStatPtrFromMap(m map[string]float32, key string) *int16 {
 	return &sip_val
 }
 
+// extractSIPStatSlice builds the array for a single p-level from a forecast's values.
+// Returns nil if no value in the series carries this statistic, so the column is stored as a
+// NULL array rather than a materialised array of nulls (~3 bytes per forecast against ~130).
+// Callers must have run validateForecastValues first: sqlc maps SMALLINT[] to []int16, which
+// cannot express element-level nulls, so partial coverage would silently be written as zeros.
+func extractSIPStatSlice(values []*pb.CreateForecastRequest_ForecastValue, key string) []int16 {
+	out := make([]int16, len(values))
+	present := false
+
+	for i, v := range values {
+		if f, ok := v.OtherStatisticsFractions[key]; ok {
+			out[i] = int16(f * 30000.0)
+			present = true
+		}
+	}
+
+	if !present {
+		return nil
+	}
+
+	return out
+}
+
+// extractP50Slice builds the p50 array. p50 is a top-level field on ForecastValue rather than a
+// key in OtherStatisticsFractions, and is always present.
+func extractP50Slice(values []*pb.CreateForecastRequest_ForecastValue) []int16 {
+	out := make([]int16, len(values))
+	for i, v := range values {
+		out[i] = int16(v.P50Fraction * 30000.0)
+	}
+
+	return out
+}
+
+
 // sipToFraction converts a SIP value to a fraction.
 func sipToFraction(sip int16) float32 {
 	return float32(sip) / 30000.0
+}
+
+// validateForecastValues checks the invariants the array storage layout depends on:
+// at least two values, strictly increasing horizons, evenly spaced, and each optional statistic
+// either present on every value or on none.
+func validateForecastValues(values []*pb.CreateForecastRequest_ForecastValue) error {
+	if len(values) < 2 {
+		return fmt.Errorf("a forecast must contain at least two values")
+	}
+
+	resolution := int32(values[1].HorizonMins) - int32(values[0].HorizonMins)
+	if resolution <= 0 {
+		return fmt.Errorf("forecast horizons must be monotonically increasing")
+	}
+
+	for i := 1; i < len(values); i++ {
+		if int32(values[i].HorizonMins)-int32(values[i-1].HorizonMins) != resolution {
+			return fmt.Errorf("forecast horizons must be evenly spaced in time")
+		}
+	}
+
+	// SMALLINT[] maps to []int16, which has no way to represent a null element, so a statistic
+	// supplied for only some horizons would be written as zeros (a valid 0% reading) for the rest.
+	for _, key := range []string{"p02", "p10", "p25", "p75", "p90", "p98"} {
+		count := 0
+
+		for _, v := range values {
+			if _, ok := v.OtherStatisticsFractions[key]; ok {
+				count++
+			}
+		}
+
+		if count != 0 && count != len(values) {
+			return fmt.Errorf(
+				"statistic '%s' must be present for all values or none, got %d of %d",
+				key, count, len(values),
+			)
+		}
+	}
+
+	return nil
 }
 
 // buildOtherStatsMap constructs a map of other statistics from optional SIP pointers.
@@ -163,6 +239,13 @@ func mapCreateForecast(
 		TargetPeriod:        targetPeriod,
 		Metadata:            req.Metadata,
 		CreatedAtUtc:        createdTime,
+		P02Sips:             extractSIPStatSlice(req.Values, "p02"),
+		P10Sips:             extractSIPStatSlice(req.Values, "p10"),
+		P25Sips:             extractSIPStatSlice(req.Values, "p25"),
+		P50Sips:             extractP50Slice(req.Values),
+		P75Sips:             extractSIPStatSlice(req.Values, "p75"),
+		P90Sips:             extractSIPStatSlice(req.Values, "p90"),
+		P98Sips:             extractSIPStatSlice(req.Values, "p98"),
 	}, nil
 }
 
