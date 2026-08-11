@@ -53,8 +53,8 @@ SELECT
     created_at_utc
 FROM ranked_forecasters
 WHERE (
-    ARRAY_LENGTH(sqlc.arg(forecaster_names)::TEXT [], 1) IS NULL
-    OR forecaster_name = ANY(sqlc.arg(forecaster_names)::TEXT [])
+    ARRAY_LENGTH(sqlc.arg(forecaster_names)::TEXT[], 1) IS NULL
+    OR forecaster_name = ANY(sqlc.arg(forecaster_names)::TEXT[])
 )
 AND (
     NOT sqlc.arg(latest_version_only)::BOOLEAN OR rn = 1
@@ -124,8 +124,8 @@ INSERT INTO pred.predicted_generation_values (
  */
 WITH requested_forecasters AS (
     SELECT
-        UNNEST(sqlc.arg(forecaster_names)::TEXT []) AS fname,
-        UNNEST(sqlc.arg(forecaster_versions)::TEXT []) AS fversion
+        UNNEST(sqlc.arg(forecaster_names)::TEXT[]) AS fname,
+        UNNEST(sqlc.arg(forecaster_versions)::TEXT[]) AS fversion
 ),
 matched_forecasters AS (
     SELECT
@@ -139,11 +139,23 @@ matched_forecasters AS (
 ),
 matched_forecasts AS (
     SELECT
-        f.forecast_uuid, f.geometry_uuid, f.source_type_id, f.created_at_utc, f.metadata,
-        f.init_time_utc, f.value_resolution_mins,
-        LOWER(f.target_period) AS first_target_utc,
-        f.p02_sips, f.p10_sips, f.p25_sips, f.p50_sips, f.p75_sips, f.p90_sips, f.p98_sips,
-        mf.forecaster_name, mf.forecaster_version
+        f.forecast_uuid,
+        f.geometry_uuid,
+        f.source_type_id,
+        f.created_at_utc,
+        f.metadata,
+        f.init_time_utc,
+        f.value_resolution_mins,
+        f.p02_sips,
+        f.p10_sips,
+        f.p25_sips,
+        f.p50_sips,
+        f.p75_sips,
+        f.p90_sips,
+        f.p98_sips,
+        mf.forecaster_name,
+        mf.forecaster_version,
+        LOWER(f.target_period) AS first_target_utc
     FROM pred.forecasts AS f
         INNER JOIN matched_forecasters AS mf USING (forecaster_id)
     WHERE f.geometry_uuid = sqlc.arg(geometry_uuid)::UUID
@@ -153,12 +165,21 @@ matched_forecasts AS (
 ),
 expanded_array AS (
     SELECT
-        mfc.forecaster_name, mfc.forecaster_version, mfc.created_at_utc, mfc.metadata,
-        mfc.geometry_uuid, mfc.source_type_id, mfc.init_time_utc,
-        (EXTRACT(EPOCH FROM (mfc.first_target_utc - mfc.init_time_utc)) / 60
-            + (o.ord - 1) * mfc.value_resolution_mins)::SMALLINT AS horizon_mins,
-        (mfc.first_target_utc + MAKE_INTERVAL(mins =>
-            ((o.ord - 1) * mfc.value_resolution_mins)::INTEGER))::TIMESTAMP AS target_time_utc,
+        mfc.forecaster_name,
+        mfc.forecaster_version,
+        mfc.created_at_utc,
+        mfc.metadata,
+        mfc.geometry_uuid,
+        mfc.source_type_id,
+        mfc.init_time_utc,
+        (
+            EXTRACT(EPOCH FROM (mfc.first_target_utc - mfc.init_time_utc)) / 60
+            + (o.ord - 1) * mfc.value_resolution_mins
+        )::SMALLINT AS horizon_mins,
+        (mfc.first_target_utc + MAKE_INTERVAL(
+            mins =>
+            ((o.ord - 1) * mfc.value_resolution_mins)::INTEGER
+        ))::TIMESTAMP AS target_time_utc,
         o.p50_sip,
         mfc.p02_sips[o.ord] AS p02_sip,
         mfc.p10_sips[o.ord] AS p10_sip,
@@ -167,17 +188,28 @@ expanded_array AS (
         mfc.p90_sips[o.ord] AS p90_sip,
         mfc.p98_sips[o.ord] AS p98_sip
     FROM matched_forecasts AS mfc
-    CROSS JOIN LATERAL unnest(mfc.p50_sips) WITH ORDINALITY AS o(p50_sip, ord)
+        CROSS JOIN LATERAL UNNEST(mfc.p50_sips) WITH ORDINALITY AS o (p50_sip, ord)
     WHERE mfc.p50_sips IS NOT NULL
 ),
 expanded_legacy AS (
     SELECT
-        mfc.forecaster_name, mfc.forecaster_version, mfc.created_at_utc, mfc.metadata,
-        mfc.geometry_uuid, mfc.source_type_id, mfc.init_time_utc,
+        mfc.forecaster_name,
+        mfc.forecaster_version,
+        mfc.created_at_utc,
+        mfc.metadata,
+        mfc.geometry_uuid,
+        mfc.source_type_id,
+        mfc.init_time_utc,
         pg.horizon_mins,
         (mfc.init_time_utc + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER))::TIMESTAMP
             AS target_time_utc,
-        pg.p50_sip, pg.p02_sip, pg.p10_sip, pg.p25_sip, pg.p75_sip, pg.p90_sip, pg.p98_sip
+        pg.p50_sip,
+        pg.p02_sip,
+        pg.p10_sip,
+        pg.p25_sip,
+        pg.p75_sip,
+        pg.p90_sip,
+        pg.p98_sip
     FROM matched_forecasts AS mfc
         INNER JOIN pred.predicted_generation_values AS pg
         ON mfc.forecast_uuid = pg.forecast_uuid
@@ -214,7 +246,7 @@ FROM expanded AS e
         WHERE s.geometry_uuid = e.geometry_uuid
             AND s.source_type_id = e.source_type_id
             AND s.sys_period @> e.target_time_utc
-        LIMIT 1
+        LIMIT 1 --noqa
     ) AS sv ON TRUE;
 
 -- name: GetLatestForecastsAtHorizonSincePivot :many
@@ -273,30 +305,45 @@ ORDER BY fr.forecaster_name ASC, f.init_time_utc DESC;
  */
 WITH allowed_forecasts AS (
     SELECT
-        f.forecast_uuid, f.geometry_uuid, f.source_type_id, f.created_at_utc, f.metadata,
-        f.value_resolution_mins, f.init_time_utc,
-        LOWER(f.target_period) AS first_target_utc,
-        f.p02_sips, f.p10_sips, f.p25_sips, f.p50_sips, f.p75_sips, f.p90_sips, f.p98_sips
+        f.forecast_uuid,
+        f.geometry_uuid,
+        f.source_type_id,
+        f.created_at_utc,
+        f.metadata,
+        f.value_resolution_mins,
+        f.init_time_utc,
+        f.p02_sips,
+        f.p10_sips,
+        f.p25_sips,
+        f.p50_sips,
+        f.p75_sips,
+        f.p90_sips,
+        f.p98_sips,
+        LOWER(f.target_period) AS first_target_utc
     FROM pred.forecasts AS f
     WHERE f.geometry_uuid = $1
         AND f.source_type_id = $2
         AND f.forecaster_id = $3
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(
-            sqlc.arg(start_timestamp_utc)::TIMESTAMP - INTERVAL '3 days')
+            sqlc.arg(start_timestamp_utc)::TIMESTAMP - INTERVAL '3 days'
+        )
         AND f.forecast_uuid < UUIDV7_BOUNDARY(
             sqlc.arg(end_timestamp_utc)::TIMESTAMP
             - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-            + INTERVAL '1 millisecond')
+            + INTERVAL '1 millisecond'
+        )
         AND f.created_at_utc <= COALESCE(sqlc.narg(pivot_timestamp)::TIMESTAMP, CURRENT_TIMESTAMP)
         AND f.target_period && TSRANGE(
             sqlc.arg(start_timestamp_utc)::TIMESTAMP,
-            sqlc.arg(end_timestamp_utc)::TIMESTAMP, '[]')
+            sqlc.arg(end_timestamp_utc)::TIMESTAMP, '[]'
+        )
 ),
 sliced AS (
     /* Convert the target-time window and minimum horizon into an array index range.
      * This means that a forecast with a window that only partially overlaps the requested
      * window will only be partially expanded. */
-    SELECT af.*,
+    SELECT
+        af.*,
         GREATEST(1, CEIL(EXTRACT(EPOCH FROM (GREATEST(
             sqlc.arg(start_timestamp_utc)::TIMESTAMP,
             af.init_time_utc + MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
@@ -311,10 +358,16 @@ expanded_array AS (
     /* Expand the sliced arrays into rows, with each row representing a single
      * target time and its associated predicted values. */
     SELECT
-        s.forecast_uuid, s.init_time_utc, s.created_at_utc, s.metadata,
-        s.geometry_uuid, s.source_type_id,
-        (s.first_target_utc + MAKE_INTERVAL(mins =>
-            ((s.lo + o.ord - 2) * s.value_resolution_mins)::INTEGER))::TIMESTAMP
+        s.forecast_uuid,
+        s.init_time_utc,
+        s.created_at_utc,
+        s.metadata,
+        s.geometry_uuid,
+        s.source_type_id,
+        (s.first_target_utc + MAKE_INTERVAL(
+            mins =>
+            ((s.lo + o.ord - 2) * s.value_resolution_mins)::INTEGER
+        ))::TIMESTAMP
             AS target_time_utc,
         (EXTRACT(EPOCH FROM (
             s.first_target_utc
@@ -329,20 +382,31 @@ expanded_array AS (
         s.p90_sips[s.lo + o.ord - 1]::SMALLINT AS p90_sip,
         s.p98_sips[s.lo + o.ord - 1]::SMALLINT AS p98_sip
     FROM sliced AS s
-    CROSS JOIN LATERAL unnest(s.p50_sips[s.lo:s.hi])
-        WITH ORDINALITY AS o(p50_sip, ord)
+        CROSS JOIN
+            LATERAL UNNEST(s.p50_sips[s.lo:s.hi])
+            WITH ORDINALITY AS o (p50_sip, ord)
     WHERE s.hi >= s.lo
 ),
 expanded_legacy AS (
     /* Forecasts whose partition has not yet been rebuilt into arrays. Column order must match
      * expanded_array exactly - UNION ALL matches by position, not by name. */
     SELECT
-        af.forecast_uuid, af.init_time_utc, af.created_at_utc, af.metadata,
-        af.geometry_uuid, af.source_type_id,
+        af.forecast_uuid,
+        af.init_time_utc,
+        af.created_at_utc,
+        af.metadata,
+        af.geometry_uuid,
+        af.source_type_id,
         (af.init_time_utc + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER))::TIMESTAMP
             AS target_time_utc,
         pg.horizon_mins,
-        pg.p50_sip, pg.p02_sip, pg.p10_sip, pg.p25_sip, pg.p75_sip, pg.p90_sip, pg.p98_sip
+        pg.p50_sip,
+        pg.p02_sip,
+        pg.p10_sip,
+        pg.p25_sip,
+        pg.p75_sip,
+        pg.p90_sip,
+        pg.p98_sip
     FROM allowed_forecasts AS af
         INNER JOIN pred.predicted_generation_values AS pg
         ON af.forecast_uuid = pg.forecast_uuid
@@ -350,15 +414,17 @@ expanded_legacy AS (
              * predicted_generation_values statically. Without them the equijoin alone only prunes
              * at runtime, and only if a nested loop is chosen over a hash join. */
             AND pg.forecast_uuid >= UUIDV7_BOUNDARY(
-                sqlc.arg(start_timestamp_utc)::TIMESTAMP - INTERVAL '3 days')
+                sqlc.arg(start_timestamp_utc)::TIMESTAMP - INTERVAL '3 days'
+            )
             AND pg.forecast_uuid < UUIDV7_BOUNDARY(
                 sqlc.arg(end_timestamp_utc)::TIMESTAMP
                 - MAKE_INTERVAL(mins => sqlc.arg(horizon_mins)::INTEGER)
-                + INTERVAL '1 millisecond')
+                + INTERVAL '1 millisecond'
+            )
     WHERE af.p50_sips IS NULL
         AND (af.init_time_utc + MAKE_INTERVAL(mins => pg.horizon_mins::INTEGER))
-            BETWEEN sqlc.arg(start_timestamp_utc)::TIMESTAMP
-            AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
+        BETWEEN sqlc.arg(start_timestamp_utc)::TIMESTAMP
+        AND sqlc.arg(end_timestamp_utc)::TIMESTAMP
         AND pg.horizon_mins >= sqlc.arg(horizon_mins)::INTEGER
 ),
 expanded AS (
@@ -374,10 +440,22 @@ winning_predictions AS (
     ORDER BY target_time_utc ASC, forecast_uuid DESC
 )
 SELECT
-    wp.horizon_mins, wp.p02_sip, wp.p25_sip, wp.p10_sip, wp.p50_sip,
-    wp.p75_sip, wp.p90_sip, wp.p98_sip,
-    wp.target_time_utc, wp.metadata, wp.init_time_utc, wp.created_at_utc,
-    sv.capacity_watts, sv.latitude, sv.longitude, sv.geometry_name
+    wp.horizon_mins,
+    wp.p02_sip,
+    wp.p25_sip,
+    wp.p10_sip,
+    wp.p50_sip,
+    wp.p75_sip,
+    wp.p90_sip,
+    wp.p98_sip,
+    wp.target_time_utc,
+    wp.metadata,
+    wp.init_time_utc,
+    wp.created_at_utc,
+    sv.capacity_watts,
+    sv.latitude,
+    sv.longitude,
+    sv.geometry_name
 FROM winning_predictions AS wp
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
 WHERE sv.sys_period @> wp.target_time_utc
@@ -388,7 +466,7 @@ ORDER BY wp.target_time_utc ASC;
  * to guard against this.
  */
 WITH target_locations AS (
-    SELECT UNNEST(sqlc.arg(geometry_uuids)::UUID []) AS geometry_uuid
+    SELECT UNNEST(sqlc.arg(geometry_uuids)::UUID[]) AS geometry_uuid
 ),
 latest_allowed_forecast_per_location AS (
     SELECT
@@ -399,16 +477,31 @@ latest_allowed_forecast_per_location AS (
         lf.metadata,
         lf.init_time_utc,
         lf.value_resolution_mins,
-        LOWER(lf.target_period) AS first_target_utc,
-        lf.p02_sips, lf.p10_sips, lf.p25_sips, lf.p50_sips,
-        lf.p75_sips, lf.p90_sips, lf.p98_sips
+        lf.p02_sips,
+        lf.p10_sips,
+        lf.p25_sips,
+        lf.p50_sips,
+        lf.p75_sips,
+        lf.p90_sips,
+        lf.p98_sips,
+        LOWER(lf.target_period) AS first_target_utc
     FROM target_locations AS tl
         CROSS JOIN LATERAL (
             SELECT
-                f.forecast_uuid, f.source_type_id, f.created_at_utc, f.metadata,
-                f.init_time_utc, f.value_resolution_mins, f.target_period,
-                f.p02_sips, f.p10_sips, f.p25_sips, f.p50_sips,
-                f.p75_sips, f.p90_sips, f.p98_sips
+                f.forecast_uuid,
+                f.source_type_id,
+                f.created_at_utc,
+                f.metadata,
+                f.init_time_utc,
+                f.value_resolution_mins,
+                f.target_period,
+                f.p02_sips,
+                f.p10_sips,
+                f.p25_sips,
+                f.p50_sips,
+                f.p75_sips,
+                f.p90_sips,
+                f.p98_sips
             FROM pred.forecasts AS f
             WHERE f.geometry_uuid = tl.geometry_uuid
                 AND f.source_type_id = $1
@@ -432,7 +525,8 @@ indexed AS (
     /* target_time = first_target_utc + (i - 1) * value_resolution_mins,
      * so i = (target - first_target) / resolution + 1. Only meaningful when p50_sips is
      * populated; the legacy branch below keys on horizon_mins instead. */
-    SELECT laf.*,
+    SELECT
+        laf.*,
         (EXTRACT(EPOCH FROM (
             sqlc.arg(target_timestamp_utc)::TIMESTAMP - laf.first_target_utc
         )) / 60 / laf.value_resolution_mins)::INTEGER + 1 AS idx,
@@ -446,13 +540,6 @@ SELECT
     i.geometry_uuid,
     i.source_type_id,
     i.horizon_mins,
-    COALESCE(i.p02_sips[i.idx], legacy.p02_sip) AS p02_sip,
-    COALESCE(i.p10_sips[i.idx], legacy.p10_sip) AS p10_sip,
-    COALESCE(i.p25_sips[i.idx], legacy.p25_sip) AS p25_sip,
-    COALESCE(i.p50_sips[i.idx], legacy.p50_sip) AS p50_sip,
-    COALESCE(i.p75_sips[i.idx], legacy.p75_sip) AS p75_sip,
-    COALESCE(i.p90_sips[i.idx], legacy.p90_sip) AS p90_sip,
-    COALESCE(i.p98_sips[i.idx], legacy.p98_sip) AS p98_sip,
     i.created_at_utc,
     i.init_time_utc,
     sv.capacity_watts,
@@ -460,22 +547,42 @@ SELECT
     sv.longitude,
     sv.geometry_name,
     i.metadata,
+    COALESCE(i.p02_sips[i.idx], legacy.p02_sip) AS p02_sip,
+    COALESCE(i.p10_sips[i.idx], legacy.p10_sip) AS p10_sip,
+    COALESCE(i.p25_sips[i.idx], legacy.p25_sip) AS p25_sip,
+    COALESCE(i.p50_sips[i.idx], legacy.p50_sip) AS p50_sip,
+    COALESCE(i.p75_sips[i.idx], legacy.p75_sip) AS p75_sip,
+    COALESCE(i.p90_sips[i.idx], legacy.p90_sip) AS p90_sip,
+    COALESCE(i.p98_sips[i.idx], legacy.p98_sip) AS p98_sip,
     sqlc.arg(target_timestamp_utc)::TIMESTAMP AS target_time_utc
 FROM indexed AS i
     INNER JOIN loc.sources_mv AS sv USING (geometry_uuid, source_type_id)
     /* The p50_sips IS NULL test sits inside the subquery, not in an ON clause: a LEFT JOIN's ON
      * condition filters the result but does not stop the subquery being evaluated, so putting it
      * there would probe predicted_generation_values for migrated forecasts too. */
-    LEFT JOIN LATERAL (
-        SELECT pg.p02_sip, pg.p10_sip, pg.p25_sip, pg.p50_sip, pg.p75_sip, pg.p90_sip, pg.p98_sip
+    LEFT OUTER JOIN LATERAL (
+        SELECT
+            pg.p02_sip,
+            pg.p10_sip,
+            pg.p25_sip,
+            pg.p50_sip,
+            pg.p75_sip,
+            pg.p90_sip,
+            pg.p98_sip
         FROM pred.predicted_generation_values AS pg
         WHERE i.p50_sips IS NULL
             AND pg.forecast_uuid = i.forecast_uuid
             AND pg.horizon_mins = i.horizon_mins
     ) AS legacy ON TRUE
 WHERE (
-    (i.p50_sips IS NOT NULL AND i.idx BETWEEN 1 AND ARRAY_LENGTH(i.p50_sips, 1)
-     AND MOD((EXTRACT(EPOCH FROM (sqlc.arg(target_timestamp_utc)::TIMESTAMP - i.first_target_utc)) / 60)::NUMERIC, i.value_resolution_mins::NUMERIC) = 0)
+    (
+        i.p50_sips IS NOT NULL AND i.idx BETWEEN 1 AND ARRAY_LENGTH(i.p50_sips, 1)
+        AND MOD(
+            (EXTRACT(EPOCH FROM (sqlc.arg(target_timestamp_utc)::TIMESTAMP - i.first_target_utc)) / 60)::NUMERIC,
+            i.value_resolution_mins::NUMERIC
+        )
+        = 0
+    )
     OR (i.p50_sips IS NULL AND legacy.p50_sip IS NOT NULL)
 )
 AND sv.sys_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP;
@@ -494,8 +601,8 @@ WITH relevant_forecasts AS (
         f.forecaster_id,
         f.init_time_utc,
         f.value_resolution_mins,
-        LOWER(f.target_period) AS first_target_utc,
-        f.p50_sips
+        f.p50_sips,
+        LOWER(f.target_period) AS first_target_utc
     FROM pred.forecasts AS f
     WHERE f.geometry_uuid = $4
         AND f.source_type_id = $1
@@ -508,13 +615,17 @@ expanded_array AS (
     SELECT
         rf.geometry_uuid,
         rf.source_type_id,
-        (EXTRACT(EPOCH FROM (rf.first_target_utc - rf.init_time_utc)) / 60
-            + (o.ord - 1) * rf.value_resolution_mins)::SMALLINT AS horizon_mins,
+        (
+            EXTRACT(EPOCH FROM (rf.first_target_utc - rf.init_time_utc)) / 60
+            + (o.ord - 1) * rf.value_resolution_mins
+        )::SMALLINT AS horizon_mins,
         o.p50_sip,
-        (rf.first_target_utc + MAKE_INTERVAL(mins =>
-            ((o.ord - 1) * rf.value_resolution_mins)::INTEGER))::TIMESTAMP AS target_time_utc
+        (rf.first_target_utc + MAKE_INTERVAL(
+            mins =>
+            ((o.ord - 1) * rf.value_resolution_mins)::INTEGER
+        ))::TIMESTAMP AS target_time_utc
     FROM relevant_forecasts AS rf
-    CROSS JOIN LATERAL unnest(rf.p50_sips) WITH ORDINALITY AS o(p50_sip, ord)
+        CROSS JOIN LATERAL UNNEST(rf.p50_sips) WITH ORDINALITY AS o (p50_sip, ord)
     WHERE rf.p50_sips IS NOT NULL
 ),
 expanded_legacy AS (

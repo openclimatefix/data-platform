@@ -1560,7 +1560,10 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 		}
 
 		if err := validateForecastValues(req.Values); err != nil {
-			return status.Error(codes.InvalidArgument, fmt.Sprintf("invalid forecast values: %v", err))
+			return status.Error(
+				codes.InvalidArgument,
+				fmt.Sprintf("invalid forecast values: %v", err),
+			)
 		}
 
 		fKey := forecasterKey{

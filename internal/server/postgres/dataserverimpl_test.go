@@ -2040,6 +2040,7 @@ func TestCreateForecast(t *testing.T) {
 		if i%2 == 0 {
 			statFractions["p25"] = 0.25
 		}
+
 		yieldsPartial[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins:              uint32(i * 30),
 			P50Fraction:              0.5,
@@ -2492,6 +2493,7 @@ func TestStreamCreateForecasts(t *testing.T) {
 		if i%2 == 0 {
 			statFractions["p25"] = 0.25
 		}
+
 		yieldsPartial[i] = &pb.CreateForecastRequest_ForecastValue{
 			HorizonMins:              uint32(i * 30),
 			P50Fraction:              0.5,

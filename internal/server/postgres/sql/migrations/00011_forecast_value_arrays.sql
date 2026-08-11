@@ -1,26 +1,11 @@
 -- +goose Up
-
-/*
- * Replaces uuidv7_extract_timestamp with an immutable implementation returning UTC wall time
- * directly, rather than a TIMESTAMPTZ that every call site then cast using the session TimeZone.
- * Measured at ~215ns/row against ~378ns/row for the version it replaces.
- *
- * PG18's native uuid_extract_timestamp() is faster still (~96ns/row), but returns NULL for any
- * UUID that is not version 1 or 7 - including pg_partman's partition bounds, which zero the
- * version nibble ('019f15d3-5800-0000-...'). Decoding the first 48 bits directly keeps the
- * original function's contract of working on any UUID, which the partition rebuild in 00012
- * depends on. The speed difference is immaterial now that no hot-path query calls this.
- */
-
 DROP FUNCTION IF EXISTS uuidv7_extract_timestamp(UUID);
 
 -- +goose StatementBegin
 CREATE FUNCTION uuidv7_extract_timestamp(u UUID) RETURNS TIMESTAMP
-LANGUAGE sql
-IMMUTABLE STRICT PARALLEL SAFE
-RETURN TIMESTAMP 'epoch' + (
-    ('x' || encode(substring(uuid_send(u) FROM 1 FOR 6), 'hex'))::BIT(48)::BIGINT
-) * INTERVAL '1 millisecond';
+   LANGUAGE sql
+   IMMUTABLE STRICT PARALLEL SAFE
+   RETURN uuid_extract_timestamp(u) AT TIME ZONE 'UTC';
 -- +goose StatementEnd
 
 /*

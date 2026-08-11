@@ -76,10 +76,10 @@ BEGIN
             p_partition, v_values;
     END IF;
 
-    v_lo := uuidv7_extract_timestamp(
-        (regexp_match(v_bounds, $re$FROM \('([^']+)'\)$re$))[1]::UUID);
-    v_hi := uuidv7_extract_timestamp(
-        (regexp_match(v_bounds, $re$TO \('([^']+)'\)$re$))[1]::UUID);
+    v_lo := partman.uuid7_time_decoder(
+        (regexp_match(v_bounds, $re$FROM \('([^']+)'\)$re$))[1]::UUID) AT TIME ZONE 'UTC';
+    v_hi := partman.uuid7_time_decoder(
+        (regexp_match(v_bounds, $re$TO \('([^']+)'\)$re$))[1]::UUID) AT TIME ZONE 'UTC';
 
     RAISE NOTICE 'pred.% covers % .. % (% chunks of %)',
         p_partition, v_lo, v_hi,

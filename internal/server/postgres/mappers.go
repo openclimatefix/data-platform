@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -93,7 +94,7 @@ func extractSIPStatSlice(values []*pb.CreateForecastRequest_ForecastValue, key s
 	return out
 }
 
-// extractP50Slice builds the p50 array. p50 is a top-level field on ForecastValue rather than a
+// extractP50Slice builds the p50 array. P50 is a top-level field on ForecastValue rather than a
 // key in OtherStatisticsFractions, and is always present.
 func extractP50Slice(values []*pb.CreateForecastRequest_ForecastValue) []int16 {
 	out := make([]int16, len(values))
@@ -103,7 +104,6 @@ func extractP50Slice(values []*pb.CreateForecastRequest_ForecastValue) []int16 {
 
 	return out
 }
-
 
 // sipToFraction converts a SIP value to a fraction.
 func sipToFraction(sip int16) float32 {
@@ -115,17 +115,17 @@ func sipToFraction(sip int16) float32 {
 // either present on every value or on none.
 func validateForecastValues(values []*pb.CreateForecastRequest_ForecastValue) error {
 	if len(values) < 2 {
-		return fmt.Errorf("a forecast must contain at least two values")
+		return errors.New("a forecast must contain at least two values")
 	}
 
 	resolution := int32(values[1].HorizonMins) - int32(values[0].HorizonMins)
 	if resolution <= 0 {
-		return fmt.Errorf("forecast horizons must be monotonically increasing")
+		return errors.New("forecast horizons must be monotonically increasing")
 	}
 
 	for i := 1; i < len(values); i++ {
 		if int32(values[i].HorizonMins)-int32(values[i-1].HorizonMins) != resolution {
-			return fmt.Errorf("forecast horizons must be evenly spaced in time")
+			return errors.New("forecast horizons must be evenly spaced in time")
 		}
 	}
 
