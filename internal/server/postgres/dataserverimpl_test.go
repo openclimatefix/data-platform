@@ -2033,11 +2033,37 @@ func TestCreateForecast(t *testing.T) {
 		}
 	}
 
+	yieldsPartial := make([]*pb.CreateForecastRequest_ForecastValue, 10)
+	for i := range yieldsPartial {
+		statFractions := map[string]float32{"p10": 0.1, "p90": 0.9}
+		// p25 is only populated on some values, making it partial
+		if i%2 == 0 {
+			statFractions["p25"] = 0.25
+		}
+
+		yieldsPartial[i] = &pb.CreateForecastRequest_ForecastValue{
+			HorizonMins:              uint32(i * 30),
+			P50Fraction:              0.5,
+			OtherStatisticsFractions: statFractions,
+		}
+	}
+
 	testcases := []struct {
 		name      string
 		req       *pb.CreateForecastRequest
 		shouldErr bool
 	}{
+		{
+			name: "Shouldn't create forecast with partially populated statistic",
+			req: &pb.CreateForecastRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fc,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				InitTimeUtc:  timestamppb.New(pivotTime),
+				Values:       yieldsPartial,
+			},
+			shouldErr: true,
+		},
 		{
 			name: "Should create forecast with populated values",
 			req: &pb.CreateForecastRequest{
@@ -2461,6 +2487,20 @@ func TestStreamCreateForecasts(t *testing.T) {
 
 	yields := generateTestForecastValues(10, 30)
 
+	yieldsPartial := make([]*pb.CreateForecastRequest_ForecastValue, 10)
+	for i := range yieldsPartial {
+		statFractions := map[string]float32{"p10": 0.1, "p90": 0.9}
+		if i%2 == 0 {
+			statFractions["p25"] = 0.25
+		}
+
+		yieldsPartial[i] = &pb.CreateForecastRequest_ForecastValue{
+			HorizonMins:              uint32(i * 30),
+			P50Fraction:              0.5,
+			OtherStatisticsFractions: statFractions,
+		}
+	}
+
 	testcases := []struct {
 		name               string
 		setupStream        func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error)
@@ -2470,6 +2510,25 @@ func TestStreamCreateForecasts(t *testing.T) {
 		expectedErrCode    codes.Code
 		expectedUuidsCount int
 	}{
+		{
+			name: "Shouldn't create forecast stream with partially populated statistic",
+			setupStream: func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error) {
+				return dc.StreamCreateForecasts(ctx)
+			},
+			sendCount: 1,
+			getReq: func(i int) *pb.CreateForecastRequest {
+				return &pb.CreateForecastRequest{
+					LocationUuid: siteResp.LocationUuid,
+					Forecaster:   fc,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					InitTimeUtc:  timestamppb.New(pivotTime.Add(time.Duration(i) * time.Hour)),
+					Values:       yieldsPartial,
+				}
+			},
+			shouldErr:          true,
+			expectedErrCode:    codes.InvalidArgument,
+			expectedUuidsCount: 0,
+		},
 		{
 			name: "Valid stream under limit",
 			setupStream: func(ctx context.Context) (pb.DataPlatformDataService_StreamCreateForecastsClient, error) {

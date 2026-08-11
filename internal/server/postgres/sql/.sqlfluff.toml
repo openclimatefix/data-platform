@@ -4,6 +4,7 @@ max_line_length = 120
 rules = aliasing, ambiguous, capitalisation, convention, layout, structure, references
 exclude_rules = ST07, AL03, AL07, LT08, RF02, RF03
 processes = 4
+large_file_skip_byte_limit = 25000
 
 [sqlfluff:indentation]
 indented_using_on = False

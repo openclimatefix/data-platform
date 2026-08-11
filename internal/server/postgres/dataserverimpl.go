@@ -64,17 +64,12 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		Msg("found source")
 
 	// Check the forecast values have monotonically increasing horizons
-	resolution_mins := req.Values[1].HorizonMins - req.Values[0].HorizonMins
-	for i, value := range req.Values {
-		if i > 0 {
-			if resolution_mins != value.HorizonMins-req.Values[i-1].HorizonMins ||
-				value.HorizonMins <= req.Values[i-1].HorizonMins {
-				return nil, status.Error(
-					codes.InvalidArgument,
-					"Forecast horizon values must be monotonically spaced in time.",
-				)
-			}
-		}
+	err = validateForecastValues(req.Values)
+	if err != nil {
+		return nil, status.Error(
+			codes.InvalidArgument,
+			fmt.Sprintf("invalid forecast values: %v", err),
+		)
 	}
 
 	// Check the forecaster exists
@@ -372,6 +367,10 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 				rows, err := pool.Query(
 					stream.Context(),
 					db.ListPredictionsForForecasts,
+					fNames,
+					fVersions,
+					locationUuid,
+					int16(req.EnergySource.Number()),
 					pgtype.Timestamp{
 						Time:  req.TimeWindow.StartTimestampUtc.AsTime(),
 						Valid: true,
@@ -380,10 +379,6 @@ func (s *DataPlatformDataServiceServerImpl) StreamForecastData(
 						Time:  req.TimeWindow.EndTimestampUtc.AsTime(),
 						Valid: true,
 					},
-					locationUuid,
-					int16(req.EnergySource.Number()),
-					fNames,
-					fVersions,
 				)
 				if err != nil {
 					return fmt.Errorf("failed to stream predictions: %w", err)
@@ -1562,6 +1557,13 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 			}
 
 			return fmt.Errorf("error receiving from stream: %w", err)
+		}
+
+		if err := validateForecastValues(req.Values); err != nil {
+			return status.Error(
+				codes.InvalidArgument,
+				fmt.Sprintf("invalid forecast values: %v", err),
+			)
 		}
 
 		fKey := forecasterKey{

@@ -12,14 +12,20 @@ INSERT INTO loc.geometries AS l (
         ST_CENTROID(ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326))
     )
 ) RETURNING
-    l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
+    l.geometry_uuid,
+    l.geometry_name,
+    ST_X(l.associated_point)::REAL AS longitude,
+    ST_Y(l.associated_point)::REAL AS latitude;
 
 -- name: RenameGeometry :one
 UPDATE loc.geometries AS l
 SET geometry_name = LOWER(sqlc.arg(new_geometry_name)::TEXT)
 WHERE l.geometry_uuid = $1
 RETURNING
-    l.geometry_uuid, l.geometry_name, ST_X(l.associated_point)::REAL AS longitude, ST_Y(l.associated_point)::REAL AS latitude;
+    l.geometry_uuid,
+    l.geometry_name,
+    ST_X(l.associated_point)::REAL AS longitude,
+    ST_Y(l.associated_point)::REAL AS latitude;
 
 -- name: ReownGeometry :one
 /* ReownGeometry assigns a new owning_entity_id to a geometry.
@@ -57,7 +63,7 @@ SELECT
     geometry_uuid,
     ST_ASBINARY(geom)::BYTEA AS geom_wkb
 FROM loc.geometries
-WHERE geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID []);
+WHERE geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID[]);
 
 -- name: GetGeometryGeoJSON :one
 /* GetLocationGeoJSON returns a GeoJSON FeatureCollection for the given geometries.
@@ -79,7 +85,7 @@ FROM (
         l.geometry_type_id,
         ST_SIMPLIFYPRESERVETOPOLOGY(l.geom, sqlc.arg(simplification_level)::REAL) AS geom_simple
     FROM loc.geometries AS l
-    WHERE l.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+    WHERE l.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID[])
 ) AS sl;
 
 /*- Queries for the sources table -------------------------------------*/
@@ -215,12 +221,12 @@ WHERE
         OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT
     )
     AND (
-        ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID [], 1) IS NULL
-        OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+        ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID[], 1) IS NULL
+        OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID[])
     )
     AND (
-        ARRAY_LENGTH(sqlc.arg(geometry_names)::TEXT [], 1) IS NULL
-        OR us.geometry_name = ANY(sqlc.arg(geometry_names)::TEXT [])
+        ARRAY_LENGTH(sqlc.arg(geometry_names)::TEXT[], 1) IS NULL
+        OR us.geometry_name = ANY(sqlc.arg(geometry_names)::TEXT[])
     )
     AND (
         sqlc.narg(geometry_type_id)::SMALLINT IS NULL
@@ -270,12 +276,12 @@ WHERE
         OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT
     )
     AND (
-        ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID [], 1) IS NULL
-        OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+        ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID[], 1) IS NULL
+        OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID[])
     )
     AND (
-        ARRAY_LENGTH(sqlc.arg(geometry_names)::TEXT [], 1) IS NULL
-        OR us.geometry_name = ANY(sqlc.arg(geometry_names)::TEXT [])
+        ARRAY_LENGTH(sqlc.arg(geometry_names)::TEXT[], 1) IS NULL
+        OR us.geometry_name = ANY(sqlc.arg(geometry_names)::TEXT[])
     )
     AND (
         sqlc.narg(geometry_type_id)::SMALLINT IS NULL
@@ -325,8 +331,8 @@ WHERE
         OR us.source_type_id = sqlc.narg(source_type_id)::SMALLINT
     )
     AND (
-        ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID [], 1) IS NULL
-        OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+        ARRAY_LENGTH(sqlc.arg(geometry_uuids)::UUID[], 1) IS NULL
+        OR us.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID[])
     )
     AND (
         sqlc.narg(geometry_type_id)::SMALLINT IS NULL

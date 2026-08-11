@@ -8,8 +8,8 @@ SELECT
     observer_name
 FROM obs.observers
 WHERE (
-    ARRAY_LENGTH(sqlc.arg(observer_names)::TEXT [], 1) IS NULL
-    OR observer_name = ANY(sqlc.arg(observer_names)::TEXT [])
+    ARRAY_LENGTH(sqlc.arg(observer_names)::TEXT[], 1) IS NULL
+    OR observer_name = ANY(sqlc.arg(observer_names)::TEXT[])
 );
 
 -- name: GetObserverByName :one
@@ -86,7 +86,7 @@ WHERE
  * It uses lateral joins to perform a reverse index scan for efficiency.
  */
 WITH target_locations AS (
-    SELECT UNNEST(sqlc.arg(geometry_uuids)::UUID []) AS geometry_uuid
+    SELECT UNNEST(sqlc.arg(geometry_uuids)::UUID[]) AS geometry_uuid
 ),
 target_observer AS (
     SELECT observer_uuid
@@ -138,7 +138,7 @@ SELECT
 FROM obs.observed_generation_values AS og
     INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
 WHERE
-    og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID [])
+    og.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID[])
     AND og.source_type_id = $1
     AND og.observer_uuid = $2
     AND og.observation_timestamp_utc = sqlc.arg(target_timestamp_utc)::TIMESTAMP
