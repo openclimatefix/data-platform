@@ -55,7 +55,6 @@ lint:
 	@uvx -q sqlfluff fix -q \
 		--disable-progress-bar \
 		--config=internal/server/postgres/sql/.sqlfluff.toml \
-		--show-lint-violations \
 		internal/server/postgres/sql/queries
 
 .PHONY: bench
