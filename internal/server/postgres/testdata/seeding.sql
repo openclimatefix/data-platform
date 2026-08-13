@@ -54,33 +54,33 @@ BEGIN
         FROM unnest(geo_list) AS u(geo_id)
         CROSS JOIN generate_series(0, (history_window_mins / forecast_freq_mins) - 1) AS s(idx)
         ORDER BY init_time_utc ASC
-    ),
-    inserted_forecasts AS (
-        INSERT INTO pred.forecasts 
-            (forecast_uuid, source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period)
-        SELECT 
-            UUIDV7(init_time_utc), 1, geo_id, 
-            (SELECT forecaster_id FROM pred.forecasters WHERE forecaster_name = name_prefix || '_forecaster_1'),
-            init_time_utc, pgv_res_mins::SMALLINT,
-            TSRANGE(init_time_utc, init_time_utc + (forecast_len_mins * INTERVAL '1 minute'))
-        FROM generated_data
-        RETURNING forecast_uuid, init_time_utc
     )
-    INSERT INTO pred.predicted_generation_values 
-        (horizon_mins, p50_sip, p10_sip, p90_sip, forecast_uuid)
+    INSERT INTO pred.forecasts 
+        (forecast_uuid, source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period,
+         p50_sips, p10_sips, p90_sips)
     SELECT 
-        gs.h, 
-        (random() * 30000)::SMALLINT,
-        3000::SMALLINT,
-        27000::SMALLINT,
-        inf.forecast_uuid
-    FROM inserted_forecasts inf
-    CROSS JOIN LATERAL generate_series(0, forecast_len_mins - pgv_res_mins, pgv_res_mins) AS gs(h)
-    ORDER BY inf.init_time_utc ASC;
+        UUIDV7(gd.init_time_utc), 1, gd.geo_id, 
+        (SELECT forecaster_id FROM pred.forecasters WHERE forecaster_name = name_prefix || '_forecaster_1'),
+        gd.init_time_utc, pgv_res_mins::SMALLINT,
+        TSRANGE(gd.init_time_utc, gd.init_time_utc + (forecast_len_mins * INTERVAL '1 minute')),
+        v.p50_sips,
+        array_fill(3000::SMALLINT, ARRAY[forecast_len_mins / pgv_res_mins]),
+        array_fill(27000::SMALLINT, ARRAY[forecast_len_mins / pgv_res_mins])
+    FROM generated_data gd
+    -- Correlated on init_time_utc so each forecast gets its own values; an uncorrelated
+    -- subquery is an InitPlan, evaluated once, giving every forecast the same array.
+    CROSS JOIN LATERAL (
+        SELECT array_agg((random() * 30000)::SMALLINT) AS p50_sips
+        FROM generate_series(
+            gd.init_time_utc,
+            gd.init_time_utc + ((forecast_len_mins - pgv_res_mins) * INTERVAL '1 minute'),
+            (pgv_res_mins * INTERVAL '1 minute')
+        )
+    ) AS v;
 
     -- Spoof the table size so Postgres uses indexes rather than seq scan in testing
-    UPDATE pg_class SET reltuples = 346000000, relpages = 5000000 WHERE relname = 'predicted_generation_values';
-    UPDATE pg_class SET reltuples = 346000000, relpages = 5000000 WHERE relname = 'predicted_generation_values_pkey';
+    UPDATE pg_class SET reltuples = 14400000, relpages = 1600000 WHERE relname = 'forecasts';
+    UPDATE pg_class SET reltuples = 14400000, relpages = 1600000 WHERE relname = 'idx_forecasts_filter';
     
     REFRESH MATERIALIZED VIEW loc.sources_mv;
     

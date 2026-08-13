@@ -109,31 +109,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateForecast(
 		return nil, fmt.Errorf("invalid forecast: %w", err)
 	}
 
-	// Create the forecast data
-	paramsList := make([]db.CreatePredictedValuesParams, len(req.Values))
-	for i, value := range req.Values {
-		paramsList[i] = db.CreatePredictedValuesParams{
-			HorizonMins:  int16(value.HorizonMins),
-			P02Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p02"),
-			P10Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p10"),
-			P25Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p25"),
-			P50Sip:       int16(value.P50Fraction * 30000.0),
-			P75Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p75"),
-			P90Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p90"),
-			P98Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p98"),
-			ForecastUuid: fParams.ForecastUuid,
-		}
-	}
-
-	count, err := querier.CreatePredictedValues(ctx, paramsList)
-	if err != nil || count < int64(len(req.Values)) {
-		if err == nil {
-			err = errors.New("inserted count less than requested")
-		}
-
-		return nil, fmt.Errorf("invalid predicted generation values: %w", err)
-	}
-
 	l.Debug().
 		Str("dp.forecast.uuid", fParams.ForecastUuid.String()).
 		Str("dp.geometry.uuid", fParams.GeometryUuid.String()).
@@ -1481,7 +1456,6 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 
 	var (
 		forecastParams []db.CreateForecastsParams
-		valueParams    []db.CreatePredictedValuesParams
 		createdUuids   []string
 		batchUuids     []string
 	)
@@ -1519,20 +1493,10 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 			return fmt.Errorf("failed to insert forecasts batch: %w", err)
 		}
 
-		countV, err := querier.CreatePredictedValues(ctx, valueParams)
-		if err != nil || countV < int64(len(valueParams)) {
-			if err == nil {
-				err = errors.New("inserted predicted values count less than requested")
-			}
-
-			return fmt.Errorf("failed to insert predicted values batch: %w", err)
-		}
-
 		createdUuids = append(createdUuids, batchUuids...)
 
 		// Reset batch buffers
 		forecastParams = forecastParams[:0]
-		valueParams = valueParams[:0]
 		batchUuids = batchUuids[:0]
 
 		batchesProcessed++
@@ -1633,21 +1597,6 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 		}
 
 		forecastParams = append(forecastParams, fParams)
-
-		for _, value := range req.Values {
-			valueParams = append(valueParams, db.CreatePredictedValuesParams{
-				HorizonMins:  int16(value.HorizonMins),
-				P02Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p02"),
-				P10Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p10"),
-				P25Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p25"),
-				P50Sip:       int16(value.P50Fraction * 30000.0),
-				P75Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p75"),
-				P90Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p90"),
-				P98Sip:       extractSIPStatPtrFromMap(value.OtherStatisticsFractions, "p98"),
-				ForecastUuid: fParams.ForecastUuid,
-			})
-		}
-
 		batchUuids = append(batchUuids, fParams.ForecastUuid.String())
 
 		// Flush if we hit the batch size limit
