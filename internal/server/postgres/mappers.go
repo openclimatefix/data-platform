@@ -58,19 +58,6 @@ func timeptrToPgTimestamp(t *timestamppb.Timestamp) pgtype.Timestamp {
 	return pgtype.Timestamp{Time: t.AsTime().UTC(), Valid: true}
 }
 
-// extractSIPStatPtrFromMap gets a key's value from a map as a pointer, and converts it
-// to a smallint percentage. If it doesn't exist, it returns nil.
-func extractSIPStatPtrFromMap(m map[string]float32, key string) *int16 {
-	val, exists := m[key]
-	if !exists {
-		return nil
-	}
-
-	sip_val := int16(val * 30000.0)
-
-	return &sip_val
-}
-
 // extractSIPStatSlice builds the array for a single p-level from a forecast's values.
 // Returns nil if no value in the series carries this statistic, so the column is stored as a
 // NULL array rather than a materialised array of nulls (~3 bytes per forecast against ~130).

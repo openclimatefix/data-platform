@@ -83,48 +83,6 @@ func Test_timeptrToPgTimestamp(t *testing.T) {
 	}
 }
 
-func Test_extractSIPStatPtrFromMap(t *testing.T) {
-	m := map[string]float32{"p10": 0.1, "p90": 0.9}
-
-	tests := []struct {
-		name     string
-		inputMap map[string]float32
-		key      string
-		expected *int16
-	}{
-		{
-			name:     "nil map returns nil",
-			inputMap: nil,
-			key:      "p10",
-			expected: nil,
-		},
-		{
-			name:     "missing key returns nil",
-			inputMap: m,
-			key:      "p50",
-			expected: nil,
-		},
-		{
-			name:     "existing key returns sip value",
-			inputMap: m,
-			key:      "p10",
-			expected: func() *int16 { v := int16(3000); return &v }(),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			res := extractSIPStatPtrFromMap(tt.inputMap, tt.key)
-			if tt.expected == nil {
-				require.Nil(t, res)
-			} else {
-				require.NotNil(t, res)
-				require.Equal(t, *tt.expected, *res)
-			}
-		})
-	}
-}
-
 func Test_sipToFraction(t *testing.T) {
 	tests := []struct {
 		name     string
