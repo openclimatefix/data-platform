@@ -1,3 +1,15 @@
+CREATE OR REPLACE FUNCTION spoof_uuidv7(ts timestamptz) RETURNS uuid AS $$
+SELECT encode(
+   set_bit(
+	   set_bit(
+		   overlay(uuid_send(gen_random_uuid()) placing
+		   substring(int8send(floor(extract(epoch from ts) * 1000)::bigint) from 3)
+		   from 1 for 6),
+	   52, 1),
+   53, 1),
+'hex')::uuid;
+$$ LANGUAGE sql volatile;
+
 CREATE OR REPLACE FUNCTION seed_db(
     name_prefix TEXT DEFAULT '',
     target_locations INTEGER DEFAULT 100,
@@ -59,7 +71,7 @@ BEGIN
         (forecast_uuid, source_type_id, geometry_uuid, forecaster_id, init_time_utc, value_resolution_mins, target_period,
          p50_sips, p10_sips, p90_sips)
     SELECT 
-        UUIDV7(gd.init_time_utc), 1, gd.geo_id, 
+        SPOOF_UUIDV7(gd.init_time_utc AT TIME ZONE 'UTC'), 1, gd.geo_id, 
         (SELECT forecaster_id FROM pred.forecasters WHERE forecaster_name = name_prefix || '_forecaster_1'),
         gd.init_time_utc, pgv_res_mins::SMALLINT,
         TSRANGE(gd.init_time_utc, gd.init_time_utc + (forecast_len_mins * INTERVAL '1 minute')),

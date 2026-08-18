@@ -7,10 +7,13 @@
 package postgres
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -1483,6 +1486,23 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 		if len(forecastParams) == 0 {
 			return nil
 		}
+
+		// Sort the batch to match the index to improve clustering in the database.
+		slices.SortFunc(forecastParams, func(a, b db.CreateForecastsParams) int {
+			if c := bytes.Compare(a.GeometryUuid[:], b.GeometryUuid[:]); c != 0 {
+				return c
+			}
+
+			if c := cmp.Compare(a.SourceTypeID, b.SourceTypeID); c != 0 {
+				return c
+			}
+
+			if c := cmp.Compare(a.ForecasterID, b.ForecasterID); c != 0 {
+				return c
+			}
+
+			return bytes.Compare(b.ForecastUuid[:], a.ForecastUuid[:])
+		})
 
 		countF, err := querier.CreateForecasts(ctx, forecastParams)
 		if err != nil || countF < int64(len(forecastParams)) {

@@ -29,7 +29,9 @@ func MapSlice[T, U any](input []T, mapper func(T) U) []U {
 }
 
 // timeWindowToPgWindow converts a TimeWindow protobuf message to a pair of pgtype.Timestamp values.
-// If the TimeWindow is nil or its StartTimestampUtc is nil, it defaults to a window from 48 hours ago to 36 hours in the future. Protovalidate ensures at the boundary that the start is always before the end, so we don't need to check that here.
+// If the TimeWindow is nil or its StartTimestampUtc is nil, it defaults to a window from 48 hours
+// ago to 36 hours in the future. Protovalidate ensures at the boundary that the start is always
+// before the end, so we don't need to check that here.
 func timeWindowToPgWindow(
 	window *pb.TimeWindow,
 ) (start pgtype.Timestamp, end pgtype.Timestamp) {
@@ -60,9 +62,9 @@ func timeptrToPgTimestamp(t *timestamppb.Timestamp) pgtype.Timestamp {
 
 // extractSIPStatSlice builds the array for a single p-level from a forecast's values.
 // Returns nil if no value in the series carries this statistic, so the column is stored as a
-// NULL array rather than a materialised array of nulls (~3 bytes per forecast against ~130).
-// Callers must have run validateForecastValues first: sqlc maps SMALLINT[] to []int16, which
-// cannot express element-level nulls, so partial coverage would silently be written as zeros.
+// NULL array rather than a materialised array of NULLs.
+// NOTE: Callers must have run validateForecastValues first, otherwise partial forecasts would
+// silently be infilled with zeros.
 func extractSIPStatSlice(values []*pb.CreateForecastRequest_ForecastValue, key string) []int16 {
 	out := make([]int16, len(values))
 	present := false
@@ -81,8 +83,9 @@ func extractSIPStatSlice(values []*pb.CreateForecastRequest_ForecastValue, key s
 	return out
 }
 
-// extractP50Slice builds the p50 array. P50 is a top-level field on ForecastValue rather than a
-// key in OtherStatisticsFractions, and is always present.
+// extractP50Slice builds the p50 array.
+// P50 is a top-level field on ForecastValue rather than a key in OtherStatisticsFractions,
+// and is always present.
 func extractP50Slice(values []*pb.CreateForecastRequest_ForecastValue) []int16 {
 	out := make([]int16, len(values))
 	for i, v := range values {
@@ -97,9 +100,7 @@ func sipToFraction(sip int16) float32 {
 	return float32(sip) / 30000.0
 }
 
-// validateForecastValues checks the invariants the array storage layout depends on:
-// at least two values, strictly increasing horizons, evenly spaced, and each optional statistic
-// either present on every value or on none.
+// validateForecastValues checks the forecast valiues against a set of rules.
 func validateForecastValues(values []*pb.CreateForecastRequest_ForecastValue) error {
 	if len(values) < 2 {
 		return errors.New("a forecast must contain at least two values")
