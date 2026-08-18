@@ -332,7 +332,7 @@ message CreateForecastRequest {
       (buf.validate.field).float.lte = 1.1,
       (buf.validate.field).float.finite = true
     ];
-    // Struct for storing additional statistics like p10, p90, mean etc.
+    // Struct for storing additional statistics/quartiles
     map<string, float> other_statistics_fractions = 3 [
       (buf.validate.field).map.min_pairs = 0,
       (buf.validate.field).map.max_pairs = 20,

@@ -12,7 +12,6 @@ PROTOC           := $(LOCAL_BIN)/protoc
 PROTOC_INCLUDE   := $(LOCAL_BIN)/include
 PROTOC_GEN_GO    := $(LOCAL_BIN)/protoc-gen-go
 PROTOC_GEN_GRPC  := $(LOCAL_BIN)/protoc-gen-go-grpc
-PROTOC_GEN_DOC   := $(LOCAL_BIN)/protoc-gen-doc
 
 # --- Sources & Stamps ---
 GO_SOURCES          := $(shell find . -name '*.go' -not -path "./internal/gen/*" -not -path "./vendor/*")
@@ -78,7 +77,7 @@ doctor: $(PROTOC)
 # --- Code Generation Targets ------------------------------------------------------------- #
 
 .PHONY: gen
-gen: gen.proto.go gen.db gen.proto.docs
+gen: gen.proto.go gen.db
 
 .PHONY: gen.db
 gen.db: ${SQLC_STAMP_FILE}
@@ -180,116 +179,6 @@ gen.proto.python: ${PROTOC}
 	@echo "$$GEN_PYPROJ" > gen/python/pyproject.toml
 	@echo "Building wheel..."
 	@cd gen/python && echo $$(uv run python -m setuptools_git_versioning) && uv build
-
-define GEN_DOCS
-## GRPC API Documentation
-
-{{- range .Files -}}
-{{- $$file_name := .Name -}}
-
-{{/* --- SERVICES & METHODS --- */}}
-{{- if .HasServices}}
-{{range .Services -}}
-<a name="{{.FullName | anchor}}"></a>
-
-### {{.Name}} ({{$$file_name}})
-{{.Description}}
-
-{{range .Methods -}}
-<a name="{{.Name | anchor}}"></a>
-
-#### {{.Name}}
-
-{{.Description}}
-
-_[{{.RequestLongType}}](#{{.RequestFullType | anchor}}){{if .RequestStreaming}} stream{{end}} / [{{.ResponseLongType}}](#{{.ResponseFullType | anchor}}){{if .ResponseStreaming}} stream{{end}}_
-
-{{end}}{{/* end methods */}}
-{{- end}}{{/* end services */}}
-{{- end}}{{/* end has_services */}}
-
-{{- if .HasMessages}}
-<details><summary>Messages ({{$$file_name}})</summary>
-
-{{range .Messages -}}
-<a name="{{.FullName | anchor}}"></a>
-<details><summary>{{.LongName}}</summary>
-{{.Description}}
-
-{{if .HasFields -}}
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-{{range .Fields -}}
-  | {{.Name}} | [{{.LongType}}](#{{.FullType | anchor}}) | {{.Label}} | {{if (index .Options "deprecated"|default false)}}**Deprecated.** {{end}}{{nobr .Description}}{{if .DefaultValue}} Default: `{{.DefaultValue}}`{{end}} |
-{{- end -}}
-{{- end -}}
-
-{{if .HasExtensions -}}
-| Extension | Type | Base | Number | Description |
-| --------- | ---- | ---- | ------ | ----------- |
-{{range .Extensions -}}
-  | {{.Name}} | {{.LongType}} | {{.ContainingLongType}} | {{.Number}} | {{nobr .Description}}{{if .DefaultValue}} Default: `{{.DefaultValue}}`{{end}} |
-{{- end }}
-{{- end }}
-</details>
-
-{{- end }}{{/* end messages */}}
-</details>
-{{ end -}}{{/* end has_messages */}}
-
-{{- if .HasEnums}}
-<details><summary>Enums ({{$$file_name}})</summary>
-
-{{range .Enums -}}
-<a name="{{.FullName | anchor}}"></a>
-
-<details><summary>{{.LongName}}</summary>
-{{.Description}}
-
-| Name | Number | Description |
-| ---- | ------ | ----------- |
-{{range .Values -}}
-  | {{.Name}} | {{.Number}} | {{nobr .Description}} |
-{{- end }}
-</details>
-
-{{- end}}{{/* end enums */}}
-</details>
-{{ end -}}{{/* end has_enums */}}
-
-{{/* --- FILE-LEVEL EXTENSIONS --- */}}
-{{- if .HasExtensions}}
-<a name="{{$$file_name | anchor}}-extensions"></a>
-
-### File-level Extensions ({{$$file_name}})
-| Extension | Type | Base | Number | Description |
-| --------- | ---- | ---- | ------ | ----------- |
-{{range .Extensions -}}
-  | {{.Name}} | {{.LongType}} | {{.ContainingLongType}} | {{.Number}} | {{nobr .Description}}{{if .DefaultValue}} Default: `{{.DefaultValue}}`{{end}} |
-{{end}}
-{{- end}}{{/* end HasExtensions */}}
-
-{{- end}}{{/* end files */}}
-
-endef
-export GEN_DOCS
-
-.PHONY: gen.proto.docs
-gen.proto.docs: ${PROTOC} ${PROTOC_GEN_DOC}
-	@rm -rf gen/docs && mkdir -p gen/docs
-	@echo "$$GEN_DOCS" > gen/docs/markdown.tmpl
-	@${PROTOC} \
-		${PROTO_SOURCES} \
-		-I=proto \
-		-I=$(PROTOC_INCLUDE) \
-		--doc_out=gen/docs \
-		--doc_opt=gen/docs/markdown.tmpl,docs.md:=buf/*,google/*,ocf/dp/dp.rules.proto
-	@sed -n '1,/<!-- DOCS START -->/p' README.md > README.tmp
-	@echo "" >> README.tmp
-	@cat gen/docs/docs.md >> README.tmp
-	@echo "" >> README.tmp
-	@sed -n '/<!-- DOCS END -->/,$$p' README.md >> README.tmp
-	@mv README.tmp README.md
 
 # --- LOCAL RUNNING TARGETS --------------------------------------------------------------------- #
 
