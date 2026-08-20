@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
@@ -963,6 +964,37 @@ func (s *DataPlatformDataServiceServerImpl) GetLocationAsTimeseries(
 	}, nil
 }
 
+// createLocationSource inserts a source entry for a geometry.
+// Importantly, this also refreshes the sources materialised view.
+func createLocationSource(
+	ctx context.Context,
+	querier *db.Queries,
+	geometryUuid uuid.UUID,
+	sourceTypeID int16,
+	capacityWatts uint64,
+	metadata *structpb.Struct,
+	validFrom time.Time,
+) (db.CreateSourceEntryRow, error) {
+	csprms := db.CreateSourceEntryParams{
+		GeometryUuid:  geometryUuid,
+		SourceTypeID:  sourceTypeID,
+		CapacityWatts: int64(capacityWatts),
+		Metadata:      metadata,
+		ValidFromUtc:  pgtype.Timestamp{Time: validFrom, Valid: true},
+	}
+
+	dbSource, err := querier.CreateSourceEntry(ctx, csprms)
+	if err != nil {
+		return db.CreateSourceEntryRow{}, fmt.Errorf("invalid location source: %w", err)
+	}
+
+	if err := querier.RefreshSourcesMaterializedView(ctx); err != nil {
+		return db.CreateSourceEntryRow{}, fmt.Errorf("failed to update sources materialised view: %w", err)
+	}
+
+	return dbSource, nil
+}
+
 func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 	ctx context.Context,
 	req *pb.CreateLocationRequest,
@@ -1007,17 +1039,12 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
 	}
 
-	csprms := db.CreateSourceEntryParams{
-		GeometryUuid:  dbLocation.GeometryUuid,
-		SourceTypeID:  int16(req.EnergySource),
-		CapacityWatts: int64(req.EffectiveCapacityWatts),
-		Metadata:      req.Metadata,
-		ValidFromUtc:  pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
-	}
-
-	dbSource, err := querier.CreateSourceEntry(ctx, csprms)
+	dbSource, err := createLocationSource(
+		ctx, querier, dbLocation.GeometryUuid, int16(req.EnergySource.Number()),
+		req.EffectiveCapacityWatts, req.Metadata, req.ValidFromUtc.AsTime(),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("invalid location: %w", err)
+		return nil, err
 	}
 
 	l.Debug().
@@ -1027,16 +1054,57 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		Str("dp.source.valid_from_utc", dbSource.ValidFromUtc.Time.String()).
 		Msg("created source entry for location")
 
-	err = querier.RefreshSourcesMaterializedView(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update sources materialised view: %w", err)
-	}
-
-	l.Debug().Msg("refreshed sources materialised view")
-
 	return &pb.CreateLocationResponse{
 		LocationUuid:           dbLocation.GeometryUuid.String(),
 		LocationName:           dbLocation.GeometryName,
+		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
+	}, nil
+}
+
+func (s *DataPlatformDataServiceServerImpl) CreateLocationEnergySource(
+	ctx context.Context,
+	req *pb.CreateLocationEnergySourceRequest,
+) (*pb.CreateLocationEnergySourceResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	locationUuid := uuid.MustParse(req.LocationUuid)
+
+	if req.ValidFromUtc == nil {
+		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
+	}
+
+	// Reject if this energy source already exists for the location at this time.
+	gsprms := db.GetSourceAtTimestampParams{
+		GeometryUuid:   locationUuid,
+		SourceTypeID:   int16(req.EnergySource.Number()),
+		AtTimestampUtc: pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
+	}
+	if _, err := querier.GetSourceAtTimestamp(ctx, gsprms); err == nil {
+		return nil, status.Errorf(
+			codes.AlreadyExists,
+			"energy source '%s' already exists for location '%s'",
+			req.EnergySource, req.LocationUuid,
+		)
+	}
+
+	dbSource, err := createLocationSource(
+		ctx, querier, locationUuid, int16(req.EnergySource.Number()),
+		req.EffectiveCapacityWatts, req.Metadata, req.ValidFromUtc.AsTime(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	l.Debug().
+		Str("dp.source.geometry_uuid", locationUuid.String()).
+		Int16("dp.source.type_id", int16(req.EnergySource.Number())).
+		Int64("dp.source.capacity", int64(dbSource.CapacityWatts)).
+		Msg("created new energy source for location")
+
+	return &pb.CreateLocationEnergySourceResponse{
+		LocationUuid:           locationUuid.String(),
+		EnergySource:           req.EnergySource,
 		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
 	}, nil
 }

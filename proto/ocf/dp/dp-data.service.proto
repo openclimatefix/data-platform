@@ -34,6 +34,10 @@ service DataPlatformDataService {
   rpc GetLocationAsTimeseries(GetLocationAsTimeseriesRequest) returns (GetLocationAsTimeseriesResponse) {}
   /* CreateLocation registers a new location in which to log or forecast generation. */
   rpc CreateLocation(CreateLocationRequest) returns (CreateLocationResponse) {}
+  /* CreateLocationEnergySource attaches a new energy source to an existing location.
+   * Errors if the location already has a source of this type.
+   */
+  rpc CreateLocationEnergySource(CreateLocationEnergySourceRequest) returns (CreateLocationEnergySourceResponse) {}
   /* UpdateLocation modifies various attributes associated with a given location. */
   rpc UpdateLocation(UpdateLocationRequest) returns (UpdateLocationResponse) {}
   /* UpdateLocationOwner changes the ownership of a location. */
