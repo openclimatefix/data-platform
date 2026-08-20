@@ -1082,15 +1082,18 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocationEnergySource(
 		GeometryUuid: locationUuid,
 		SourceTypeID: int16(req.EnergySource.Number()),
 	}
+
 	exists, err := querier.CheckSourceExists(ctx, cseprms)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check source existence: %w", err)
 	}
+
 	if exists {
 		return nil, status.Errorf(
 			codes.AlreadyExists,
 			"energy source '%s' has already been created for location '%s'. New inserts to an existing energy source must go through the UpdateLocation RPC.",
-			req.EnergySource, req.LocationUuid,
+			req.EnergySource,
+			req.LocationUuid,
 		)
 	}
 

@@ -113,7 +113,7 @@ WHERE
 
 -- name: CheckSourceExists :one
 /* CheckSourceExists returns true if the given geometry and source type has ever had an entry. */
-SELECT EXISTS (
+SELECT EXISTS(
     SELECT 1
     FROM loc.sources_history
     WHERE geometry_uuid = $1

@@ -377,8 +377,10 @@ func TestCreateLocationEnergySource(t *testing.T) {
 				LocationUuid:           createResp.LocationUuid,
 				EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR, // Created today
 				EffectiveCapacityWatts: 2000,
-				ValidFromUtc:           timestamppb.New(time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Minute)),
-				Metadata:               metadata,
+				ValidFromUtc: timestamppb.New(
+					time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Minute),
+				),
+				Metadata: metadata,
 			},
 			shouldErr:    true,
 			errCodeCheck: codes.AlreadyExists,
