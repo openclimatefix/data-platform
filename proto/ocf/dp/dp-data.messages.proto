@@ -469,6 +469,32 @@ message CreateLocationResponse {
 }
 
 
+message CreateLocationEnergySourceRequest {
+  string location_uuid = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+  EnergySource energy_source = 2 [
+    (buf.validate.field).required = true
+  ];
+  // The effective capacity of this source in watts.
+  uint64 effective_capacity_watts = 3 [
+    (buf.validate.field).required = true
+  ];
+  optional google.protobuf.Struct metadata = 4;
+  // The UTC time from which this source is considered valid. Leave empty to use current time.
+  optional google.protobuf.Timestamp valid_from_utc = 5 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+  ];
+}
+
+message CreateLocationEnergySourceResponse {
+  string location_uuid = 1;
+  EnergySource energy_source = 2;
+  uint64 effective_capacity_watts = 3;
+}
+
+
 message GetLocationRequest {
   string location_uuid = 1 [
     (buf.validate.field).required = true,

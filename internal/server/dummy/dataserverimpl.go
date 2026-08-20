@@ -299,6 +299,18 @@ func (d *DataPlatformDataServiceServerImpl) CreateLocation(
 	}, nil
 }
 
+// CreateLocationEnergySource implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) CreateLocationEnergySource(
+	ctx context.Context,
+	req *pb.CreateLocationEnergySourceRequest,
+) (*pb.CreateLocationEnergySourceResponse, error) {
+	return &pb.CreateLocationEnergySourceResponse{
+		LocationUuid:           req.LocationUuid,
+		EnergySource:           req.EnergySource,
+		EffectiveCapacityWatts: req.EffectiveCapacityWatts,
+	}, nil
+}
+
 // UpdateLocation implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) UpdateLocation(
 	ctx context.Context,

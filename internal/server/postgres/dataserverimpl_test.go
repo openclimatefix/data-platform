@@ -331,6 +331,108 @@ func TestCreateLocation(t *testing.T) {
 	})
 }
 
+func TestCreateLocationEnergySource(t *testing.T) {
+	metadata := createTestMetadata(t, map[string]any{"source": "test_energy_source"})
+
+	// Create a location with solar valid from today
+	createResp := createTestLocation(
+		t,
+		"scotland_region",
+		"POINT(-0.127 51.507)",
+		1230,
+		time.Now().UTC().Truncate(time.Minute),
+		metadata,
+	)
+
+	testcases := []struct {
+		name         string
+		req          *pb.CreateLocationEnergySourceRequest
+		shouldErr    bool
+		errCodeCheck codes.Code
+	}{
+		{
+			name: "Should add wind energy source to existing location",
+			req: &pb.CreateLocationEnergySourceRequest{
+				LocationUuid:           createResp.LocationUuid,
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_WIND,
+				EffectiveCapacityWatts: 5000,
+				Metadata:               metadata,
+			},
+			shouldErr: false,
+		},
+		{
+			name: "Should fail to add already existing energy source",
+			req: &pb.CreateLocationEnergySourceRequest{
+				LocationUuid:           createResp.LocationUuid,
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR, // Already exists
+				EffectiveCapacityWatts: 2000,
+				Metadata:               metadata,
+			},
+			shouldErr:    true,
+			errCodeCheck: codes.AlreadyExists,
+		},
+		{
+			name: "Should fail if the energy source already exists but we query a past valid_from",
+			req: &pb.CreateLocationEnergySourceRequest{
+				LocationUuid:           createResp.LocationUuid,
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR, // Created today
+				EffectiveCapacityWatts: 2000,
+				ValidFromUtc: timestamppb.New(
+					time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Minute),
+				),
+				Metadata: metadata,
+			},
+			shouldErr:    true,
+			errCodeCheck: codes.AlreadyExists,
+		},
+		{
+			name: "Should fail for non-existent location",
+			req: &pb.CreateLocationEnergySourceRequest{
+				LocationUuid:           uuid.New().String(),
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_WIND,
+				EffectiveCapacityWatts: 5000,
+				Metadata:               metadata,
+			},
+			shouldErr: true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := dc.CreateLocationEnergySource(t.Context(), tc.req)
+
+			if tc.shouldErr {
+				require.Error(t, err, "Expected an error")
+
+				if tc.errCodeCheck != codes.OK {
+					require.Equal(t, tc.errCodeCheck, status.Code(err))
+				}
+			} else {
+				require.NoError(t, err, "Expected to be able to create the location energy source")
+				require.Equal(t, tc.req.LocationUuid, resp.LocationUuid)
+				require.Equal(t, tc.req.EnergySource, resp.EnergySource)
+				require.Equal(t, tc.req.EffectiveCapacityWatts, resp.EffectiveCapacityWatts)
+
+				// Verify it can be fetched
+				resp2, err := dc.GetLocation(
+					t.Context(),
+					&pb.GetLocationRequest{
+						LocationUuid:    tc.req.LocationUuid,
+						EnergySource:    tc.req.EnergySource,
+						IncludeGeometry: false,
+					},
+				)
+				require.NoError(
+					t,
+					err,
+					"Expected to be able to fetch the newly created energy source",
+				)
+				require.Equal(t, tc.req.EffectiveCapacityWatts, resp2.EffectiveCapacityWatts)
+			}
+		})
+	}
+}
+
 func TestUpdateLocation(t *testing.T) {
 	metadata := createTestMetadata(t, map[string]any{"source": "test"})
 
