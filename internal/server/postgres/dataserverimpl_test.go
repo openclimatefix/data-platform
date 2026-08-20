@@ -389,6 +389,7 @@ func TestCreateLocationEnergySource(t *testing.T) {
 
 			if tc.shouldErr {
 				require.Error(t, err, "Expected an error")
+
 				if tc.errCodeCheck != codes.OK {
 					require.Equal(t, tc.errCodeCheck, status.Code(err))
 				}
@@ -407,7 +408,11 @@ func TestCreateLocationEnergySource(t *testing.T) {
 						IncludeGeometry: false,
 					},
 				)
-				require.NoError(t, err, "Expected to be able to fetch the newly created energy source")
+				require.NoError(
+					t,
+					err,
+					"Expected to be able to fetch the newly created energy source",
+				)
 				require.Equal(t, tc.req.EffectiveCapacityWatts, resp2.EffectiveCapacityWatts)
 			}
 		})

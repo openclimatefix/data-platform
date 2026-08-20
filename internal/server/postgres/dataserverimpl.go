@@ -989,7 +989,10 @@ func createLocationSource(
 	}
 
 	if err := querier.RefreshSourcesMaterializedView(ctx); err != nil {
-		return db.CreateSourceEntryRow{}, fmt.Errorf("failed to update sources materialised view: %w", err)
+		return db.CreateSourceEntryRow{}, fmt.Errorf(
+			"failed to update sources materialised view: %w",
+			err,
+		)
 	}
 
 	return dbSource, nil
