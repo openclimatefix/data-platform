@@ -111,6 +111,15 @@ WHERE
     AND s.source_type_id = $2
     AND s.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP;
 
+-- name: CheckSourceExists :one
+/* CheckSourceExists returns true if the given geometry and source type has ever had an entry. */
+SELECT EXISTS (
+    SELECT 1
+    FROM loc.sources_history
+    WHERE geometry_uuid = $1
+        AND source_type_id = $2
+);
+
 -- name: CreateSourceEntry :one
 /* CreateSourceEntry creates a new source entry for a given geometry and source type.
  * It fetches the state prior to the input valid time, and only inserts the new row if it differs

@@ -1077,16 +1077,19 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocationEnergySource(
 		req.ValidFromUtc = timestamppb.New(time.Now().UTC().Truncate(time.Minute))
 	}
 
-	// Reject if this energy source already exists for the location at this time.
-	gsprms := db.GetSourceAtTimestampParams{
-		GeometryUuid:   locationUuid,
-		SourceTypeID:   int16(req.EnergySource.Number()),
-		AtTimestampUtc: pgtype.Timestamp{Time: req.ValidFromUtc.AsTime(), Valid: true},
+	// Reject if this energy source already exists for the location.
+	cseprms := db.CheckSourceExistsParams{
+		GeometryUuid: locationUuid,
+		SourceTypeID: int16(req.EnergySource.Number()),
 	}
-	if _, err := querier.GetSourceAtTimestamp(ctx, gsprms); err == nil {
+	exists, err := querier.CheckSourceExists(ctx, cseprms)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check source existence: %w", err)
+	}
+	if exists {
 		return nil, status.Errorf(
 			codes.AlreadyExists,
-			"energy source '%s' already exists for location '%s'",
+			"energy source '%s' has already been created for location '%s'. New inserts to an existing energy source must go through the UpdateLocation RPC.",
 			req.EnergySource, req.LocationUuid,
 		)
 	}

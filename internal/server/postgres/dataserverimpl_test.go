@@ -334,7 +334,7 @@ func TestCreateLocation(t *testing.T) {
 func TestCreateLocationEnergySource(t *testing.T) {
 	metadata := createTestMetadata(t, map[string]any{"source": "test_energy_source"})
 
-	// Create an initial location with solar
+	// Create a location with solar valid from today
 	createResp := createTestLocation(
 		t,
 		"scotland_region",
@@ -366,6 +366,18 @@ func TestCreateLocationEnergySource(t *testing.T) {
 				LocationUuid:           createResp.LocationUuid,
 				EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR, // Already exists
 				EffectiveCapacityWatts: 2000,
+				Metadata:               metadata,
+			},
+			shouldErr:    true,
+			errCodeCheck: codes.AlreadyExists,
+		},
+		{
+			name: "Should fail if the energy source already exists but we query a past valid_from",
+			req: &pb.CreateLocationEnergySourceRequest{
+				LocationUuid:           createResp.LocationUuid,
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR, // Created today
+				EffectiveCapacityWatts: 2000,
+				ValidFromUtc:           timestamppb.New(time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Minute)),
 				Metadata:               metadata,
 			},
 			shouldErr:    true,
