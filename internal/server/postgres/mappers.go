@@ -399,10 +399,15 @@ func mapLocationSummary(
 	cap int64,
 	srcType, geomType int16,
 	meta *structpb.Struct,
+	countryCode *string,
 ) *pb.ListLocationsResponse_LocationSummary {
+	var cc string
+	if countryCode != nil {
+		cc = *countryCode
+	}
 	return &pb.ListLocationsResponse_LocationSummary{
-		LocationUuid: geomUuid.String(),
-		LocationName: geomName,
+		LocationUuid:           geomUuid.String(),
+		LocationName:           geomName,
 		Latlng: &pb.LatLng{
 			Latitude:  lat,
 			Longitude: lon,
@@ -411,6 +416,7 @@ func mapLocationSummary(
 		EnergySource:           pb.EnergySource(srcType),
 		LocationType:           pb.LocationType(geomType),
 		Metadata:               meta,
+		CountryCode:            cc,
 	}
 }
 

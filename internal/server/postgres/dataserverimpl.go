@@ -1021,6 +1021,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateLocation(
 		Geom:            req.GeometryWkt,
 		GeometryTypeID:  int16(req.LocationType),
 		AssociatedPoint: associated_point,
+		CountryCode:     req.CountryCode,
 	}
 
 	dbLocation, err := querier.CreateGeometry(ctx, cgprms)
@@ -1446,6 +1447,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			GeometryUuids:          parsedUuids,
 			SourceTypeID:           sourceTypeId,
 			GeometryTypeID:         locationTypeId,
+			CountryCode:            req.CountryCodeFilter,
 		}
 
 		glResp, err := querier.ListSourcesAtTimestampWithin(ctx, llprms)
@@ -1457,6 +1459,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			locations = append(locations, mapLocationSummary(
 				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
 				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
+				loc.CountryCode,
 			))
 		}
 	} else if req.EnclosedLocationUuidFilter != nil {
@@ -1467,6 +1470,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			GeometryUuids:          parsedUuids,
 			SourceTypeID:           sourceTypeId,
 			GeometryTypeID:         locationTypeId,
+			CountryCode:            req.CountryCodeFilter,
 		}
 
 		glResp, err := querier.ListSourcesAtTimestampWithout(ctx, llprms)
@@ -1478,6 +1482,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			locations = append(locations, mapLocationSummary(
 				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
 				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
+				loc.CountryCode,
 			))
 		}
 	} else {
@@ -1488,6 +1493,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			SourceTypeID:           sourceTypeId,
 			GeometryTypeID:         locationTypeId,
 			GeometryNames:          req.LocationNamesFilter,
+			CountryCode:            req.CountryCodeFilter,
 		}
 
 		glResp, err := querier.ListSourcesAtTimestamp(ctx, lsprms)
@@ -1499,6 +1505,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			locations = append(locations, mapLocationSummary(
 				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
 				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
+				loc.CountryCode,
 			))
 		}
 	}

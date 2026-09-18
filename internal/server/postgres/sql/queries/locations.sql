@@ -2,7 +2,7 @@
 
 -- name: CreateGeometry :one
 INSERT INTO loc.geometries AS l (
-    geometry_name, geom, geometry_type_id, associated_point
+    geometry_name, geom, geometry_type_id, associated_point, country_code
 ) VALUES (
     LOWER(sqlc.arg(geometry_name)::TEXT),
     ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326),
@@ -10,7 +10,8 @@ INSERT INTO loc.geometries AS l (
     COALESCE(
         ST_GEOMFROMTEXT(sqlc.narg(associated_point)::TEXT, 4326),
         ST_CENTROID(ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326))
-    )
+    ),
+    sqlc.arg(country_code)::CHAR(3)
 ) RETURNING
     l.geometry_uuid,
     l.geometry_name,
@@ -215,6 +216,7 @@ WITH unfiltered_sources AS (
         ls.capacity_limit_sip,
         ls.geometry_name,
         ls.geometry_type_id,
+        ls.country_code,
         ls.owning_entity_id,
         ls.longitude,
         ls.latitude,
@@ -242,6 +244,10 @@ WHERE
         OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT
     )
     AND (
+        sqlc.narg(country_code)::TEXT IS NULL
+        OR us.country_code = sqlc.narg(country_code)::TEXT
+    )
+    AND (
         sqlc.narg(owning_entity_external_id)::TEXT IS NULL
         OR us.owning_entity_id = (
             SELECT entity_id
@@ -267,6 +273,7 @@ unfiltered_sources AS (
         ls.capacity_limit_sip,
         ls.geometry_name,
         ls.geometry_type_id,
+        ls.country_code,
         ls.longitude,
         ls.latitude,
         ls.owning_entity_id,
@@ -297,6 +304,10 @@ WHERE
         OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT
     )
     AND (
+        sqlc.narg(country_code)::TEXT IS NULL
+        OR us.country_code = sqlc.narg(country_code)::TEXT
+    )
+    AND (
         sqlc.narg(owning_entity_external_id)::TEXT IS NULL
         OR us.owning_entity_id = (
             SELECT entity_id
@@ -322,6 +333,7 @@ unfiltered_sources AS (
         ls.capacity_limit_sip,
         ls.geometry_name,
         ls.geometry_type_id,
+        ls.country_code,
         ls.longitude,
         ls.latitude,
         ls.owning_entity_id,
@@ -346,6 +358,10 @@ WHERE
     AND (
         sqlc.narg(geometry_type_id)::SMALLINT IS NULL
         OR us.geometry_type_id = sqlc.narg(geometry_type_id)::SMALLINT
+    )
+    AND (
+        sqlc.narg(country_code)::TEXT IS NULL
+        OR us.country_code = sqlc.narg(country_code)::TEXT
     )
     AND (
         sqlc.narg(owning_entity_external_id)::TEXT IS NULL

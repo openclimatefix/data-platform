@@ -453,6 +453,12 @@ message CreateLocationRequest {
   // Optional latitude/longitude to associate with the location.
   // Defaults to the centroid of the geometry if not provided. Not required for Point geometries.
   optional LatLng associated_latlng = 8;
+  
+  // ISO 3166-1 alpha-3, uppercase.
+  string country_code = 9 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.pattern = "^[A-Z]{3}$"
+  ];
 
   option (buf.validate.message).cel = {
     id: "latlng_invalid_for_point"
@@ -806,7 +812,11 @@ message ListLocationsRequest {
     },
     (buf.validate.field).repeated.unique = true
   ];
-
+  // Optional filter to only return locations in a specific country.
+  // ISO 3166-1 alpha-3, uppercase.
+  optional string country_code_filter = 9 [
+    (buf.validate.field).string.pattern = "^[A-Z]{3}$"
+  ];
 
   option (buf.validate.message).cel = {
     id: "enclosing_and_enclosed_mutually_exclusive"
@@ -831,6 +841,7 @@ message ListLocationsResponse {
     uint64 effective_capacity_watts = 5;
     LatLng latlng = 6;
     google.protobuf.Struct metadata = 7;
+    string country_code = 8;
   }
 
   repeated LocationSummary locations = 1;
