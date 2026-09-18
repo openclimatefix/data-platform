@@ -266,6 +266,7 @@ func Test_mapLocationSummary(t *testing.T) {
 				1,
 				1,
 				tt.metadata,
+				nil,
 			)
 
 			require.Equal(t, id.String(), res.LocationUuid)
