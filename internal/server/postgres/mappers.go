@@ -405,9 +405,10 @@ func mapLocationSummary(
 	if countryCode != nil {
 		cc = *countryCode
 	}
+
 	return &pb.ListLocationsResponse_LocationSummary{
-		LocationUuid:           geomUuid.String(),
-		LocationName:           geomName,
+		LocationUuid: geomUuid.String(),
+		LocationName: geomName,
 		Latlng: &pb.LatLng{
 			Latitude:  lat,
 			Longitude: lon,

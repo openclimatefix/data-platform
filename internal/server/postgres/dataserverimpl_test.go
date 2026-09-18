@@ -1495,6 +1495,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 		if i == 1 {
 			cc = "NLD"
 		}
+
 		for _, energySource := range []pb.EnergySource{pb.EnergySource_ENERGY_SOURCE_SOLAR, pb.EnergySource_ENERGY_SOURCE_WIND} {
 			for _, locType := range []pb.LocationType{pb.LocationType_LOCATION_TYPE_SITE, pb.LocationType_LOCATION_TYPE_GSP} {
 				resp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
@@ -1518,8 +1519,6 @@ func TestListLocationsLocationFilters(t *testing.T) {
 			}
 		}
 	}
-
-
 
 	sourceFilter := new(pb.EnergySource)
 	*sourceFilter = pb.EnergySource_ENERGY_SOURCE_SOLAR
