@@ -49,7 +49,7 @@ func createTestLocation(
 		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
 		ValidFromUtc:           timestamppb.New(ts),
-		CountryCode:            countryCode,
+		CountryCode:            ptr(countryCode),
 	})
 	require.NoError(t, err)
 
@@ -130,7 +130,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			expectedLatLng: &pb.LatLng{
@@ -147,7 +147,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			shouldErr: true,
@@ -160,7 +160,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 4560,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			expectedLatLng: &pb.LatLng{
@@ -177,7 +177,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_UNSPECIFIED,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			shouldErr: true,
@@ -190,7 +190,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			shouldErr: true,
@@ -203,7 +203,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(0.0 51.5)",
 				EffectiveCapacityWatts: 1230,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			expectedLatLng: &pb.LatLng{
@@ -220,7 +220,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5))",
 				EffectiveCapacityWatts: 1000e9,
 				LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			expectedLatLng: &pb.LatLng{
@@ -237,7 +237,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POLYGON((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0))",
 				EffectiveCapacityWatts: 14e6,
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			shouldErr: true,
@@ -250,7 +250,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0, 2.0 51.5)))",
 				EffectiveCapacityWatts: 1100e6,
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			expectedLatLng: &pb.LatLng{
@@ -267,7 +267,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0)))",
 				EffectiveCapacityWatts: 14e6,
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			shouldErr: true,
@@ -280,7 +280,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "POINT(1000000 1000000)",
 				EffectiveCapacityWatts: 10289e3,
 				LocationType:           pb.LocationType_LOCATION_TYPE_SITE,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 			},
 			shouldErr: true,
@@ -293,7 +293,7 @@ func TestCreateLocation(t *testing.T) {
 				GeometryWkt:            "MULTIPOLYGON(((0.0 51.5, 1.0 51.5, 1.0 52.0, 0.0 52.0, 0.0 51.5)),((2.0 51.5, 3.0 51.5, 3.0 52.0, 2.0 52.0, 2.0 51.5)))",
 				EffectiveCapacityWatts: 14e6,
 				LocationType:           pb.LocationType_LOCATION_TYPE_DNO,
-				CountryCode:            "GBR",
+				CountryCode:            ptr("GB"),
 				Metadata:               metadata,
 				AssociatedLatlng: &pb.LatLng{
 					Latitude:  51.5074,
@@ -356,7 +356,7 @@ func TestCreateLocationEnergySource(t *testing.T) {
 		1230,
 		time.Now().UTC().Truncate(time.Minute),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	testcases := []struct {
@@ -460,7 +460,7 @@ func TestUpdateLocation(t *testing.T) {
 		1234e6,
 		pivotTime.Add(-10*time.Hour),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	newMetadata := createTestMetadata(t, map[string]any{"source": "test", "updated": true})
@@ -563,7 +563,7 @@ func TestUpdateLocationOwner(t *testing.T) {
 		1234e6,
 		time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	createResp = createTestLocation(
@@ -573,7 +573,7 @@ func TestUpdateLocationOwner(t *testing.T) {
 		1000e6,
 		time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	testcases := []struct {
@@ -784,7 +784,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*1),
 		metadata,
-		"GBR",
+		"GB",
 	)
 	siteResp2 := createTestLocation(
 		t,
@@ -793,7 +793,7 @@ func TestGetForecastAtTimestamp(t *testing.T) {
 		2000000,
 		pivotTime.Add(-time.Hour*1),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	// Create a forecaster
@@ -962,7 +962,7 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 			capacity,
 			pivotTime.Add(-time.Hour*1),
 			metadata,
-			"GBR",
+			"GB",
 		)
 		siteUuids[i] = siteResp.LocationUuid
 
@@ -1068,7 +1068,7 @@ func TestGetLocation(t *testing.T) {
 		12e6,
 		time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	testCases := []struct {
@@ -1132,7 +1132,7 @@ func TestGetLocationAsTimeseries(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*48),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	// Update the metadata and capacity at 24 hours before pivot
@@ -1264,7 +1264,7 @@ func TestGetLocationsAsGeoJSON(t *testing.T) {
 			uint64(1000000+i*100),
 			time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
 			&structpb.Struct{},
-			"GBR",
+			"GB",
 		)
 		siteUuids[i] = resp.LocationUuid
 	}
@@ -1295,7 +1295,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*49),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	// Update the capacity of the site to check it is reflected in the values
@@ -1491,9 +1491,9 @@ func TestListLocationsLocationFilters(t *testing.T) {
 	// Create a bunch of locations
 	var locationUuids []string
 	for i := range 5 {
-		cc := "GBR"
+		cc := "GB"
 		if i == 1 {
-			cc = "NLD"
+			cc = "NL"
 		}
 
 		for _, energySource := range []pb.EnergySource{pb.EnergySource_ENERGY_SOURCE_SOLAR, pb.EnergySource_ENERGY_SOURCE_WIND} {
@@ -1511,7 +1511,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 					LocationType:           locType,
 					ValidFromUtc:           timestamppb.New(pivotTime.Add(-time.Hour * 4)),
 					Metadata:               metadata,
-					CountryCode:            cc,
+					CountryCode:            ptr(cc),
 				})
 				require.NoError(t, err)
 
@@ -1590,7 +1590,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 		{
 			name: "Should filter by country code",
 			req: &pb.ListLocationsRequest{
-				CountryCodeFilter:   ptr("GBR"),
+				CountryCodeFilter:   ptr("GB"),
 				LocationUuidsFilter: locationUuids,
 			},
 			expectedCount: 4 * 4, // 0, 2, 3, 4
@@ -1598,7 +1598,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 		{
 			name: "Should filter by country code and energy source",
 			req: &pb.ListLocationsRequest{
-				CountryCodeFilter:   ptr("NLD"),
+				CountryCodeFilter:   ptr("NL"),
 				EnergySourceFilter:  sourceFilter,
 				LocationUuidsFilter: locationUuids,
 			},
@@ -1719,7 +1719,7 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*64),
 		&structpb.Struct{},
-		"GBR",
+		"GB",
 	)
 
 	// Create an observer to make the observations
@@ -1792,7 +1792,7 @@ func TestGetLatestObservations(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*4),
 		&structpb.Struct{},
-		"GBR",
+		"GB",
 	)
 
 	// Create an observer to make the observations
@@ -1973,7 +1973,7 @@ func TestCreateObservations(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*4),
 		&structpb.Struct{},
-		"GBR",
+		"GB",
 	)
 
 	// Update the capacity
@@ -2081,7 +2081,7 @@ func TestGetWeekAverageDeltas(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*12*24),
 		&structpb.Struct{},
-		"GBR",
+		"GB",
 	)
 
 	// Create an observer to make the observations
@@ -2155,7 +2155,7 @@ func TestCreateForecast(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*24),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	// Create a forecaster
@@ -2369,7 +2369,7 @@ func TestGetLatestForecasts(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*24),
 		metadata,
-		"GBR",
+		"GB",
 	)
 	fc := createTestForecaster(t, "test_get_latest_forecasts_forecaster", "v1")
 
@@ -2466,7 +2466,7 @@ func TestStreamForecastData(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*48),
 		metadata,
-		"GBR",
+		"GB",
 	)
 
 	// Create two forecasters
@@ -2637,7 +2637,7 @@ func TestStreamCreateForecasts(t *testing.T) {
 		1000000,
 		pivotTime.Add(-time.Hour*24),
 		nil,
-		"GBR",
+		"GB",
 	)
 
 	// Create a forecaster
@@ -2778,7 +2778,7 @@ func TestStreamCreateForecasts(t *testing.T) {
 				1000000,
 				pivotTime.Add(-time.Hour*24),
 				nil,
-				"GBR",
+				"GB",
 			)
 
 			fcTC := createTestForecaster(t, fmt.Sprintf("test_stream_fc_%d", tcIdx), "v1")
