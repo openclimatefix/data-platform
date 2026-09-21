@@ -454,10 +454,9 @@ message CreateLocationRequest {
   // Defaults to the centroid of the geometry if not provided. Not required for Point geometries.
   optional LatLng associated_latlng = 8;
   
-  // ISO 3166-1 alpha-3, uppercase.
-  string country_code = 9 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).string.pattern = "^[A-Z]{3}$"
+  // ISO 3166-1 alpha-2, uppercase.
+  optional string country_code = 9 [
+    (buf.validate.field).string.pattern = "^[A-Z]{2}$"
   ];
 
   option (buf.validate.message).cel = {
@@ -813,9 +812,9 @@ message ListLocationsRequest {
     (buf.validate.field).repeated.unique = true
   ];
   // Optional filter to only return locations in a specific country.
-  // ISO 3166-1 alpha-3, uppercase.
+  // ISO 3166-1 alpha-2, uppercase.
   optional string country_code_filter = 9 [
-    (buf.validate.field).string.pattern = "^[A-Z]{3}$"
+    (buf.validate.field).string.pattern = "^[A-Z]{2}$"
   ];
 
   option (buf.validate.message).cel = {

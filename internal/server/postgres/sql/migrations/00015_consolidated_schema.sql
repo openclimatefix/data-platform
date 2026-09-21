@@ -138,6 +138,10 @@ CREATE TABLE loc.geometries (
     REFERENCES loc.entities(entity_id)
     ON UPDATE CASCADE
     ON DELETE SET NULL,
+    country_code CHAR(3),
+    CONSTRAINT country_code_format_check CHECK (
+	country_code IS NULL OR country_code ~ '^[A-Z]{3}$'
+    ),
     PRIMARY KEY (geometry_uuid),
     UNIQUE (geometry_name, geom_hash)
 );
@@ -154,6 +158,9 @@ WHERE geometry_type_id = 2
   AND (((metadata ->> 'gsp_id') IS NOT NULL));
 -- Index for finding all geometries owned by a certain entity
 CREATE INDEX idx_owning_entity_id ON loc.geometries (owning_entity_id);
+-- Index for finding all geometries in a certain country and of a certain type
+CREATE INDEX idx_geometries_country_type
+ON loc.geometries (country_code, geometry_type_id);
 
 /*
  * Table to store the temporal generation capability of geometries.
@@ -206,6 +213,7 @@ SELECT
     COALESCE(sh.metadata || g.metadata, sh.metadata, g.metadata)::JSONB AS metadata_jsonb,
     g.geometry_name,
     g.geometry_type_id,
+    g.country_code,
     g.owning_entity_id,
     ST_X(g.associated_point)::REAL AS longitude,
     ST_Y(g.associated_point)::REAL AS latitude,
@@ -218,10 +226,12 @@ SELECT
     ) AS sys_period
 FROM loc.sources_history AS sh
 INNER JOIN loc.geometries AS g USING (geometry_uuid);
+
 -- Prevent overlapping records. Required for concurrent refreshes.
 CREATE UNIQUE INDEX ON loc.sources_mv (geometry_uuid, source_type_id, sys_period);
 CREATE INDEX idx_sources_mv_owning_entity_id ON loc.sources_mv (owning_entity_id);
 CREATE INDEX idx_sources_mv_composite_lookup ON loc.sources_mv USING gist (geometry_uuid, source_type_id, sys_period);
+CREATE INDEX idx_sources_mv_country_type ON loc.sources_mv (country_code, geometry_type_id);
 
 
 /* == OBSERVATIONS ================================================================================

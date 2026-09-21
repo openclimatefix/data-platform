@@ -11,7 +11,7 @@ INSERT INTO loc.geometries AS l (
         ST_GEOMFROMTEXT(sqlc.narg(associated_point)::TEXT, 4326),
         ST_CENTROID(ST_GEOMFROMTEXT(sqlc.arg(geom)::TEXT, 4326))
     ),
-    sqlc.arg(country_code)::CHAR(3)
+    sqlc.narg(country_code)::CHAR(2)
 ) RETURNING
     l.geometry_uuid,
     l.geometry_name,
