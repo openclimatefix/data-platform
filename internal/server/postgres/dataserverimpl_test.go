@@ -183,6 +183,19 @@ func TestCreateLocation(t *testing.T) {
 			shouldErr: true,
 		},
 		{
+			name: "Shouldn't create non-site location with POINT geometry",
+			req: &pb.CreateLocationRequest{
+				LocationName:           "point_gsp",
+				EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				GeometryWkt:            "POINT(0.0 51.5)",
+				EffectiveCapacityWatts: 1230,
+				LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
+				CountryCode:            ptr("GB"),
+				Metadata:               metadata,
+			},
+			shouldErr: true,
+		},
+		{
 			name: "Shouldn't create location with empty name",
 			req: &pb.CreateLocationRequest{
 				LocationName:           "",
@@ -1575,6 +1588,8 @@ func TestListLocationsLocationFilters(t *testing.T) {
 
 		for _, energySource := range []pb.EnergySource{pb.EnergySource_ENERGY_SOURCE_SOLAR, pb.EnergySource_ENERGY_SOURCE_WIND} {
 			for _, locType := range []pb.LocationType{pb.LocationType_LOCATION_TYPE_SITE, pb.LocationType_LOCATION_TYPE_GSP} {
+				geometryWkt := fmt.Sprintf("POLYGON((-5.%[1]d 51.%[1]d, -5.%[1]d 51.%[1]d1, -5.%[1]d1 51.%[1]d1, -5.%[1]d1 51.%[1]d, -5.%[1]d 51.%[1]d))", i)
+
 				resp, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
 					LocationName: fmt.Sprintf(
 						"test_list_locations_site_%02d_%d_%d",
@@ -1582,7 +1597,7 @@ func TestListLocationsLocationFilters(t *testing.T) {
 						energySource,
 						locType,
 					),
-					GeometryWkt:            fmt.Sprintf("POINT(-5.%d 51.%d)", i, i),
+					GeometryWkt:            geometryWkt,
 					EffectiveCapacityWatts: uint64(1000000 + i*100),
 					EnergySource:           energySource,
 					LocationType:           locType,

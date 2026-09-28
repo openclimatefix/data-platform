@@ -465,6 +465,13 @@ message CreateLocationRequest {
     expression:
       "this.geometry_wkt.startsWith('POINT') ? !has(this.associated_latlng) : true"
   };
+
+  option (buf.validate.message).cel = {
+    id: "point_geometry_reserved_for_sites"
+    message: "POINT geometries are only allowed for LOCATION_TYPE_SITE"
+    expression:
+      "this.geometry_wkt.startsWith('POINT') ? this.location_type == 1 : true"
+  };
 }
 
 message CreateLocationResponse {
