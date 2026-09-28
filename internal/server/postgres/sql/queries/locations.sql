@@ -169,6 +169,44 @@ WHERE p.capacity_watts IS DISTINCT FROM n.capacity_watts
     OR p.metadata IS DISTINCT FROM n.metadata
 RETURNING geometry_uuid, source_type_id, capacity_watts, valid_from_utc, metadata;
 
+-- name: BatchCreateSourceEntries :many
+/* BatchCreateSourceEntries creates new source history entries for many geometries of a single
+ * source type at once. Like CreateSourceEntry, it only inserts rows whose capacity differs from
+ * the geometry's previous state, but does so set-based instead of one row at a time.
+ * Callers are responsible for refreshing loc.sources_mv afterwards - this is intentionally not
+ * done here so that many geometries can be updated with a single refresh.
+ */
+WITH input AS (
+    SELECT
+        u.geometry_uuid,
+        c.capacity_watts
+    FROM UNNEST(sqlc.arg(geometry_uuids)::UUID[]) WITH ORDINALITY AS u (geometry_uuid, ord)
+        INNER JOIN UNNEST(sqlc.arg(capacity_watts)::BIGINT[]) WITH ORDINALITY AS c (capacity_watts, ord)
+        ON u.ord = c.ord
+),
+prev_state AS (
+    SELECT DISTINCT ON (sh.geometry_uuid)
+        sh.geometry_uuid,
+        sh.capacity_watts
+    FROM loc.sources_history AS sh
+        INNER JOIN input USING (geometry_uuid)
+    WHERE sh.source_type_id = sqlc.arg(source_type_id)::SMALLINT
+        AND sh.valid_from_utc <= sqlc.arg(valid_from_utc)::TIMESTAMP
+    ORDER BY sh.geometry_uuid ASC, sh.valid_from_utc DESC
+)
+INSERT INTO loc.sources_history (
+    geometry_uuid, source_type_id, capacity_watts, valid_from_utc
+)
+SELECT
+    i.geometry_uuid,
+    sqlc.arg(source_type_id)::SMALLINT,
+    i.capacity_watts,
+    sqlc.arg(valid_from_utc)::TIMESTAMP
+FROM input AS i
+    LEFT OUTER JOIN prev_state AS p USING (geometry_uuid)
+WHERE p.capacity_watts IS DISTINCT FROM i.capacity_watts
+RETURNING geometry_uuid, capacity_watts;
+
 -- name: RefreshSourcesMaterializedView :exec
 REFRESH MATERIALIZED VIEW CONCURRENTLY loc.sources_mv;
 

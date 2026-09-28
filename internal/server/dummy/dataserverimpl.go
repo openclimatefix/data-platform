@@ -339,6 +339,17 @@ func (d *DataPlatformDataServiceServerImpl) UpdateLocationOwner(
 	}, nil
 }
 
+// BatchUpdateLocationCapacity implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) BatchUpdateLocationCapacity(
+	ctx context.Context,
+	req *pb.BatchUpdateLocationCapacityRequest,
+) (*pb.BatchUpdateLocationCapacityResponse, error) {
+	return &pb.BatchUpdateLocationCapacityResponse{
+		UpdatedCount:   uint32(len(req.Updates)),
+		UnchangedCount: 0,
+	}, nil
+}
+
 // CreateObservations implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) CreateObservations(
 	ctx context.Context,

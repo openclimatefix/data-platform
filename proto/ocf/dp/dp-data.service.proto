@@ -42,6 +42,10 @@ service DataPlatformDataService {
   rpc UpdateLocation(UpdateLocationRequest) returns (UpdateLocationResponse) {}
   /* UpdateLocationOwner changes the ownership of a location. */
   rpc UpdateLocationOwner(UpdateLocationOwnerRequest) returns (UpdateLocationOwnerResponse) {}
+  /* BatchUpdateLocationCapacity updates the effective capacity of many locations of a single
+   * energy source in one call. Intended for bulk maintenance jobs.
+   */
+  rpc BatchUpdateLocationCapacity(BatchUpdateLocationCapacityRequest) returns (BatchUpdateLocationCapacityResponse) {}
   
   /* ListLocations fetches a list of registered locations that match the supplied filters. */
   rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse) {}
