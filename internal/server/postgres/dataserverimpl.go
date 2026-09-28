@@ -1262,6 +1262,60 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationOwner(
 	}, nil
 }
 
+// BatchUpdateLocationCapacity updates the effective capacity of many locations of a single
+// energy source in one transaction, refreshing the sources materialised view only once at the
+// end. This is intended for bulk maintenance jobs that would otherwise overload the database by
+// calling UpdateLocation once per location.
+func (s *DataPlatformDataServiceServerImpl) BatchUpdateLocationCapacity(
+	ctx context.Context,
+	req *pb.BatchUpdateLocationCapacityRequest,
+) (*pb.BatchUpdateLocationCapacityResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	validFrom := time.Now().UTC().Truncate(time.Minute)
+	if req.ValidFromUtc != nil {
+		validFrom = req.ValidFromUtc.AsTime().UTC()
+	}
+
+	geometryUuids := make([]uuid.UUID, len(req.Updates))
+	capacityWatts := make([]int64, len(req.Updates))
+
+	for i, u := range req.Updates {
+		geometryUuids[i] = uuid.MustParse(u.LocationUuid)
+		capacityWatts[i] = int64(u.NewEffectiveCapacityWatts)
+	}
+
+	bcprms := db.BatchCreateSourceEntriesParams{
+		SourceTypeID:  int16(req.EnergySource.Number()),
+		ValidFromUtc:  pgtype.Timestamp{Time: validFrom, Valid: true},
+		GeometryUuids: geometryUuids,
+		CapacityWatts: capacityWatts,
+	}
+
+	dbUpdated, err := querier.BatchCreateSourceEntries(ctx, bcprms)
+	if err != nil {
+		return nil, fmt.Errorf("invalid location capacity batch: %w", err)
+	}
+
+	if len(dbUpdated) > 0 {
+		if err := querier.RefreshSourcesMaterializedView(ctx); err != nil {
+			return nil, fmt.Errorf("failed to update sources materialised view: %w", err)
+		}
+	}
+
+	l.Debug().
+		Int16("dp.source.type_id", bcprms.SourceTypeID).
+		Int("dp.locations.requested", len(req.Updates)).
+		Int("dp.locations.updated", len(dbUpdated)).
+		Msg("batch updated location capacities")
+
+	return &pb.BatchUpdateLocationCapacityResponse{
+		UpdatedCount:   uint32(len(dbUpdated)),
+		UnchangedCount: uint32(len(req.Updates) - len(dbUpdated)),
+	}, nil
+}
+
 func (s *DataPlatformDataServiceServerImpl) GetLocationsAsGeoJSON(
 	ctx context.Context,
 	req *pb.GetLocationsAsGeoJSONRequest,

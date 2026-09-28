@@ -615,6 +615,36 @@ message UpdateLocationOwnerResponse {
   string organisation_id = 2;
 }
 
+message BatchUpdateLocationCapacityRequest {
+  message Update {
+    string location_uuid = 1 [
+      (buf.validate.field).required = true,
+      (buf.validate.field).string.uuid = true
+    ];
+    uint64 new_effective_capacity_watts = 2;
+  }
+
+  EnergySource energy_source = 1 [
+    (buf.validate.field).required = true
+  ];
+  repeated BatchUpdateLocationCapacityRequest.Update updates = 2 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 5000
+  ];
+  // The UTC time from which these capacities are considered valid. Leave empty to use current time.
+  optional google.protobuf.Timestamp valid_from_utc = 3 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+  ];
+}
+
+message BatchUpdateLocationCapacityResponse {
+  // The number of locations whose capacity changed and was recorded.
+  uint32 updated_count = 1;
+  // The number of locations whose requested capacity matched their existing capacity, and so
+  // were left unchanged.
+  uint32 unchanged_count = 2;
+}
+
 message GetLocationsAsGeoJSONRequest {
   repeated string location_uuids = 1 [
     (buf.validate.field).repeated.min_items = 1,

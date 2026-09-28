@@ -629,6 +629,83 @@ func TestUpdateLocationOwner(t *testing.T) {
 	}
 }
 
+func TestBatchUpdateLocationCapacity(t *testing.T) {
+	metadata := createTestMetadata(t, map[string]any{"source": "test"})
+	pivotTime := time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)
+
+	locA := createTestLocation(
+		t, "test_batch_capacity_site_a", "POINT(-0.1 51.5)", 1000e6, pivotTime, metadata, "GB",
+	)
+	locB := createTestLocation(
+		t, "test_batch_capacity_site_b", "POINT(-0.2 51.6)", 2000e6, pivotTime, metadata, "GB",
+	)
+
+	testcases := []struct {
+		name                   string
+		req                    *pb.BatchUpdateLocationCapacityRequest
+		expectedUpdatedCount   uint32
+		expectedUnchangedCount uint32
+		expectedCapacityWatts  map[string]uint64
+		shouldErr              bool
+	}{
+		{
+			name: "Should update only the location whose capacity changed",
+			req: &pb.BatchUpdateLocationCapacityRequest{
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ValidFromUtc: timestamppb.New(pivotTime.Add(time.Hour)),
+				Updates: []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: locA.LocationUuid, NewEffectiveCapacityWatts: 1500e6},
+					{LocationUuid: locB.LocationUuid, NewEffectiveCapacityWatts: 2000e6},
+				},
+			},
+			expectedUpdatedCount:   1,
+			expectedUnchangedCount: 1,
+			expectedCapacityWatts: map[string]uint64{
+				locA.LocationUuid: 1500e6,
+				locB.LocationUuid: 2000e6,
+			},
+		},
+		{
+			name: "Should fail the whole batch for an unknown location uuid",
+			req: &pb.BatchUpdateLocationCapacityRequest{
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ValidFromUtc: timestamppb.New(pivotTime.Add(2 * time.Hour)),
+				Updates: []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: locA.LocationUuid, NewEffectiveCapacityWatts: 1600e6},
+					{LocationUuid: uuid.NewString(), NewEffectiveCapacityWatts: 1e6},
+				},
+			},
+			shouldErr: true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := dc.BatchUpdateLocationCapacity(t.Context(), tc.req)
+
+			if tc.shouldErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedUpdatedCount, resp.UpdatedCount)
+				require.Equal(t, tc.expectedUnchangedCount, resp.UnchangedCount)
+
+				for locationUuid, expectedCapacity := range tc.expectedCapacityWatts {
+					getResp, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+						LocationUuid: locationUuid,
+						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						PivotTimestampUtc: timestamppb.New(
+							tc.req.ValidFromUtc.AsTime().Add(time.Minute),
+						),
+					})
+					require.NoError(t, err)
+					require.Equal(t, expectedCapacity, getResp.EffectiveCapacityWatts)
+				}
+			}
+		})
+	}
+}
+
 func TestCreateUpdateForecaster(t *testing.T) {
 	testcases := []struct {
 		name      string
