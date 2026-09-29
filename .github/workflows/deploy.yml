@@ -83,15 +83,16 @@ jobs:
         env:
           TFC_TOKEN: ${{ secrets.TFC_API_TOKEN }}
           WORKSPACE_ID: ${{ vars.TF_WORKSPACE_ID }}
+          WORKSPACE_NAME: ${{ vars.TF_WORKSPACE_NAME }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           response=$(curl -sf \
             --request POST \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
-            --data "$(jq -n --arg msg "Deploy ${VERSION} via GitHub Actions (${GITHUB_SHA})" --arg ws "$WORKSPACE_ID" \
+            --data "$(jq -n --arg msg "Deploy ${{ github.event.repository.name }} ${VERSION} via GitHub Actions (${GITHUB_SHA::7})" --arg ws "$WORKSPACE_ID" \
               '{data:{type:"runs",attributes:{message:$msg,"auto-apply":false},relationships:{workspace:{data:{type:"workspaces",id:$ws}}}}}')" \
             "https://${TF_ADDRESS}/api/v2/runs")
           run_id=$(echo "$response" | jq -r '.data.id')
-          echo "Started TFC run: https://${TF_ADDRESS}/app/-/workspaces/${WORKSPACE_ID}/runs/${run_id}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Started TFC run: https://${TF_ADDRESS}/app/openclimatefix/workspaces/${WORKSPACE_NAME}/runs/${run_id}" >> "$GITHUB_STEP_SUMMARY"
 
