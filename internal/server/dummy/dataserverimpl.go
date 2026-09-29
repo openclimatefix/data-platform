@@ -541,6 +541,7 @@ func (d *DataPlatformDataServiceServerImpl) GetLocation(
 		EffectiveCapacityWatts: 1280e3,
 		Metadata:               &structpb.Struct{},
 		GeometryWkb:            geometryWkb,
+		CountryCode:            "GB",
 	}, nil
 }
 
