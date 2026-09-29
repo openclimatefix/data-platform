@@ -1,0 +1,29 @@
+name: SemVer Tag Created CI
+run-name: 'Deploy ${{ github.ref_name }} by @${{ github.actor }}'
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+jobs:
+  deploy-dev:
+    strategy:
+      fail-fast: false
+      matrix:
+        domain: [ "eu", "in" ]
+    uses: ./.github/workflows/deploy.yml
+    with:
+      deploy_target: "development"
+      domain: ${{ matrix.domain }}
+    secrets: inherit
+
+  deploy-prod:
+    strategy:
+      fail-fast: false
+      matrix:
+        domain: [ "eu", "in" ]
+    uses: ./.github/workflows/deploy.yml
+    with:
+      deploy_target: "production"
+      domain: ${{ matrix.domain }}
+    secrets: inherit

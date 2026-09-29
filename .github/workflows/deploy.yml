@@ -1,0 +1,97 @@
+name: Deploy
+run-name: Deploy ${{ github.ref_name }} to ${{ inputs.deploy_target }}-${{ inputs.domain }} by @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        required: true
+        description: 'The target environment to deploy to'
+        type: choice
+        options: ['development', 'production']
+      domain:
+        required: true
+        description: 'The domain to deploy to'
+        type: choice
+        options: ['eu', 'in']
+  workflow_call:
+    inputs:
+      deploy_target:
+        required: false
+        default: 'development'
+        description: 'The target environment to deploy to'
+        type: string
+      domain:
+        required: true
+        description: 'The domain to deploy to'
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TF_ADDRESS: app.terraform.io
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: "${{ inputs.deploy_target }}-${{ inputs.domain }}"
+    if: startsWith(github.ref, 'refs/tags/v')
+    concurrency:
+      group: deploy-${{ inputs.deploy_target }}-${{ inputs.domain }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Resolve version
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Find TFC variable id
+        id: find-var
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_API_TOKEN }}
+          WORKSPACE_ID: ${{ vars.TF_WORKSPACE_ID }}
+          VAR_KEY: ${{ vars.TF_VARIABLE_KEY }}
+        run: |
+          response=$(curl -sf \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://${TF_ADDRESS}/api/v2/workspaces/${WORKSPACE_ID}/vars")
+          var_id=$(echo "$response" | jq -r --arg key "$VAR_KEY" '.data[] | select(.attributes.key==$key) | .id')
+          if [ -z "$var_id" ] || [ "$var_id" == "null" ]; then
+            echo "No workspace variable found with key '${VAR_KEY}'" >&2
+            exit 1
+          fi
+          echo "id=${var_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Update TFC variable
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_API_TOKEN }}
+          WORKSPACE_ID: ${{ vars.TF_WORKSPACE_ID }}
+          VAR_ID: ${{ steps.find-var.outputs.id }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          curl -sf \
+            --request PATCH \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --data "$(jq -n --arg id "$VAR_ID" --arg value "$VERSION" \
+              '{data:{id:$id,type:"vars",attributes:{value:$value}}}')" \
+            "https://${TF_ADDRESS}/api/v2/workspaces/${WORKSPACE_ID}/vars/${VAR_ID}"
+
+      - name: Start TFC run
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_API_TOKEN }}
+          WORKSPACE_ID: ${{ vars.TF_WORKSPACE_ID }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          response=$(curl -sf \
+            --request POST \
+            --header "Authorization: Bearer ${TFC_TOKEN}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --data "$(jq -n --arg msg "Deploy ${VERSION} via GitHub Actions (${GITHUB_SHA})" --arg ws "$WORKSPACE_ID" \
+              '{data:{type:"runs",attributes:{message:$msg,"auto-apply":false},relationships:{workspace:{data:{type:"workspaces",id:$ws}}}}}')" \
+            "https://${TF_ADDRESS}/api/v2/runs")
+          run_id=$(echo "$response" | jq -r '.data.id')
+          echo "Started TFC run: https://${TF_ADDRESS}/app/-/workspaces/${WORKSPACE_ID}/runs/${run_id}" >> "$GITHUB_STEP_SUMMARY"
+
