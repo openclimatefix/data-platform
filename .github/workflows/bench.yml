@@ -102,7 +102,7 @@ jobs:
           cat bench-diff.txt >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
 
-      - name: Write results to markdown file
+      - name: Write results to job summary
         env:
           FILENAME: ${{ steps.benchfiles.outputs.head-filename }}
           BENCH_DIFF: ${{ steps.bench-diff.outputs.summary }}
@@ -126,17 +126,7 @@ jobs:
               echo '```'
               echo "</details>"
             fi
-          } > bench-comment.md
-
-      - name: Upload benchmark results
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: bench-comment-${{ github.event.number }}
-          path: bench-comment.md
-          if-no-files-found: error
-          retention-days: 1
-          overwrite: true
+          } >> $GITHUB_STEP_SUMMARY
 
       - name: Save gobin cache
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
