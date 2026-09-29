@@ -925,6 +925,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 		EffectiveCapacityWatts: uint64(dbSource.CapacityWatts),
 		Metadata:               dbSource.MetadataJsonb,
 		GeometryWkb:            geometry,
+		CountryCode:            ptrToValElseEmpty(dbSource.CountryCode),
 	}, nil
 }
 

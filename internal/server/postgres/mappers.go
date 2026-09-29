@@ -392,6 +392,14 @@ func mapForecastAsTimeseriesFromLocationValue(
 	}
 }
 
+func ptrToValElseEmpty[T any](v *T) T {
+	var empty T
+	if v == nil {
+		return empty
+	}
+	return *v
+}
+
 func mapLocationSummary(
 	geomUuid uuid.UUID,
 	geomName string,
@@ -401,11 +409,6 @@ func mapLocationSummary(
 	meta *structpb.Struct,
 	countryCode *string,
 ) *pb.ListLocationsResponse_LocationSummary {
-	var cc string
-	if countryCode != nil {
-		cc = *countryCode
-	}
-
 	return &pb.ListLocationsResponse_LocationSummary{
 		LocationUuid: geomUuid.String(),
 		LocationName: geomName,
@@ -417,7 +420,7 @@ func mapLocationSummary(
 		EnergySource:           pb.EnergySource(srcType),
 		LocationType:           pb.LocationType(geomType),
 		Metadata:               meta,
-		CountryCode:            cc,
+		CountryCode:            ptrToValElseEmpty(countryCode),
 	}
 }
 

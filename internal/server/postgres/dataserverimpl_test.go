@@ -1196,6 +1196,7 @@ func TestGetLocation(t *testing.T) {
 				require.Equal(t, createResp.LocationUuid, resp.LocationUuid)
 				require.Equal(t, "test_get_location_site", resp.LocationName)
 				require.Equal(t, uint64(12e6), resp.EffectiveCapacityWatts)
+				require.Equal(t, "GB", resp.CountryCode)
 
 				if tc.req.IncludeGeometry {
 					expected, err := hex.DecodeString(
