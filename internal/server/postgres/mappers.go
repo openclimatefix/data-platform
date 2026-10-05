@@ -397,6 +397,7 @@ func ptrToValElseEmpty[T any](v *T) T {
 	if v == nil {
 		return empty
 	}
+
 	return *v
 }
 

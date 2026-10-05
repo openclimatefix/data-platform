@@ -60,7 +60,7 @@ that the Data Platform Server is running on `localhost:50051`
 
 ```bash
 $ make gen.proto.python
-$ uvx marimo edit --headless --sandbox examples/python-notebook/example.py 
+$ uvx marimo edit --headless --sandbox examples/python/example.py 
 ```
 
 For ease, the above process is wrapped in a Makefile target:

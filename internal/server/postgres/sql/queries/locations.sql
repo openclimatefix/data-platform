@@ -188,7 +188,8 @@ WITH input AS (
 prev_state AS (
     SELECT DISTINCT ON (sh.geometry_uuid)
         sh.geometry_uuid,
-        sh.capacity_watts
+        sh.capacity_watts,
+        sh.metadata
     FROM loc.sources_history AS sh
         INNER JOIN input USING (geometry_uuid)
     WHERE sh.source_type_id = sqlc.arg(source_type_id)::SMALLINT
@@ -196,13 +197,14 @@ prev_state AS (
     ORDER BY sh.geometry_uuid ASC, sh.valid_from_utc DESC
 )
 INSERT INTO loc.sources_history (
-    geometry_uuid, source_type_id, capacity_watts, valid_from_utc
+    geometry_uuid, source_type_id, capacity_watts, valid_from_utc, metadata
 )
 SELECT
     i.geometry_uuid,
     sqlc.arg(source_type_id)::SMALLINT,
     i.capacity_watts,
-    sqlc.arg(valid_from_utc)::TIMESTAMP
+    sqlc.arg(valid_from_utc)::TIMESTAMP,
+    p.metadata
 FROM input AS i
     LEFT OUTER JOIN prev_state AS p USING (geometry_uuid)
 WHERE p.capacity_watts IS DISTINCT FROM i.capacity_watts
