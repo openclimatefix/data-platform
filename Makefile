@@ -189,4 +189,4 @@ run.db:
 
 .PHONY: run.notebook
 run.notebook: gen.proto.python
-	uvx marimo edit --headless --sandbox examples/python-notebook/example.py
+	uvx marimo edit --headless --sandbox examples/python/example.py
