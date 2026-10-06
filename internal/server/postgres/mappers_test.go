@@ -409,3 +409,41 @@ func Test_mapForecastAsTimeseriesFromLocationValue(t *testing.T) {
 		})
 	}
 }
+
+func Test_mapObservationAsTimeseries(t *testing.T) {
+	obsTime := time.Date(2025, 2, 26, 12, 0, 0, 0, time.UTC)
+	createdTime := time.Date(2025, 2, 26, 12, 5, 0, 0, time.UTC)
+
+	res := mapObservationAsTimeseries(db.GetObservationsBetweenRow{
+		ObservationTimestampUtc: pgtype.Timestamp{Time: obsTime, Valid: true},
+		CreatedTimestampUtc:     pgtype.Timestamp{Time: createdTime, Valid: true},
+		ValueSip:                15000,
+		CapacityWatts:           2000,
+	})
+
+	require.Equal(t, obsTime, res.TimestampUtc.AsTime())
+	require.Equal(t, createdTime, res.CreatedTimestampUtc.AsTime())
+	require.Equal(t, float32(0.5), res.ValueFraction)
+	require.Equal(t, uint64(2000), res.EffectiveCapacityWatts)
+}
+
+func Test_mapObservationAtTimestamp(t *testing.T) {
+	id := uuid.New()
+	createdTime := time.Date(2025, 2, 26, 12, 5, 0, 0, time.UTC)
+
+	res := mapObservationAtTimestamp(db.ListObservationsAtTimeForLocationsRow{
+		GeometryUuid:        id,
+		CreatedTimestampUtc: pgtype.Timestamp{Time: createdTime, Valid: true},
+		ValueSip:            30000,
+		CapacityWatts:       1000,
+		Latitude:            51.5,
+		Longitude:           -0.1,
+	})
+
+	require.Equal(t, id.String(), res.LocationUuid)
+	require.Equal(t, createdTime, res.CreatedTimestampUtc.AsTime())
+	require.Equal(t, float32(1), res.ValueFraction)
+	require.Equal(t, uint64(1000), res.EffectiveCapacityWatts)
+	require.Equal(t, float32(51.5), res.Latlng.Latitude)
+	require.Equal(t, float32(-0.1), res.Latlng.Longitude)
+}

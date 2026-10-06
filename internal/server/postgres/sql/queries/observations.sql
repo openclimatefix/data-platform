@@ -27,9 +27,9 @@ WHERE o.observer_name = $1;
  * and 30000 representing 100% of capacity.
  */
 INSERT INTO obs.observed_generation_values (
-    geometry_uuid, source_type_id, observer_uuid, observation_timestamp_utc, value_sip
+    geometry_uuid, source_type_id, observer_uuid, observation_timestamp_utc, value_sip, created_timestamp_utc
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 );
 
 -- name: CreateObservationsBatch :batchone
@@ -42,14 +42,16 @@ INSERT INTO obs.observed_generation_values (
     source_type_id,
     observer_uuid,
     observation_timestamp_utc,
-    value_sip
+    value_sip,
+    created_timestamp_utc
 )
 SELECT
     mv.geometry_uuid,
     mv.source_type_id,
     sqlc.arg(observer_uuid)::UUID,
     sqlc.arg(observation_timestamp_utc)::TIMESTAMP,
-    ((sqlc.arg(value_watts)::BIGINT::DOUBLE PRECISION / mv.capacity_watts) * 30000.0)::SMALLINT AS calculated_value_sip
+    ((sqlc.arg(value_watts)::BIGINT::DOUBLE PRECISION / mv.capacity_watts) * 30000.0)::SMALLINT AS calculated_value_sip,
+    sqlc.arg(created_timestamp_utc)::TIMESTAMP
 FROM loc.sources_mv AS mv
 WHERE mv.geometry_uuid = sqlc.arg(geometry_uuid)::UUID
     AND mv.source_type_id = sqlc.arg(source_type_id)::SMALLINT
@@ -68,6 +70,7 @@ SELECT
     og.source_type_id,
     og.observation_timestamp_utc,
     og.value_sip,
+    og.created_timestamp_utc,
     sh.capacity_watts
 FROM obs.observed_generation_values AS og
     INNER JOIN loc.sources_mv AS sh USING (geometry_uuid, source_type_id)
@@ -76,6 +79,7 @@ WHERE
     AND og.source_type_id = $2
     AND og.observer_uuid = $3
     AND og.observation_timestamp_utc BETWEEN sqlc.arg(start_time_utc)::TIMESTAMP AND sqlc.arg(end_time_utc)::TIMESTAMP
+    AND og.created_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
     AND sh.sys_period @> og.observation_timestamp_utc;
 
 -- name: GetLatestObservations :many
@@ -111,7 +115,7 @@ FROM target_locations AS tl
             WHERE og.geometry_uuid = tl.geometry_uuid
                 AND og.source_type_id = sqlc.arg(source_type_id)::SMALLINT
                 AND og.observer_uuid = tobs.observer_uuid
-                AND og.observation_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
+                AND og.created_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
             ORDER BY og.observation_timestamp_utc DESC
             LIMIT 1
         ) AS latest_obs
@@ -131,6 +135,7 @@ SELECT
     og.source_type_id,
     og.observation_timestamp_utc,
     og.value_sip,
+    og.created_timestamp_utc,
     sh.capacity_watts,
     sh.latitude,
     sh.longitude,

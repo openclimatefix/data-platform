@@ -1043,6 +1043,8 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	expectedCreatedTime := time.Date(2025, 2, 26, 12, 5, 0, 0, time.UTC)
+
 	siteUuids := make([]string, 3)
 	for i := range siteUuids {
 		capacity := uint64(1000000 + i*100000)
@@ -1058,9 +1060,10 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 		siteUuids[i] = siteResp.LocationUuid
 
 		req := &pb.CreateObservationsRequest{
-			LocationUuid: siteResp.LocationUuid,
-			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-			ObserverName: observerResp.ObserverName,
+			LocationUuid:        siteResp.LocationUuid,
+			EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			ObserverName:        observerResp.ObserverName,
+			CreatedTimestampUtc: timestamppb.New(expectedCreatedTime),
 			Values: []*pb.CreateObservationsRequest_Value{
 				{
 					ValueWatts:   uint64(capacity / 10),
@@ -1144,6 +1147,11 @@ func TestGetObservationsAtTimestamp(t *testing.T) {
 
 				for i, obs := range resp.Values {
 					require.Equal(t, tc.expectedFractions[i], obs.ValueFraction)
+
+					require.NotNil(t, obs.CreatedTimestampUtc)
+					created := obs.CreatedTimestampUtc.AsTime()
+					require.True(t, created.Equal(expectedCreatedTime),
+						"created time %s should be equal to %s", created, expectedCreatedTime)
 				}
 			}
 		})
@@ -1385,7 +1393,7 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 		"test_get_forecast_as_timeseries_site",
 		"POINT(-60.25 57.5)",
 		1000000,
-		pivotTime.Add(-time.Hour*49),
+		pivotTime.Add(-time.Hour*24*32),
 		metadata,
 		"GB",
 	)
@@ -1537,6 +1545,42 @@ func TestGetForecastAsTimeseries(t *testing.T) {
 				0.5, 0.501, 0.502, 0.503, 0.504, 0.505, 0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
 			},
 			shouldErr: false,
+		},
+		{
+			name: "Should allow a time window of exactly 31 days",
+			req: &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fc,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				HorizonMins:  0,
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(
+						pivotTime.Add(time.Hour * 36).Add(-time.Hour * 24 * 31),
+					),
+					EndTimestampUtc: timestamppb.New(pivotTime.Add(time.Hour * 36)),
+				},
+				InitializationTimestampUtc: timestamppb.New(pivotTime.Add(-30 * time.Minute)),
+			},
+			expectedValues: []float32{
+				0.5, 0.501, 0.502, 0.503, 0.504, 0.505, 0.506, 0.507, 0.508, 0.509, 0.510, 0.511,
+			},
+			shouldErr: false,
+		},
+		{
+			name: "Should reject a time window longer than 31 days",
+			req: &pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: siteResp.LocationUuid,
+				Forecaster:   fc,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				HorizonMins:  0,
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(
+						pivotTime.Add(time.Hour * 36).Add(-time.Hour*24*31 - time.Minute),
+					),
+					EndTimestampUtc: timestamppb.New(pivotTime.Add(time.Hour * 36)),
+				},
+			},
+			shouldErr: true,
 		},
 	}
 
@@ -1838,28 +1882,52 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 		}
 	}
 
+	expectedCreatedTime := time.Date(2025, 2, 26, 12, 5, 0, 0, time.UTC)
+
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
-		LocationUuid: siteResp.LocationUuid,
-		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		ObserverName: obsResp.ObserverName,
-		Values:       values,
+		LocationUuid:        siteResp.LocationUuid,
+		EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		ObserverName:        obsResp.ObserverName,
+		CreatedTimestampUtc: timestamppb.New(expectedCreatedTime),
+		Values:              values,
 	})
 	require.NoError(t, err)
 
 	testcases := []struct {
-		startTime    time.Time
-		endTime      time.Time
-		expectedSize int
+		name            string
+		startTime       time.Time
+		endTime         time.Time
+		expectedSize    int
+		expectedErrCode codes.Code
 	}{
 		{
+			name:         "Should return all values in a day-long window",
 			startTime:    pivotTime.Add(-time.Hour * 24),
 			endTime:      pivotTime,
 			expectedSize: len(values),
 		},
+		{
+			name:         "Should allow windows longer than a week",
+			startTime:    pivotTime.Add(-time.Hour * 24 * 8),
+			endTime:      pivotTime,
+			expectedSize: len(values),
+		},
+		{
+			name:         "Should allow windows of exactly 31 days",
+			startTime:    pivotTime.Add(-time.Hour * 24 * 31),
+			endTime:      pivotTime,
+			expectedSize: len(values),
+		},
+		{
+			name:            "Should reject windows longer than 31 days",
+			startTime:       pivotTime.Add(-time.Hour*24*31 - time.Minute),
+			endTime:         pivotTime,
+			expectedErrCode: codes.InvalidArgument,
+		},
 	}
 
 	for _, tc := range testcases {
-		t.Run(fmt.Sprintf("Size %d", tc.expectedSize), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			resp, err := dc.GetObservationsAsTimeseries(
 				t.Context(),
 				&pb.GetObservationsAsTimeseriesRequest{
@@ -1872,8 +1940,21 @@ func TestGetObservationsAsTimeseries(t *testing.T) {
 					ObserverName: obsResp.ObserverName,
 				},
 			)
+			if tc.expectedErrCode != codes.OK {
+				require.Error(t, err)
+				require.Equal(t, tc.expectedErrCode, status.Code(err))
+				return
+			}
+
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedSize, len(resp.Values))
+
+			for _, v := range resp.Values {
+				require.NotNil(t, v.CreatedTimestampUtc)
+				created := v.CreatedTimestampUtc.AsTime()
+				require.True(t, created.Equal(expectedCreatedTime),
+					"created time %s should be equal to %s", created, expectedCreatedTime)
+			}
 		})
 	}
 }
@@ -1899,21 +1980,33 @@ func TestGetLatestObservations(t *testing.T) {
 	require.NoError(t, err)
 
 	// Seed some observations for the site.
-	values := []*pb.CreateObservationsRequest_Value{
-		{
-			TimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 2)),
-			ValueWatts:   uint64(0.3 * float64(siteResp.EffectiveCapacityWatts)),
-		},
-		{
-			TimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 1)),
-			ValueWatts:   uint64(0.5 * float64(siteResp.EffectiveCapacityWatts)),
-		},
-	}
+	// Create the older observation
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
 		LocationUuid: siteResp.LocationUuid,
 		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 		ObserverName: obsResp.ObserverName,
-		Values:       values,
+		CreatedTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 2)),
+		Values: []*pb.CreateObservationsRequest_Value{
+			{
+				TimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 2)),
+				ValueWatts:   uint64(0.3 * float64(siteResp.EffectiveCapacityWatts)),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Create the newer observation
+	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+		LocationUuid: siteResp.LocationUuid,
+		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		ObserverName: obsResp.ObserverName,
+		CreatedTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 1)),
+		Values: []*pb.CreateObservationsRequest_Value{
+			{
+				TimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 1)),
+				ValueWatts:   uint64(0.5 * float64(siteResp.EffectiveCapacityWatts)),
+			},
+		},
 	})
 	require.NoError(t, err)
 
@@ -2124,6 +2217,16 @@ func TestCreateObservations(t *testing.T) {
 				LocationUuid: siteResp.LocationUuid,
 				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
 				ObserverName: obsResp.ObserverName,
+				Values:       validObservations,
+			},
+		},
+		{
+			name: "Should create valid observations with explicitly provided created timestamp",
+			req: &pb.CreateObservationsRequest{
+				LocationUuid: siteResp.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName: obsResp.ObserverName,
+				CreatedTimestampUtc: timestamppb.New(time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)),
 				Values:       validObservations,
 			},
 		},
