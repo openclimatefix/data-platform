@@ -138,9 +138,9 @@ CREATE TABLE loc.geometries (
     REFERENCES loc.entities(entity_id)
     ON UPDATE CASCADE
     ON DELETE SET NULL,
-    country_code CHAR(3),
+    country_code CHAR(2),
     CONSTRAINT country_code_format_check CHECK (
-	country_code IS NULL OR country_code ~ '^[A-Z]{3}$'
+	country_code IS NULL OR country_code ~ '^[A-Z]{2}$'
     ),
     PRIMARY KEY (geometry_uuid),
     UNIQUE (geometry_name, geom_hash)

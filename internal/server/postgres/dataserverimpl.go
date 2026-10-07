@@ -566,12 +566,20 @@ func (s *DataPlatformDataServiceServerImpl) GetObservationsAsTimeseries(
 
 	start, end := timeWindowToPgWindow(req.TimeWindow)
 
+	var pivotTime pgtype.Timestamp
+	if req.PivotTimestampUtc != nil {
+		pivotTime = pgtype.Timestamp{Time: req.PivotTimestampUtc.AsTime(), Valid: true}
+	} else {
+		pivotTime = pgtype.Timestamp{Time: time.Now().UTC(), Valid: true}
+	}
+
 	goprms := db.GetObservationsBetweenParams{
 		GeometryUuid: locationUuid,
 		SourceTypeID: int16(req.EnergySource),
 		ObserverUuid: observerResp.ObserverUuid,
 		StartTimeUtc: start,
 		EndTimeUtc:   end,
+		PivotTimeUtc: pivotTime,
 	}
 
 	dbObs, err := querier.GetObservationsBetween(ctx, goprms)
@@ -631,6 +639,16 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 	}
 
 	// Insert the observations
+	var createdTime pgtype.Timestamp
+	if req.CreatedTimestampUtc != nil {
+		createdTime = pgtype.Timestamp{Time: req.CreatedTimestampUtc.AsTime(), Valid: true}
+	} else {
+		createdTime = pgtype.Timestamp{
+			Time:  time.Now().UTC().Truncate(time.Second),
+			Valid: true,
+		}
+	}
+
 	coprms := make([]db.CreateObservationsBatchParams, len(req.Values))
 	for i, v := range req.Values {
 		coprms[i] = db.CreateObservationsBatchParams{
@@ -640,8 +658,9 @@ func (s *DataPlatformDataServiceServerImpl) CreateObservations(
 				Time:  v.TimestampUtc.AsTime(),
 				Valid: true,
 			},
-			SourceTypeID: dbSource.SourceTypeID,
-			ValueWatts:   int64(v.ValueWatts),
+			SourceTypeID:        dbSource.SourceTypeID,
+			ValueWatts:          int64(v.ValueWatts),
+			CreatedTimestampUtc: createdTime,
 		}
 	}
 

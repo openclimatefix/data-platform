@@ -277,6 +277,7 @@ func mapObservationAsTimeseries(
 		ValueFraction:          sipToFraction(obs.ValueSip),
 		TimestampUtc:           timestamppb.New(obs.ObservationTimestampUtc.Time),
 		EffectiveCapacityWatts: uint64(obs.CapacityWatts),
+		CreatedTimestampUtc:    timestamppb.New(obs.CreatedTimestampUtc.Time),
 	}
 }
 
@@ -335,6 +336,7 @@ func mapObservationAtTimestamp(
 			Latitude:  obs.Latitude,
 			Longitude: obs.Longitude,
 		},
+		CreatedTimestampUtc: timestamppb.New(obs.CreatedTimestampUtc.Time),
 	}
 }
 
