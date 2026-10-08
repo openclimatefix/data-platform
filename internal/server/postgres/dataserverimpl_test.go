@@ -643,78 +643,182 @@ func TestUpdateLocationOwner(t *testing.T) {
 }
 
 func TestBatchUpdateLocationCapacity(t *testing.T) {
-	metadata := createTestMetadata(t, map[string]any{"source": "test"})
+	initialMetadata := createTestMetadata(t, map[string]any{"source": "test"})
+	newMetadata := createTestMetadata(t, map[string]any{"source": "updated", "extra": 1})
 	pivotTime := time.Date(2019, 5, 6, 6, 0, 0, 0, time.UTC)
 
-	locA := createTestLocation(
-		t, "test_batch_capacity_site_a", "POINT(-0.1 51.5)", 1000e6, pivotTime, metadata, "GB",
-	)
-	locB := createTestLocation(
-		t, "test_batch_capacity_site_b", "POINT(-0.2 51.6)", 2000e6, pivotTime, metadata, "GB",
-	)
+	type expectedState struct {
+		capacityWatts uint64
+		metadata      map[string]any
+	}
 
+	// Each case operates on its own pair of locations, A and B, both created with 1000MW/2000MW
+	// capacity and the initial metadata. The updates are built from the created location UUIDs.
 	testcases := []struct {
 		name                   string
-		req                    *pb.BatchUpdateLocationCapacityRequest
+		updates                func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update
 		expectedUpdatedCount   uint32
 		expectedUnchangedCount uint32
-		expectedCapacityWatts  map[string]uint64
-		shouldErr              bool
+		expectedA              expectedState
+		expectedB              expectedState
+		expectedErrCode        codes.Code
 	}{
 		{
-			name: "Should update only the location whose capacity changed",
-			req: &pb.BatchUpdateLocationCapacityRequest{
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				ValidFromUtc: timestamppb.New(pivotTime.Add(time.Hour)),
-				Updates: []*pb.BatchUpdateLocationCapacityRequest_Update{
-					{LocationUuid: locA.LocationUuid, NewEffectiveCapacityWatts: 1500e6},
-					{LocationUuid: locB.LocationUuid, NewEffectiveCapacityWatts: 2000e6},
-				},
+			name: "Should update only the location whose capacity changed, keeping metadata",
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: a, NewEffectiveCapacityWatts: ptr(uint64(1500e6))},
+					{LocationUuid: b, NewEffectiveCapacityWatts: ptr(uint64(2000e6))},
+				}
 			},
 			expectedUpdatedCount:   1,
 			expectedUnchangedCount: 1,
-			expectedCapacityWatts: map[string]uint64{
-				locA.LocationUuid: 1500e6,
-				locB.LocationUuid: 2000e6,
+			expectedA:              expectedState{1500e6, initialMetadata.AsMap()},
+			expectedB:              expectedState{2000e6, initialMetadata.AsMap()},
+		},
+		{
+			name: "Should update metadata only, keeping capacity",
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: a, NewMetadata: newMetadata},
+				}
 			},
+			expectedUpdatedCount:   1,
+			expectedUnchangedCount: 0,
+			expectedA:              expectedState{1000e6, newMetadata.AsMap()},
+			expectedB:              expectedState{2000e6, initialMetadata.AsMap()},
+		},
+		{
+			name: "Should update capacity and metadata together",
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{
+						LocationUuid:              a,
+						NewEffectiveCapacityWatts: ptr(uint64(1100e6)),
+						NewMetadata:               newMetadata,
+					},
+				}
+			},
+			expectedUpdatedCount:   1,
+			expectedUnchangedCount: 0,
+			expectedA:              expectedState{1100e6, newMetadata.AsMap()},
+			expectedB:              expectedState{2000e6, initialMetadata.AsMap()},
+		},
+		{
+			name: "Should apply a mix of capacity-only and metadata-only updates to the right rows",
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: a, NewMetadata: newMetadata},
+					{LocationUuid: b, NewEffectiveCapacityWatts: ptr(uint64(2500e6))},
+				}
+			},
+			expectedUpdatedCount:   2,
+			expectedUnchangedCount: 0,
+			expectedA:              expectedState{1000e6, newMetadata.AsMap()},
+			expectedB:              expectedState{2500e6, initialMetadata.AsMap()},
+		},
+		{
+			name: "Should clear metadata when given an empty object",
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: a, NewMetadata: &structpb.Struct{}},
+				}
+			},
+			expectedUpdatedCount:   1,
+			expectedUnchangedCount: 0,
+			expectedA:              expectedState{1000e6, map[string]any{}},
+			expectedB:              expectedState{2000e6, initialMetadata.AsMap()},
+		},
+		{
+			name: "Should treat identical capacity and metadata as unchanged",
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{
+						LocationUuid:              a,
+						NewEffectiveCapacityWatts: ptr(uint64(1000e6)),
+						NewMetadata:               initialMetadata,
+					},
+					{LocationUuid: b, NewMetadata: initialMetadata},
+				}
+			},
+			expectedUpdatedCount:   0,
+			expectedUnchangedCount: 2,
+			expectedA:              expectedState{1000e6, initialMetadata.AsMap()},
+			expectedB:              expectedState{2000e6, initialMetadata.AsMap()},
 		},
 		{
 			name: "Should fail the whole batch for an unknown location uuid",
-			req: &pb.BatchUpdateLocationCapacityRequest{
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				ValidFromUtc: timestamppb.New(pivotTime.Add(2 * time.Hour)),
-				Updates: []*pb.BatchUpdateLocationCapacityRequest_Update{
-					{LocationUuid: locA.LocationUuid, NewEffectiveCapacityWatts: 1600e6},
-					{LocationUuid: uuid.NewString(), NewEffectiveCapacityWatts: 1e6},
-				},
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: a, NewEffectiveCapacityWatts: ptr(uint64(1600e6))},
+					{LocationUuid: uuid.NewString(), NewEffectiveCapacityWatts: ptr(uint64(1e6))},
+				}
 			},
-			shouldErr: true,
+			expectedErrCode: codes.FailedPrecondition,
+		},
+		{
+			name: "Should reject an update with neither capacity nor metadata",
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: a},
+				}
+			},
+			expectedErrCode: codes.InvalidArgument,
+		},
+		{
+			name: "Should reject duplicate location uuids in a batch",
+			updates: func(a, b string) []*pb.BatchUpdateLocationCapacityRequest_Update {
+				return []*pb.BatchUpdateLocationCapacityRequest_Update{
+					{LocationUuid: a, NewEffectiveCapacityWatts: ptr(uint64(1100e6))},
+					{LocationUuid: a, NewMetadata: newMetadata},
+				}
+			},
+			expectedErrCode: codes.InvalidArgument,
 		},
 	}
 
-	for _, tc := range testcases {
+	for i, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := dc.BatchUpdateLocationCapacity(t.Context(), tc.req)
+			locA := createTestLocation(
+				t, fmt.Sprintf("test_batch_capacity_site_a_%d", i), "POINT(-0.1 51.5)",
+				1000e6, pivotTime, initialMetadata, "GB",
+			)
+			locB := createTestLocation(
+				t, fmt.Sprintf("test_batch_capacity_site_b_%d", i), "POINT(-0.2 51.6)",
+				2000e6, pivotTime, initialMetadata, "GB",
+			)
 
-			if tc.shouldErr {
+			req := &pb.BatchUpdateLocationCapacityRequest{
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ValidFromUtc: timestamppb.New(pivotTime.Add(time.Hour)),
+				Updates:      tc.updates(locA.LocationUuid, locB.LocationUuid),
+			}
+
+			resp, err := dc.BatchUpdateLocationCapacity(t.Context(), req)
+
+			if tc.expectedErrCode != codes.OK {
 				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.expectedUpdatedCount, resp.UpdatedCount)
-				require.Equal(t, tc.expectedUnchangedCount, resp.UnchangedCount)
+				require.Equal(t, tc.expectedErrCode, status.Code(err), err.Error())
+				return
+			}
 
-				for locationUuid, expectedCapacity := range tc.expectedCapacityWatts {
-					getResp, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
-						LocationUuid: locationUuid,
-						EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-						PivotTimestampUtc: timestamppb.New(
-							tc.req.ValidFromUtc.AsTime().Add(time.Minute),
-						),
-					})
-					require.NoError(t, err)
-					require.Equal(t, expectedCapacity, getResp.EffectiveCapacityWatts)
-					require.Equal(t, metadata.AsMap(), getResp.Metadata.AsMap())
-				}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedUpdatedCount, resp.UpdatedCount)
+			require.Equal(t, tc.expectedUnchangedCount, resp.UnchangedCount)
+
+			expected := map[string]expectedState{
+				locA.LocationUuid: tc.expectedA,
+				locB.LocationUuid: tc.expectedB,
+			}
+			for locationUuid, want := range expected {
+				getResp, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+					LocationUuid:      locationUuid,
+					EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					PivotTimestampUtc: timestamppb.New(req.ValidFromUtc.AsTime().Add(time.Minute)),
+				})
+				require.NoError(t, err)
+				require.Equal(t, want.capacityWatts, getResp.EffectiveCapacityWatts)
+				require.Equal(t, want.metadata, getResp.Metadata.AsMap())
 			}
 		})
 	}
@@ -1982,9 +2086,9 @@ func TestGetLatestObservations(t *testing.T) {
 	// Seed some observations for the site.
 	// Create the older observation
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
-		LocationUuid: siteResp.LocationUuid,
-		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		ObserverName: obsResp.ObserverName,
+		LocationUuid:        siteResp.LocationUuid,
+		EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		ObserverName:        obsResp.ObserverName,
 		CreatedTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 2)),
 		Values: []*pb.CreateObservationsRequest_Value{
 			{
@@ -1997,9 +2101,9 @@ func TestGetLatestObservations(t *testing.T) {
 
 	// Create the newer observation
 	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
-		LocationUuid: siteResp.LocationUuid,
-		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-		ObserverName: obsResp.ObserverName,
+		LocationUuid:        siteResp.LocationUuid,
+		EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		ObserverName:        obsResp.ObserverName,
 		CreatedTimestampUtc: timestamppb.New(pivotTime.Add(-time.Hour * 1)),
 		Values: []*pb.CreateObservationsRequest_Value{
 			{
@@ -2223,11 +2327,11 @@ func TestCreateObservations(t *testing.T) {
 		{
 			name: "Should create valid observations with explicitly provided created timestamp",
 			req: &pb.CreateObservationsRequest{
-				LocationUuid: siteResp.LocationUuid,
-				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
-				ObserverName: obsResp.ObserverName,
+				LocationUuid:        siteResp.LocationUuid,
+				EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName:        obsResp.ObserverName,
 				CreatedTimestampUtc: timestamppb.New(time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)),
-				Values:       validObservations,
+				Values:              validObservations,
 			},
 		},
 		{
