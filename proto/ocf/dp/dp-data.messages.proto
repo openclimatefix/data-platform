@@ -638,7 +638,21 @@ message BatchUpdateLocationCapacityRequest {
       (buf.validate.field).required = true,
       (buf.validate.field).string.uuid = true
     ];
-    uint64 new_effective_capacity_watts = 2;
+    // The new effective capacity. Leave unset to keep the existing capacity.
+    optional uint64 new_effective_capacity_watts = 2;
+    // The new metadata object to set for the location. Leave unset to keep the existing metadata.
+    // Note that this will replace any existing metadata, so be sure to include existing fields where
+    // needed. An empty object clears the metadata.
+    optional google.protobuf.Struct new_metadata = 3;
+
+    // Ensure one of the updatable fields is set.
+    option (buf.validate.message).cel = {
+      id: "has_update_field"
+      message: "at least one updatable field must be set"
+      expression:
+          "has(this.new_effective_capacity_watts) "
+          "|| has(this.new_metadata)"
+    };
   }
 
   EnergySource energy_source = 1 [
@@ -646,7 +660,12 @@ message BatchUpdateLocationCapacityRequest {
   ];
   repeated BatchUpdateLocationCapacityRequest.Update updates = 2 [
     (buf.validate.field).repeated.min_items = 1,
-    (buf.validate.field).repeated.max_items = 5000
+    (buf.validate.field).repeated.max_items = 5000,
+    (buf.validate.field).cel = {
+      id: "unique_location_uuids"
+      message: "each location_uuid may only appear once per batch"
+      expression: "this.map(u, u.location_uuid).unique()"
+    }
   ];
   // The UTC time from which these capacities are considered valid. Leave empty to use current time.
   optional google.protobuf.Timestamp valid_from_utc = 3 [
@@ -655,10 +674,10 @@ message BatchUpdateLocationCapacityRequest {
 }
 
 message BatchUpdateLocationCapacityResponse {
-  // The number of locations whose capacity changed and was recorded.
+  // The number of locations whose capacity or metadata changed and was recorded.
   uint32 updated_count = 1;
-  // The number of locations whose requested capacity matched their existing capacity, and so
-  // were left unchanged.
+  // The number of locations whose requested capacity and metadata matched their existing state,
+  // and so were left unchanged.
   uint32 unchanged_count = 2;
 }
 

@@ -172,42 +172,71 @@ RETURNING geometry_uuid, source_type_id, capacity_watts, valid_from_utc, metadat
 
 -- name: BatchCreateSourceEntries :many
 /* BatchCreateSourceEntries creates new source history entries for many geometries of a single
- * source type at once. Like CreateSourceEntry, it only inserts rows whose capacity differs from
- * the geometry's previous state, but does so set-based instead of one row at a time.
+ * source type at once. Like CreateSourceEntry, it only inserts rows whose capacity or metadata
+ * differ from the geometry's previous state, but does so set-based instead of one row at a time.
+ * Where set_capacity (or set_metadata) is false for a geometry, the corresponding capacity_watts
+ * (or metadata) value is ignored and the previous state's value is kept. An empty metadata object
+ * clears the metadata.
  * Callers are responsible for refreshing loc.sources_mv afterwards - this is intentionally not
  * done here so that many geometries can be updated with a single refresh.
  */
 WITH input AS (
     SELECT
         u.geometry_uuid,
-        c.capacity_watts
+        sc.set_capacity,
+        c.capacity_watts,
+        sm.set_metadata,
+        m.metadata
     FROM UNNEST(sqlc.arg(geometry_uuids)::UUID[]) WITH ORDINALITY AS u (geometry_uuid, ord)
+        INNER JOIN UNNEST(sqlc.arg(set_capacity)::BOOLEAN[]) WITH ORDINALITY AS sc (set_capacity, ord)
+        ON u.ord = sc.ord
         INNER JOIN UNNEST(sqlc.arg(capacity_watts)::BIGINT[]) WITH ORDINALITY AS c (capacity_watts, ord)
         ON u.ord = c.ord
+        INNER JOIN UNNEST(sqlc.arg(set_metadata)::BOOLEAN[]) WITH ORDINALITY AS sm (set_metadata, ord)
+        ON u.ord = sm.ord
+        INNER JOIN UNNEST(sqlc.arg(metadata)::JSONB[]) WITH ORDINALITY AS m (metadata, ord)
+        ON u.ord = m.ord
 ),
 prev_state AS (
     SELECT DISTINCT ON (sh.geometry_uuid)
         sh.geometry_uuid,
         sh.capacity_watts,
+        sh.capacity_limit_sip,
         sh.metadata
     FROM loc.sources_history AS sh
         INNER JOIN input USING (geometry_uuid)
     WHERE sh.source_type_id = sqlc.arg(source_type_id)::SMALLINT
         AND sh.valid_from_utc <= sqlc.arg(valid_from_utc)::TIMESTAMP
     ORDER BY sh.geometry_uuid ASC, sh.valid_from_utc DESC
+),
+new_state AS (
+    SELECT
+        i.geometry_uuid,
+        p.capacity_watts AS prev_capacity_watts,
+        p.metadata AS prev_metadata,
+        p.capacity_limit_sip,
+        CASE WHEN i.set_capacity THEN i.capacity_watts ELSE p.capacity_watts END AS capacity_watts,
+        CASE
+            WHEN NOT i.set_metadata THEN p.metadata
+            WHEN i.metadata = '{}'::JSONB THEN NULL
+            ELSE i.metadata
+        END AS metadata
+    FROM input AS i
+        LEFT OUTER JOIN prev_state AS p USING (geometry_uuid)
 )
 INSERT INTO loc.sources_history (
-    geometry_uuid, source_type_id, capacity_watts, valid_from_utc, metadata
+    geometry_uuid, source_type_id, capacity_watts, capacity_limit_sip, valid_from_utc, metadata
 )
 SELECT
-    i.geometry_uuid,
+    n.geometry_uuid,
     sqlc.arg(source_type_id)::SMALLINT,
-    i.capacity_watts,
+    n.capacity_watts,
+    n.capacity_limit_sip,
     sqlc.arg(valid_from_utc)::TIMESTAMP,
-    p.metadata
-FROM input AS i
-    LEFT OUTER JOIN prev_state AS p USING (geometry_uuid)
-WHERE p.capacity_watts IS DISTINCT FROM i.capacity_watts
+    n.metadata
+FROM new_state AS n
+WHERE n.prev_capacity_watts IS DISTINCT FROM n.capacity_watts
+    OR n.prev_metadata IS DISTINCT FROM n.metadata
 RETURNING geometry_uuid, capacity_watts;
 
 -- name: RefreshSourcesMaterializedView :exec

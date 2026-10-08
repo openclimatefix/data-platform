@@ -1282,10 +1282,11 @@ func (s *DataPlatformDataServiceServerImpl) UpdateLocationOwner(
 	}, nil
 }
 
-// BatchUpdateLocationCapacity updates the effective capacity of many locations of a single
-// energy source in one transaction, refreshing the sources materialised view only once at the
-// end. This is intended for bulk maintenance jobs that would otherwise overload the database by
-// calling UpdateLocation once per location.
+// BatchUpdateLocationCapacity updates the effective capacity and/or metadata of many locations of
+// a single energy source in one transaction, refreshing the sources materialised view only once
+// at the end. Fields left unset on an update keep their existing values. This is intended for
+// bulk maintenance jobs that would otherwise overload the database by calling UpdateLocation once
+// per location.
 func (s *DataPlatformDataServiceServerImpl) BatchUpdateLocationCapacity(
 	ctx context.Context,
 	req *pb.BatchUpdateLocationCapacityRequest,
@@ -1298,19 +1299,38 @@ func (s *DataPlatformDataServiceServerImpl) BatchUpdateLocationCapacity(
 		validFrom = req.ValidFromUtc.AsTime().UTC()
 	}
 
-	geometryUuids := make([]uuid.UUID, len(req.Updates))
-	capacityWatts := make([]int64, len(req.Updates))
+	// Fields left unset on an update keep their existing values. The placeholder values for unset
+	// fields are ignored by the query.
+	n := len(req.Updates)
+	geometryUuids := make([]uuid.UUID, n)
+	setCapacity := make([]bool, n)
+	capacityWatts := make([]int64, n)
+	setMetadata := make([]bool, n)
+	metadata := make([]*structpb.Struct, n)
 
 	for i, u := range req.Updates {
 		geometryUuids[i] = uuid.MustParse(u.LocationUuid)
-		capacityWatts[i] = int64(u.NewEffectiveCapacityWatts)
+
+		if u.NewEffectiveCapacityWatts != nil {
+			setCapacity[i] = true
+			capacityWatts[i] = int64(*u.NewEffectiveCapacityWatts)
+		}
+
+		metadata[i] = &structpb.Struct{}
+		if u.NewMetadata != nil {
+			setMetadata[i] = true
+			metadata[i] = u.NewMetadata
+		}
 	}
 
 	bcprms := db.BatchCreateSourceEntriesParams{
 		SourceTypeID:  int16(req.EnergySource.Number()),
 		ValidFromUtc:  pgtype.Timestamp{Time: validFrom, Valid: true},
 		GeometryUuids: geometryUuids,
+		SetCapacity:   setCapacity,
 		CapacityWatts: capacityWatts,
+		SetMetadata:   setMetadata,
+		Metadata:      metadata,
 	}
 
 	dbUpdated, err := querier.BatchCreateSourceEntries(ctx, bcprms)
@@ -1328,7 +1348,7 @@ func (s *DataPlatformDataServiceServerImpl) BatchUpdateLocationCapacity(
 		Int16("dp.source.type_id", bcprms.SourceTypeID).
 		Int("dp.locations.requested", len(req.Updates)).
 		Int("dp.locations.updated", len(dbUpdated)).
-		Msg("batch updated location capacities")
+		Msg("batch updated location capacities and metadata")
 
 	return &pb.BatchUpdateLocationCapacityResponse{
 		UpdatedCount:   uint32(len(dbUpdated)),
