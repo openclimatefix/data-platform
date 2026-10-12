@@ -774,6 +774,150 @@ func (s *DataPlatformDataServiceServerImpl) ListObservers(
 	}, nil
 }
 
+func (s *DataPlatformDataServiceServerImpl) CreateMarket(
+	ctx context.Context,
+	req *pb.CreateMarketRequest,
+) (*pb.CreateMarketResponse, error) {
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	mkprms := db.CreateMarketParams{MarketName: req.Name, CurrencyCode: req.CurrencyCode}
+
+	dbMarket, err := querier.CreateMarket(ctx, mkprms)
+	if err != nil {
+		return nil, fmt.Errorf("invalid market: %w", err)
+	}
+
+	return &pb.CreateMarketResponse{
+		MarketUuid:   dbMarket.MarketUuid.String(),
+		MarketName:   dbMarket.MarketName,
+		CurrencyCode: dbMarket.CurrencyCode,
+	}, nil
+}
+
+func (s *DataPlatformDataServiceServerImpl) ListMarkets(
+	ctx context.Context,
+	req *pb.ListMarketsRequest,
+) (*pb.ListMarketsResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	lmPrms := db.GetMarketsByFiltersParams{
+		MarketNames: req.MarketNamesFilter,
+	}
+
+	dbListMarkets, err := querier.GetMarketsByFilters(ctx, lmPrms)
+	if err != nil {
+		return nil, fmt.Errorf("backend communication error: %w", err)
+	}
+
+	l.Debug().
+		Int("dp.markets.count", len(dbListMarkets)).
+		Msg("found markets")
+
+	return &pb.ListMarketsResponse{
+		Markets: MapSlice(dbListMarkets, mapMarket),
+	}, nil
+}
+
+func (s *DataPlatformDataServiceServerImpl) CreateEnergyPrices(
+	ctx context.Context,
+	req *pb.CreateEnergyPricesRequest,
+) (*pb.CreateEnergyPricesResponse, error) {
+	l := zerolog.Ctx(ctx)
+
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	mkprms := db.GetMarketByNameParams{MarketName: req.MarketName}
+
+	dbMarket, err := querier.GetMarketByName(ctx, mkprms)
+	if err != nil {
+		return nil, fmt.Errorf("no market of name '%s' found: %w", req.MarketName, err)
+	}
+
+	var createdTime pgtype.Timestamp
+	if req.CreatedTimestampUtc != nil {
+		createdTime = pgtype.Timestamp{Time: req.CreatedTimestampUtc.AsTime(), Valid: true}
+	} else {
+		createdTime = pgtype.Timestamp{
+			Time:  time.Now().UTC().Truncate(time.Second),
+			Valid: true,
+		}
+	}
+
+	periodStarts := make([]pgtype.Timestamp, len(req.Values))
+	prices := make([]int32, len(req.Values))
+
+	for i, v := range req.Values {
+		periodStarts[i] = pgtype.Timestamp{Time: v.TimestampUtc.AsTime(), Valid: true}
+		prices[i] = priceToHundredths(v.PricePerMwh)
+	}
+
+	cpprms := db.CreatePriceValuesParams{
+		GeometryUuid:           uuid.MustParse(req.LocationUuid),
+		MarketUuid:             dbMarket.MarketUuid,
+		ResolutionMins:         int16(req.ResolutionMins),
+		CreatedTimestampUtc:    createdTime,
+		PeriodStartsUtc:        periodStarts,
+		PricesHundredthsPerMwh: prices,
+	}
+
+	err = querier.CreatePriceValues(ctx, cpprms)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"could not create prices for location '%s': %w",
+			req.LocationUuid,
+			err,
+		)
+	}
+
+	l.Debug().Str("dp.geometry.uuid", req.LocationUuid).
+		Str("dp.market.uuid", dbMarket.MarketUuid.String()).
+		Str("dp.market.name", dbMarket.MarketName).
+		Int("dp.prices.count", len(prices)).
+		Msg("created prices")
+
+	return &pb.CreateEnergyPricesResponse{}, nil
+}
+
+func (s *DataPlatformDataServiceServerImpl) GetEnergyPricesAsTimeseries(
+	ctx context.Context,
+	req *pb.GetEnergyPricesAsTimeseriesRequest,
+) (*pb.GetEnergyPricesAsTimeseriesResponse, error) {
+	querier := db.New(ix.GetTxFromContext(ctx))
+
+	mkprms := db.GetMarketByNameParams{MarketName: req.MarketName}
+
+	dbMarket, err := querier.GetMarketByName(ctx, mkprms)
+	if err != nil {
+		return nil, fmt.Errorf("no market of name '%s' found: %w", req.MarketName, err)
+	}
+
+	start, end := timeWindowToPgWindow(req.TimeWindow)
+
+	gpprms := db.GetPricesBetweenParams{
+		GeometryUuid: uuid.MustParse(req.LocationUuid),
+		MarketUuid:   dbMarket.MarketUuid,
+		StartTimeUtc: start,
+		EndTimeUtc:   end,
+	}
+
+	dbPrices, err := querier.GetPricesBetween(ctx, gpprms)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"could not get prices for location '%s': %w",
+			req.LocationUuid,
+			err,
+		)
+	}
+
+	return &pb.GetEnergyPricesAsTimeseriesResponse{
+		LocationUuid: req.LocationUuid,
+		MarketName:   dbMarket.MarketName,
+		CurrencyCode: dbMarket.CurrencyCode,
+		Values:       MapSlice(dbPrices, mapPriceAsTimeseries),
+	}, nil
+}
+
 func (s *DataPlatformDataServiceServerImpl) GetForecastAtTimestamp(
 	ctx context.Context,
 	req *pb.GetForecastAtTimestampRequest,

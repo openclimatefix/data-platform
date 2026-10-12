@@ -807,6 +807,145 @@ message ListObserversResponse {
 }
 
 
+message CreateMarketRequest {
+  string name = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_market_name) = true
+  ];
+  // The currency prices in this market are quoted in. ISO 4217, uppercase.
+  string currency_code = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.pattern = "^[A-Z]{3}$"
+  ];
+}
+
+message CreateMarketResponse {
+  string market_uuid = 1;
+  string market_name = 2;
+  string currency_code = 3;
+}
+
+
+message ListMarketsRequest {
+  // Optional filter to only return markets from a given set.
+  // If empty, all markets will be returned.
+  repeated string market_names_filter = 1 [
+    (buf.validate.field).repeated.max_items = 100,
+    (buf.validate.field).repeated.unique = true,
+    (buf.validate.field).repeated.items = {
+        string: {min_len: 2, max_len: 100},
+    }
+  ];
+}
+
+message ListMarketsResponse {
+  message MarketSummary {
+    string market_uuid = 1;
+    string market_name = 2;
+    string currency_code = 3;
+  }
+
+  repeated MarketSummary markets = 1;
+}
+
+
+message CreateEnergyPricesRequest {
+  message Value {
+    // The start of the period the price applies to. May be in the future, as markets such as
+    // day-ahead publish prices before the period they apply to.
+    google.protobuf.Timestamp timestamp_utc = 1 [
+      (buf.validate.field).required = true,
+      (buf.validate.field).timestamp = { gt: { seconds: 112000000} },
+      (buf.validate.field).cel = {
+        id: "timestamp_not_too_far_in_future"
+        message: "timestamp_utc cannot be more than 31 days in the future"
+        expression: "this <= now + duration('744h')"
+      }
+    ];
+    // The price per MWh in the currency of the market. Can be negative.
+    // Stored to a precision of two decimal places.
+    double price_per_mwh = 2 [
+      (buf.validate.field).double.finite = true,
+      (buf.validate.field).double.gte = -10000,
+      (buf.validate.field).double.lte = 10000
+    ];
+  }
+
+  string location_uuid = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+  string market_name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_market_name) = true
+  ];
+  // The length of the period each value applies to. All values in a request share a resolution.
+  uint32 resolution_mins = 3 [
+    (buf.validate.field).uint32.gt = 0,
+    (buf.validate.field).uint32.lte = 60
+  ];
+  /* The time the prices became known. If not specified, the current time will be used.
+   * Set this explicitly when backfilling historic prices.
+   */
+  optional google.protobuf.Timestamp created_timestamp_utc = 4 [
+    (buf.validate.field).timestamp = { gt: { seconds: 112000000}, lt_now: true }
+  ];
+  /* Values for periods that already have a price replace the stored price.
+   */
+  repeated CreateEnergyPricesRequest.Value values = 5 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 10000,
+    (buf.validate.field).cel = {
+      id: "unique_timestamps"
+      message: "each timestamp_utc may only appear once per request"
+      expression: "this.map(v, int(v.timestamp_utc)).unique()"
+    }
+  ];
+}
+
+message CreateEnergyPricesResponse {}
+
+
+message GetEnergyPricesAsTimeseriesRequest {
+  string location_uuid = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+  string market_name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.(valid_market_name) = true
+  ];
+  // Prices whose period starts within the window are returned.
+  TimeWindow time_window = 3 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "window_size_limit"
+      message: "window size must not exceed 1 year"
+      expression: "this.end_timestamp_utc - this.start_timestamp_utc <= duration('8760h')"
+    },
+    (buf.validate.field).cel = {
+      id: "start_time_near_future_limit"
+      message: "start time cannot be more than 30 days in the future"
+      expression: "this.start_timestamp_utc <= now + duration('720h')"
+    }
+  ];
+}
+
+message GetEnergyPricesAsTimeseriesResponse {
+  message Value {
+    google.protobuf.Timestamp timestamp_utc = 1;
+    uint32 resolution_mins = 2;
+    double price_per_mwh = 3;
+    google.protobuf.Timestamp created_timestamp_utc = 4;
+  }
+
+  string location_uuid = 1;
+  string market_name = 2;
+  string currency_code = 3;
+  repeated Value values = 4;
+}
+
+
 message GetWeekAverageDeltasRequest {
   string location_uuid = 1 [
     (buf.validate.field).required = true,

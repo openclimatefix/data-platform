@@ -447,3 +447,46 @@ func Test_mapObservationAtTimestamp(t *testing.T) {
 	require.Equal(t, float32(51.5), res.Latlng.Latitude)
 	require.Equal(t, float32(-0.1), res.Latlng.Longitude)
 }
+
+func Test_PriceConversion(t *testing.T) {
+	tests := []struct {
+		name      string
+		price     float64
+		hundredth int32
+	}{
+		{"zero", 0, 0},
+		{"positive", 45.67, 4567},
+		{"negative", -250.5, -25050},
+		{"rounds float error", 0.29, 29},
+		{"rounds to nearest", 12.345678, 1235},
+		{"rounds negative to nearest", -0.016, -2},
+		{"upper bound", 10000, 1000000},
+		{"lower bound", -10000, -1000000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.hundredth, priceToHundredths(tt.price))
+		})
+	}
+
+	require.InDelta(t, 45.67, hundredthsToPrice(4567), 1e-9)
+	require.InDelta(t, -0.01, hundredthsToPrice(-1), 1e-9)
+}
+
+func Test_mapPriceAsTimeseries(t *testing.T) {
+	start := time.Date(2020, 7, 7, 12, 0, 0, 0, time.UTC)
+	created := time.Date(2020, 7, 6, 12, 0, 0, 0, time.UTC)
+
+	res := mapPriceAsTimeseries(db.GetPricesBetweenRow{
+		PeriodStartUtc:        pgtype.Timestamp{Time: start, Valid: true},
+		ResolutionMins:        15,
+		PriceHundredthsPerMwh: -1234,
+		CreatedTimestampUtc:   pgtype.Timestamp{Time: created, Valid: true},
+	})
+
+	require.Equal(t, start, res.TimestampUtc.AsTime())
+	require.Equal(t, uint32(15), res.ResolutionMins)
+	require.InDelta(t, -12.34, res.PricePerMwh, 1e-9)
+	require.Equal(t, created, res.CreatedTimestampUtc.AsTime())
+}
