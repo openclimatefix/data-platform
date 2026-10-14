@@ -3275,6 +3275,7 @@ func TestCreateListMarkets(t *testing.T) {
 			createReq: &pb.CreateMarketRequest{
 				Name:         "test_create_list_markets_market_1",
 				CurrencyCode: "EUR",
+				CountryCode:  "NL",
 			},
 			expectedNames: []string{"test_create_list_markets_market_1"},
 		},
@@ -3283,6 +3284,7 @@ func TestCreateListMarkets(t *testing.T) {
 			createReq: &pb.CreateMarketRequest{
 				Name:         "test_create_list_markets_market_2",
 				CurrencyCode: "GBP",
+				CountryCode:  "GB",
 			},
 			expectedNames: []string{
 				"test_create_list_markets_market_1",
@@ -3294,6 +3296,7 @@ func TestCreateListMarkets(t *testing.T) {
 			createReq: &pb.CreateMarketRequest{
 				Name:         "test_create_list_markets_market_1",
 				CurrencyCode: "EUR",
+				CountryCode:  "NL",
 			},
 		},
 		{
@@ -3301,6 +3304,7 @@ func TestCreateListMarkets(t *testing.T) {
 			createReq: &pb.CreateMarketRequest{
 				Name:         "",
 				CurrencyCode: "EUR",
+				CountryCode:  "NL",
 			},
 		},
 		{
@@ -3308,6 +3312,7 @@ func TestCreateListMarkets(t *testing.T) {
 			createReq: &pb.CreateMarketRequest{
 				Name:         "invalid name with spaces and *special_characters*",
 				CurrencyCode: "EUR",
+				CountryCode:  "NL",
 			},
 		},
 		{
@@ -3315,12 +3320,21 @@ func TestCreateListMarkets(t *testing.T) {
 			createReq: &pb.CreateMarketRequest{
 				Name:         "test_create_list_markets_market_3",
 				CurrencyCode: "eur",
+				CountryCode:  "NL",
 			},
 		},
 		{
 			name: "Shouldn't create market without currency code",
 			createReq: &pb.CreateMarketRequest{
 				Name: "test_create_list_markets_market_3",
+				CountryCode:  "NL",
+			},
+		},
+		{
+			name: "Shouldn't create market without country code",
+			createReq: &pb.CreateMarketRequest{
+				Name:         "test_create_list_markets_market_3",
+				CurrencyCode: "EUR",
 			},
 		},
 		{
@@ -3362,25 +3376,18 @@ func TestCreateListMarkets(t *testing.T) {
 
 func TestCreateGetEnergyPrices(t *testing.T) {
 	pivotTime := time.Date(2020, 7, 7, 0, 0, 0, 0, time.UTC)
-	siteResp := createTestLocation(
-		t,
-		"test_create_get_energy_prices_site",
-		"POINT(5.1 52.1)",
-		1000000,
-		pivotTime.Add(-time.Hour*4),
-		&structpb.Struct{},
-		"NL",
-	)
 
 	marketResp, err := dc.CreateMarket(t.Context(), &pb.CreateMarketRequest{
 		Name:         "test_create_get_energy_prices_market",
 		CurrencyCode: "EUR",
+		CountryCode:  "NL",
 	})
 	require.NoError(t, err)
 
 	otherMarketResp, err := dc.CreateMarket(t.Context(), &pb.CreateMarketRequest{
 		Name:         "test_create_get_energy_prices_other_market",
 		CurrencyCode: "EUR",
+		CountryCode:  "NL",
 	})
 	require.NoError(t, err)
 
@@ -3401,7 +3408,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 		resp, err := dc.GetEnergyPricesAsTimeseries(
 			t.Context(),
 			&pb.GetEnergyPricesAsTimeseriesRequest{
-				LocationUuid: siteResp.LocationUuid,
 				MarketName:   marketName,
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime),
@@ -3425,7 +3431,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 
 	t.Run("Should create prices, including negative ones", func(t *testing.T) {
 		_, err := dc.CreateEnergyPrices(t.Context(), &pb.CreateEnergyPricesRequest{
-			LocationUuid:        siteResp.LocationUuid,
 			MarketName:          marketResp.MarketName,
 			ResolutionMins:      60,
 			CreatedTimestampUtc: timestamppb.New(firstCreated),
@@ -3435,7 +3440,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 
 		resp := getPrices(t, marketResp.MarketName)
 		require.Len(t, resp.Values, 5)
-		require.Equal(t, siteResp.LocationUuid, resp.LocationUuid)
 		require.Equal(t, marketResp.MarketName, resp.MarketName)
 
 		expected := []float64{45.67, -0.01, -250, 0, 3999.99}
@@ -3455,7 +3459,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 	t.Run("Should replace changed prices and leave unchanged prices alone", func(t *testing.T) {
 		// Republish with the second price changed, and a sixth added
 		_, err := dc.CreateEnergyPrices(t.Context(), &pb.CreateEnergyPricesRequest{
-			LocationUuid:        siteResp.LocationUuid,
 			MarketName:          marketResp.MarketName,
 			ResolutionMins:      60,
 			CreatedTimestampUtc: timestamppb.New(secondCreated),
@@ -3479,7 +3482,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 
 	t.Run("Should replace the resolution of existing prices", func(t *testing.T) {
 		_, err := dc.CreateEnergyPrices(t.Context(), &pb.CreateEnergyPricesRequest{
-			LocationUuid:        siteResp.LocationUuid,
 			MarketName:          marketResp.MarketName,
 			ResolutionMins:      15,
 			CreatedTimestampUtc: timestamppb.New(secondCreated),
@@ -3496,7 +3498,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 		tomorrow := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
 
 		_, err := dc.CreateEnergyPrices(t.Context(), &pb.CreateEnergyPricesRequest{
-			LocationUuid:   siteResp.LocationUuid,
 			MarketName:     otherMarketResp.MarketName,
 			ResolutionMins: 60,
 			Values: []*pb.CreateEnergyPricesRequest_Value{
@@ -3508,7 +3509,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 		resp, err := dc.GetEnergyPricesAsTimeseries(
 			t.Context(),
 			&pb.GetEnergyPricesAsTimeseriesRequest{
-				LocationUuid: siteResp.LocationUuid,
 				MarketName:   otherMarketResp.MarketName,
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(tomorrow.Add(-time.Hour)),
@@ -3530,18 +3530,7 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 			name: "Shouldn't create prices for non-existent market",
 			code: codes.NotFound,
 			req: &pb.CreateEnergyPricesRequest{
-				LocationUuid:   siteResp.LocationUuid,
 				MarketName:     "non_existent_market",
-				ResolutionMins: 60,
-				Values:         hourlyValues(1),
-			},
-		},
-		{
-			name: "Shouldn't create prices for non-existent location",
-			code: codes.FailedPrecondition,
-			req: &pb.CreateEnergyPricesRequest{
-				LocationUuid:   uuid.NewString(),
-				MarketName:     marketResp.MarketName,
 				ResolutionMins: 60,
 				Values:         hourlyValues(1),
 			},
@@ -3550,7 +3539,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 			name: "Shouldn't create prices with zero resolution",
 			code: codes.InvalidArgument,
 			req: &pb.CreateEnergyPricesRequest{
-				LocationUuid: siteResp.LocationUuid,
 				MarketName:   marketResp.MarketName,
 				Values:       hourlyValues(1),
 			},
@@ -3559,7 +3547,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 			name: "Shouldn't create prices with a duplicated timestamp",
 			code: codes.InvalidArgument,
 			req: &pb.CreateEnergyPricesRequest{
-				LocationUuid:   siteResp.LocationUuid,
 				MarketName:     marketResp.MarketName,
 				ResolutionMins: 60,
 				Values: []*pb.CreateEnergyPricesRequest_Value{
@@ -3572,7 +3559,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 			name: "Shouldn't create prices too far in the future",
 			code: codes.InvalidArgument,
 			req: &pb.CreateEnergyPricesRequest{
-				LocationUuid:   siteResp.LocationUuid,
 				MarketName:     marketResp.MarketName,
 				ResolutionMins: 60,
 				Values: []*pb.CreateEnergyPricesRequest_Value{
@@ -3587,7 +3573,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 			name: "Shouldn't create prices outside of the allowed range",
 			code: codes.InvalidArgument,
 			req: &pb.CreateEnergyPricesRequest{
-				LocationUuid:   siteResp.LocationUuid,
 				MarketName:     marketResp.MarketName,
 				ResolutionMins: 60,
 				Values:         hourlyValues(-10001),
@@ -3597,7 +3582,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 			name: "Shouldn't create empty prices",
 			code: codes.InvalidArgument,
 			req: &pb.CreateEnergyPricesRequest{
-				LocationUuid:   siteResp.LocationUuid,
 				MarketName:     marketResp.MarketName,
 				ResolutionMins: 60,
 			},
@@ -3616,7 +3600,6 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 		_, err := dc.GetEnergyPricesAsTimeseries(
 			t.Context(),
 			&pb.GetEnergyPricesAsTimeseriesRequest{
-				LocationUuid: siteResp.LocationUuid,
 				MarketName:   "non_existent_market",
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime),

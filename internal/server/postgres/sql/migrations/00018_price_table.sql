@@ -26,6 +26,8 @@ CREATE TABLE obs.markets (
     ),
     currency_code CHAR(3) NOT NULL,
     CONSTRAINT currency_code_format_check CHECK (currency_code ~ '^[A-Z]{3}$'),
+    country_code CHAR(2) NOT NULL,
+    CONSTRAINT country_code_format_check CHECK (country_code ~ '^[A-Z]{2}$'),
     PRIMARY KEY (market_uuid),
     UNIQUE (market_name)
 );
@@ -39,10 +41,6 @@ CREATE TABLE obs.markets (
  * Republished prices replace the existing ones, in which case the created timestamp is updated.
  */
 CREATE TABLE obs.observed_price_values (
-    geometry_uuid UUID NOT NULL
-    REFERENCES loc.geometries (geometry_uuid)
-    ON UPDATE CASCADE
-    ON DELETE CASCADE,
     market_uuid UUID NOT NULL
     REFERENCES obs.markets (market_uuid)
     ON UPDATE CASCADE
@@ -57,5 +55,5 @@ CREATE TABLE obs.observed_price_values (
     ),
     price_hundredths_per_mwh INTEGER NOT NULL,
     created_timestamp_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (geometry_uuid, market_uuid, period_start_utc)
+    PRIMARY KEY (market_uuid, period_start_utc)
 );

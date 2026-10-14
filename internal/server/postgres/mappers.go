@@ -317,6 +317,7 @@ func mapMarket(m db.ObsMarket) *pb.ListMarketsResponse_MarketSummary {
 		MarketUuid:   m.MarketUuid.String(),
 		MarketName:   m.MarketName,
 		CurrencyCode: m.CurrencyCode,
+		CountryCode:  m.CountryCode,
 	}
 }
 

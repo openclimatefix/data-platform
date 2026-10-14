@@ -780,7 +780,11 @@ func (s *DataPlatformDataServiceServerImpl) CreateMarket(
 ) (*pb.CreateMarketResponse, error) {
 	querier := db.New(ix.GetTxFromContext(ctx))
 
-	mkprms := db.CreateMarketParams{MarketName: req.Name, CurrencyCode: req.CurrencyCode}
+	mkprms := db.CreateMarketParams{
+		MarketName:   req.Name,
+		CurrencyCode: req.CurrencyCode,
+		CountryCode:  req.CountryCode,
+	}
 
 	dbMarket, err := querier.CreateMarket(ctx, mkprms)
 	if err != nil {
@@ -791,6 +795,7 @@ func (s *DataPlatformDataServiceServerImpl) CreateMarket(
 		MarketUuid:   dbMarket.MarketUuid.String(),
 		MarketName:   dbMarket.MarketName,
 		CurrencyCode: dbMarket.CurrencyCode,
+		CountryCode:  dbMarket.CountryCode,
 	}, nil
 }
 
@@ -853,7 +858,6 @@ func (s *DataPlatformDataServiceServerImpl) CreateEnergyPrices(
 	}
 
 	cpprms := db.CreatePriceValuesParams{
-		GeometryUuid:           uuid.MustParse(req.LocationUuid),
 		MarketUuid:             dbMarket.MarketUuid,
 		ResolutionMins:         int16(req.ResolutionMins),
 		CreatedTimestampUtc:    createdTime,
@@ -864,14 +868,13 @@ func (s *DataPlatformDataServiceServerImpl) CreateEnergyPrices(
 	err = querier.CreatePriceValues(ctx, cpprms)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"could not create prices for location '%s': %w",
-			req.LocationUuid,
+			"could not create prices for market '%s': %w",
+			req.MarketName,
 			err,
 		)
 	}
 
-	l.Debug().Str("dp.geometry.uuid", req.LocationUuid).
-		Str("dp.market.uuid", dbMarket.MarketUuid.String()).
+	l.Debug().Str("dp.market.uuid", dbMarket.MarketUuid.String()).
 		Str("dp.market.name", dbMarket.MarketName).
 		Int("dp.prices.count", len(prices)).
 		Msg("created prices")
@@ -895,7 +898,6 @@ func (s *DataPlatformDataServiceServerImpl) GetEnergyPricesAsTimeseries(
 	start, end := timeWindowToPgWindow(req.TimeWindow)
 
 	gpprms := db.GetPricesBetweenParams{
-		GeometryUuid: uuid.MustParse(req.LocationUuid),
 		MarketUuid:   dbMarket.MarketUuid,
 		StartTimeUtc: start,
 		EndTimeUtc:   end,
@@ -904,16 +906,16 @@ func (s *DataPlatformDataServiceServerImpl) GetEnergyPricesAsTimeseries(
 	dbPrices, err := querier.GetPricesBetween(ctx, gpprms)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"could not get prices for location '%s': %w",
-			req.LocationUuid,
+			"could not get prices for market '%s': %w",
+			req.MarketName,
 			err,
 		)
 	}
 
 	return &pb.GetEnergyPricesAsTimeseriesResponse{
-		LocationUuid: req.LocationUuid,
 		MarketName:   dbMarket.MarketName,
 		CurrencyCode: dbMarket.CurrencyCode,
+		CountryCode:  dbMarket.CountryCode,
 		Values:       MapSlice(dbPrices, mapPriceAsTimeseries),
 	}, nil
 }

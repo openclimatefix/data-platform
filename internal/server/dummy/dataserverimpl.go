@@ -391,6 +391,7 @@ func (d *DataPlatformDataServiceServerImpl) CreateMarket(
 		MarketUuid:   uuid.New().String(),
 		MarketName:   req.Name,
 		CurrencyCode: req.CurrencyCode,
+		CountryCode:  req.CountryCode,
 	}, nil
 }
 
@@ -415,6 +416,7 @@ func (d *DataPlatformDataServiceServerImpl) ListMarkets(
 			MarketUuid:   uuid.New().String(),
 			MarketName:   name,
 			CurrencyCode: "EUR",
+			CountryCode:  "NL",
 		}
 	}
 
@@ -451,9 +453,9 @@ func (d *DataPlatformDataServiceServerImpl) GetEnergyPricesAsTimeseries(
 	}
 
 	return &pb.GetEnergyPricesAsTimeseriesResponse{
-		LocationUuid: req.LocationUuid,
 		MarketName:   req.MarketName,
 		CurrencyCode: "EUR",
+		CountryCode:  "NL",
 		Values:       values,
 	}, nil
 }

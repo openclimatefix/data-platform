@@ -1,14 +1,15 @@
 -- name: CreateMarket :one
-INSERT INTO obs.markets (market_name, currency_code) VALUES (
-    LOWER(sqlc.arg(market_name)::TEXT), UPPER(sqlc.arg(currency_code)::TEXT)
+INSERT INTO obs.markets (market_name, currency_code, country_code) VALUES (
+    LOWER(sqlc.arg(market_name)::TEXT), UPPER(sqlc.arg(currency_code)::TEXT), UPPER(sqlc.arg(country_code)::TEXT)
 ) RETURNING
-    market_uuid, market_name, currency_code;
+    market_uuid, market_name, currency_code, country_code;
 
 -- name: GetMarketsByFilters :many
 SELECT
     market_uuid,
     market_name,
-    currency_code
+    currency_code,
+    country_code
 FROM obs.markets
 WHERE (
     ARRAY_LENGTH(sqlc.arg(market_names)::TEXT[], 1) IS NULL
@@ -19,7 +20,8 @@ WHERE (
 SELECT
     market_uuid,
     market_name,
-    currency_code
+    currency_code,
+    country_code
 FROM obs.markets
 WHERE market_name = LOWER(sqlc.arg(market_name)::TEXT);
 
@@ -30,7 +32,6 @@ WHERE market_name = LOWER(sqlc.arg(market_name)::TEXT);
  * that the created timestamp keeps reflecting when the price last changed.
  */
 INSERT INTO obs.observed_price_values AS p (
-    geometry_uuid,
     market_uuid,
     period_start_utc,
     resolution_mins,
@@ -38,7 +39,6 @@ INSERT INTO obs.observed_price_values AS p (
     created_timestamp_utc
 )
 SELECT
-    sqlc.arg(geometry_uuid)::UUID,
     sqlc.arg(market_uuid)::UUID,
     t.period_start_utc,
     sqlc.arg(resolution_mins)::SMALLINT,
@@ -48,7 +48,7 @@ FROM UNNEST(sqlc.arg(period_starts_utc)::TIMESTAMP[]) WITH ORDINALITY AS t (peri
     INNER JOIN
         UNNEST(sqlc.arg(prices_hundredths_per_mwh)::INTEGER[]) WITH ORDINALITY AS pr (price_hundredths_per_mwh, ord)
     ON t.ord = pr.ord
-ON CONFLICT (geometry_uuid, market_uuid, period_start_utc)
+ON CONFLICT (market_uuid, period_start_utc)
 DO UPDATE SET
     resolution_mins = excluded.resolution_mins,
     price_hundredths_per_mwh = excluded.price_hundredths_per_mwh,
@@ -67,7 +67,6 @@ SELECT
     created_timestamp_utc
 FROM obs.observed_price_values
 WHERE
-    geometry_uuid = $1
-    AND market_uuid = $2
+    market_uuid = $1
     AND period_start_utc BETWEEN sqlc.arg(start_time_utc)::TIMESTAMP AND sqlc.arg(end_time_utc)::TIMESTAMP
 ORDER BY period_start_utc ASC;
