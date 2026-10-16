@@ -382,6 +382,84 @@ func (s *DataPlatformDataServiceServerImpl) GetLatestObservations(
 	}, nil
 }
 
+// CreateMarket implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) CreateMarket(
+	ctx context.Context,
+	req *pb.CreateMarketRequest,
+) (*pb.CreateMarketResponse, error) {
+	return &pb.CreateMarketResponse{
+		MarketUuid:   uuid.New().String(),
+		MarketName:   req.Name,
+		CurrencyCode: req.CurrencyCode,
+		CountryCode:  req.CountryCode,
+	}, nil
+}
+
+// ListMarkets implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) ListMarkets(
+	ctx context.Context,
+	req *pb.ListMarketsRequest,
+) (*pb.ListMarketsResponse, error) {
+	markets := make([]*pb.ListMarketsResponse_MarketSummary, 3)
+
+	if len(req.MarketNamesFilter) != 0 {
+		markets = make([]*pb.ListMarketsResponse_MarketSummary, len(req.MarketNamesFilter))
+	}
+
+	for i := range markets {
+		name := fmt.Sprintf("DummyMarket%d", i)
+		if len(req.MarketNamesFilter) != 0 {
+			name = req.MarketNamesFilter[i]
+		}
+
+		markets[i] = &pb.ListMarketsResponse_MarketSummary{
+			MarketUuid:   uuid.New().String(),
+			MarketName:   name,
+			CurrencyCode: "EUR",
+			CountryCode:  "NL",
+		}
+	}
+
+	return &pb.ListMarketsResponse{
+		Markets: markets,
+	}, nil
+}
+
+// CreateEnergyPrices implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) CreateEnergyPrices(
+	ctx context.Context,
+	req *pb.CreateEnergyPricesRequest,
+) (*pb.CreateEnergyPricesResponse, error) {
+	return &pb.CreateEnergyPricesResponse{}, nil
+}
+
+// GetEnergyPricesAsTimeseries implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) GetEnergyPricesAsTimeseries(
+	ctx context.Context,
+	req *pb.GetEnergyPricesAsTimeseriesRequest,
+) (*pb.GetEnergyPricesAsTimeseriesResponse, error) {
+	start := req.TimeWindow.StartTimestampUtc.AsTime()
+	end := req.TimeWindow.EndTimestampUtc.AsTime()
+
+	values := make([]*pb.GetEnergyPricesAsTimeseriesResponse_Value, 0)
+
+	for t := start.Truncate(time.Hour); !t.After(end); t = t.Add(time.Hour) {
+		values = append(values, &pb.GetEnergyPricesAsTimeseriesResponse_Value{
+			TimestampUtc:        timestamppb.New(t),
+			ResolutionMins:      60,
+			PricePerMwh:         50 + 40*math.Sin(float64(t.Hour())*math.Pi/12),
+			CreatedTimestampUtc: timestamppb.New(start),
+		})
+	}
+
+	return &pb.GetEnergyPricesAsTimeseriesResponse{
+		MarketName:   req.MarketName,
+		CurrencyCode: "EUR",
+		CountryCode:  "NL",
+		Values:       values,
+	}, nil
+}
+
 // CreateObserver implements dp.DataPlatformDataServiceServer.
 func (d *DataPlatformDataServiceServerImpl) CreateObserver(
 	ctx context.Context,

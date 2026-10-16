@@ -3,6 +3,7 @@ package postgres
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -98,6 +99,18 @@ func extractP50Slice(values []*pb.CreateForecastRequest_ForecastValue) []int16 {
 // sipToFraction converts a SIP value to a fraction.
 func sipToFraction(sip int16) float32 {
 	return float32(sip) / 30000.0
+}
+
+// priceToHundredths converts a price per MWh to an integer number of hundredths of the currency
+// unit, rounding to the nearest. Protovalidate bounds the price at the boundary, so this
+// cannot overflow.
+func priceToHundredths(price float64) int32 {
+	return int32(math.Round(price * 100))
+}
+
+// hundredthsToPrice converts an integer number of hundredths of the currency unit to a price.
+func hundredthsToPrice(hundredths int32) float64 {
+	return float64(hundredths) / 100.0
 }
 
 // validateForecastValues checks the forecast valiues against a set of rules.
@@ -296,6 +309,26 @@ func mapObserver(ob db.ObsObserver) *pb.ListObserversResponse_ObserverSummary {
 	return &pb.ListObserversResponse_ObserverSummary{
 		ObserverUuid: ob.ObserverUuid.String(),
 		ObserverName: ob.ObserverName,
+	}
+}
+
+func mapMarket(m db.ObsMarket) *pb.ListMarketsResponse_MarketSummary {
+	return &pb.ListMarketsResponse_MarketSummary{
+		MarketUuid:   m.MarketUuid.String(),
+		MarketName:   m.MarketName,
+		CurrencyCode: m.CurrencyCode,
+		CountryCode:  m.CountryCode,
+	}
+}
+
+func mapPriceAsTimeseries(
+	price db.GetPricesBetweenRow,
+) *pb.GetEnergyPricesAsTimeseriesResponse_Value {
+	return &pb.GetEnergyPricesAsTimeseriesResponse_Value{
+		TimestampUtc:        timestamppb.New(price.PeriodStartUtc.Time),
+		ResolutionMins:      uint32(price.ResolutionMins),
+		PricePerMwh:         hundredthsToPrice(price.PriceHundredthsPerMwh),
+		CreatedTimestampUtc: timestamppb.New(price.CreatedTimestampUtc.Time),
 	}
 }
 
