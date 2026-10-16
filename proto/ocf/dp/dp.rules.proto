@@ -31,6 +31,14 @@ extend buf.validate.StringRules {
 } 
 
 extend buf.validate.StringRules {
+ optional bool valid_market_name = 4457822 [(buf.validate.predefined).cel = {
+   id: "string.valid.marketname",
+   message: "Required field, 2-100 chars long; alphanumeric, lowercase, and underscores only",
+   expression: "this.size() >= 2 && this.size() <= 100 && this.matches(\'^[a-z0-9_]+$\')"
+ }];
+}
+
+extend buf.validate.StringRules {
  optional bool valid_geometry = 4457821 [(buf.validate.predefined).cel = {
    id: "string.valid.geometry",
    message: "Required field, valid geomeetry in Well-Known Text (WKT) format",

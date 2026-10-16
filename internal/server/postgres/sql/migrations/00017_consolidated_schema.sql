@@ -292,6 +292,7 @@ CREATE TABLE obs.observed_generation_values (
     REFERENCES loc.geometries (geometry_uuid)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
+    created_timestamp_utc TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (geometry_uuid, source_type_id, observer_uuid, observation_timestamp_utc)
 )
 PARTITION BY RANGE (observation_timestamp_utc);

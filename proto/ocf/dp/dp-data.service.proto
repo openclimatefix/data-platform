@@ -75,6 +75,20 @@ service DataPlatformDataService {
   /* GetLatestObservation fetches the most recent observation for a given location and observer. */
   rpc GetLatestObservations(GetLatestObservationsRequest) returns (GetLatestObservationsResponse) {}
 
+  /* CreateMarket registers a new market.
+   * A market is a producer of energy prices, e.g. a day-ahead or intraday auction.
+   * The market defines the currency its prices are quoted in. */
+  rpc CreateMarket(CreateMarketRequest) returns (CreateMarketResponse) {}
+  /* ListMarkets fetches a list of registered markets that match the supplied filters. */
+  rpc ListMarkets(ListMarketsRequest) returns (ListMarketsResponse) {}
+  /* CreateEnergyPrices saves a timeseries of energy prices from a given market.
+   * Prices already stored for a period are replaced. */
+  rpc CreateEnergyPrices(CreateEnergyPricesRequest) returns (CreateEnergyPricesResponse) {}
+  /* GetEnergyPricesAsTimeseries fetches a 1-D horizontal slice of energy prices.
+   * It returns an empty series if no prices are stored for the window, for instance because
+   * the market has not yet published them. */
+  rpc GetEnergyPricesAsTimeseries(GetEnergyPricesAsTimeseriesRequest) returns (GetEnergyPricesAsTimeseriesResponse) {}
+
   // --- Analysis ----------------------------------------------------------------
 
   /* GetLocationsAsGeoJSON fetches a given set of locations as GeoJSON, suitable for display on a
