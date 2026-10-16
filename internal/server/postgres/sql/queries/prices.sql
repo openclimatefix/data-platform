@@ -13,7 +13,9 @@ SELECT
 FROM obs.markets
 WHERE (
     ARRAY_LENGTH(sqlc.arg(market_names)::TEXT[], 1) IS NULL
-    OR market_name = ANY(sqlc.arg(market_names)::TEXT[])
+    OR market_name = ANY(ARRAY(
+        SELECT LOWER(n) FROM UNNEST(sqlc.arg(market_names)::TEXT[]) AS n
+    ))
 );
 
 -- name: GetMarketByName :one
