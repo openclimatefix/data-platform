@@ -3326,8 +3326,8 @@ func TestCreateListMarkets(t *testing.T) {
 		{
 			name: "Shouldn't create market without currency code",
 			createReq: &pb.CreateMarketRequest{
-				Name: "test_create_list_markets_market_3",
-				CountryCode:  "NL",
+				Name:        "test_create_list_markets_market_3",
+				CountryCode: "NL",
 			},
 		},
 		{
@@ -3408,7 +3408,7 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 		resp, err := dc.GetEnergyPricesAsTimeseries(
 			t.Context(),
 			&pb.GetEnergyPricesAsTimeseriesRequest{
-				MarketName:   marketName,
+				MarketName: marketName,
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour * 23)),
@@ -3509,7 +3509,7 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 		resp, err := dc.GetEnergyPricesAsTimeseries(
 			t.Context(),
 			&pb.GetEnergyPricesAsTimeseriesRequest{
-				MarketName:   otherMarketResp.MarketName,
+				MarketName: otherMarketResp.MarketName,
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(tomorrow.Add(-time.Hour)),
 					EndTimestampUtc:   timestamppb.New(tomorrow.Add(time.Hour)),
@@ -3539,8 +3539,8 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 			name: "Shouldn't create prices with zero resolution",
 			code: codes.InvalidArgument,
 			req: &pb.CreateEnergyPricesRequest{
-				MarketName:   marketResp.MarketName,
-				Values:       hourlyValues(1),
+				MarketName: marketResp.MarketName,
+				Values:     hourlyValues(1),
 			},
 		},
 		{
@@ -3600,7 +3600,7 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 		_, err := dc.GetEnergyPricesAsTimeseries(
 			t.Context(),
 			&pb.GetEnergyPricesAsTimeseriesRequest{
-				MarketName:   "non_existent_market",
+				MarketName: "non_existent_market",
 				TimeWindow: &pb.TimeWindow{
 					StartTimestampUtc: timestamppb.New(pivotTime),
 					EndTimestampUtc:   timestamppb.New(pivotTime.Add(time.Hour)),
