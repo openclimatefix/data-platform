@@ -73,7 +73,8 @@ WITH target_source AS (
     FROM loc.sources_mv AS sv
     WHERE sv.geometry_uuid = $1
         AND sv.source_type_id = $2
-    LIMIT 1 --noqa
+    ORDER BY sv.sys_period DESC
+    LIMIT 1
 ),
 target_components AS MATERIALIZED (
     -- Direct observations on the target location itself take priority when present
@@ -203,7 +204,8 @@ target_sources AS (
                 FROM loc.sources_mv AS sv
                 WHERE sv.geometry_uuid = tl.geometry_uuid
                     AND sv.source_type_id = sqlc.arg(source_type_id)::SMALLINT
-                LIMIT 1 --noqa
+                ORDER BY sv.sys_period DESC
+                LIMIT 1
             ) AS src
 ),
 location_components AS MATERIALIZED (

@@ -260,6 +260,7 @@ WITH target_source AS (
     FROM loc.sources_mv AS sv
     WHERE sv.geometry_uuid = $1
         AND sv.source_type_id = $2
+    ORDER BY sv.sys_period DESC
     LIMIT 1
 ),
 target_components AS MATERIALIZED (
