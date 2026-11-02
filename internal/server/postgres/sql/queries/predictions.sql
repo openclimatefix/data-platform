@@ -295,7 +295,7 @@ component_sources AS MATERIALIZED (
         cs.sys_period
     FROM distinct_components AS dc
         INNER JOIN loc.sources_mv AS cs
-        ON cs.geometry_uuid = dc.component_geometry_uuid
+        ON dc.component_geometry_uuid = cs.geometry_uuid
             AND cs.source_type_id = $2
             AND cs.sys_period && TSRANGE(
                 sqlc.arg(start_timestamp_utc)::TIMESTAMP,
@@ -323,7 +323,7 @@ allowed_forecasts AS (
         LOWER(f.target_period) AS first_target_utc
     FROM distinct_components AS dc
         INNER JOIN pred.forecasts AS f
-        ON f.geometry_uuid = dc.component_geometry_uuid
+        ON dc.component_geometry_uuid = f.geometry_uuid
     WHERE f.source_type_id = $2
         AND f.forecaster_id = $3
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(
@@ -410,29 +410,30 @@ aggregated AS (
      * The CASE statements avoid dividing by zero when components are missing a p-level. */
     SELECT
         tc.is_direct,
+        wp.target_time_utc,
         MIN(wp.horizon_mins)::SMALLINT AS horizon_mins,
         CASE
             WHEN BOOL_AND(wp.p02_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(tc.weight * comp_sv.capacity_watts * wp.p02_sip)
-                    / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(tc.weight * comp_sv.capacity_watts * wp.p02_sip)
+                        / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p02_sip,
         CASE
             WHEN BOOL_AND(wp.p25_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(tc.weight * comp_sv.capacity_watts * wp.p25_sip)
-                    / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(tc.weight * comp_sv.capacity_watts * wp.p25_sip)
+                        / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p25_sip,
         CASE
             WHEN BOOL_AND(wp.p10_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(tc.weight * comp_sv.capacity_watts * wp.p10_sip)
-                    / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(tc.weight * comp_sv.capacity_watts * wp.p10_sip)
+                        / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p10_sip,
         COALESCE(ROUND(
@@ -442,36 +443,35 @@ aggregated AS (
         CASE
             WHEN BOOL_AND(wp.p75_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(tc.weight * comp_sv.capacity_watts * wp.p75_sip)
-                    / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(tc.weight * comp_sv.capacity_watts * wp.p75_sip)
+                        / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p75_sip,
         CASE
             WHEN BOOL_AND(wp.p90_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(tc.weight * comp_sv.capacity_watts * wp.p90_sip)
-                    / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(tc.weight * comp_sv.capacity_watts * wp.p90_sip)
+                        / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p90_sip,
         CASE
             WHEN BOOL_AND(wp.p98_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(tc.weight * comp_sv.capacity_watts * wp.p98_sip)
-                    / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(tc.weight * comp_sv.capacity_watts * wp.p98_sip)
+                        / NULLIF(SUM(tc.weight * comp_sv.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p98_sip,
-        wp.target_time_utc,
         (ARRAY_AGG(wp.metadata) FILTER (WHERE tc.component_count = 1))[1]::JSONB AS metadata,
         MAX(wp.init_time_utc)::TIMESTAMP AS init_time_utc,
         MAX(wp.created_at_utc)::TIMESTAMP AS created_at_utc
     FROM winning_predictions AS wp
         INNER JOIN target_components AS tc
-            ON tc.component_geometry_uuid = wp.geometry_uuid
+        ON wp.geometry_uuid = tc.component_geometry_uuid
         INNER JOIN component_sources AS comp_sv
-            ON comp_sv.geometry_uuid = wp.geometry_uuid
+        ON wp.geometry_uuid = comp_sv.geometry_uuid
             AND comp_sv.sys_period @> wp.target_time_utc
     GROUP BY wp.target_time_utc, tc.is_direct, tc.component_count
     HAVING COUNT(*) = tc.component_count
@@ -500,7 +500,7 @@ SELECT
     sv.geometry_name
 FROM winning AS w
     INNER JOIN loc.sources_mv AS sv
-        ON sv.geometry_uuid = $1
+    ON sv.geometry_uuid = $1
         AND sv.source_type_id = $2
         AND sv.sys_period @> w.target_time_utc
 ORDER BY w.target_time_utc ASC;
@@ -641,7 +641,7 @@ picked AS MATERIALIZED (
         i.p98_sips[i.idx] AS p98_sip
     FROM indexed AS i
         INNER JOIN loc.sources_mv AS comp_sv
-            ON comp_sv.geometry_uuid = i.geometry_uuid
+        ON i.geometry_uuid = comp_sv.geometry_uuid
             AND comp_sv.source_type_id = $1
             AND comp_sv.sys_period @> sqlc.arg(target_timestamp_utc)::TIMESTAMP
     WHERE i.idx BETWEEN 1 AND ARRAY_LENGTH(i.p50_sips, 1)
@@ -657,9 +657,9 @@ aggregated AS (
     /* Aggregate the winning predictions for each target time across all components via weighted sum
      * Again, the CASE statements avoid dividing by zero when components are missing a p-level. */
     SELECT
-        (ARRAY_AGG(p.forecast_uuid) FILTER (WHERE lc.component_count = 1))[1]::UUID AS forecast_uuid,
         lc.target_geometry_uuid,
         lc.is_direct,
+        (ARRAY_AGG(p.forecast_uuid) FILTER (WHERE lc.component_count = 1))[1]::UUID AS forecast_uuid,
         MIN(p.horizon_mins)::SMALLINT AS horizon_mins,
         MAX(p.created_at_utc)::TIMESTAMP AS created_at_utc,
         MAX(p.init_time_utc)::TIMESTAMP AS init_time_utc,
@@ -667,25 +667,25 @@ aggregated AS (
         CASE
             WHEN BOOL_AND(p.p02_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(lc.weight * p.capacity_watts * p.p02_sip)
-                    / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(lc.weight * p.capacity_watts * p.p02_sip)
+                        / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p02_sip,
         CASE
             WHEN BOOL_AND(p.p10_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(lc.weight * p.capacity_watts * p.p10_sip)
-                    / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(lc.weight * p.capacity_watts * p.p10_sip)
+                        / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p10_sip,
         CASE
             WHEN BOOL_AND(p.p25_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(lc.weight * p.capacity_watts * p.p25_sip)
-                    / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(lc.weight * p.capacity_watts * p.p25_sip)
+                        / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p25_sip,
         COALESCE(ROUND(
@@ -695,31 +695,31 @@ aggregated AS (
         CASE
             WHEN BOOL_AND(p.p75_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(lc.weight * p.capacity_watts * p.p75_sip)
-                    / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(lc.weight * p.capacity_watts * p.p75_sip)
+                        / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p75_sip,
         CASE
             WHEN BOOL_AND(p.p90_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(lc.weight * p.capacity_watts * p.p90_sip)
-                    / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(lc.weight * p.capacity_watts * p.p90_sip)
+                        / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p90_sip,
         CASE
             WHEN BOOL_AND(p.p98_sip IS NOT NULL)
                 THEN COALESCE(ROUND(
-                    SUM(lc.weight * p.capacity_watts * p.p98_sip)
-                    / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
-                ), 0)::SMALLINT
+                        SUM(lc.weight * p.capacity_watts * p.p98_sip)
+                        / NULLIF(SUM(lc.weight * p.capacity_watts), 0.0)
+                    ), 0)::SMALLINT
             ELSE NULL::SMALLINT
         END AS p98_sip,
         sqlc.arg(target_timestamp_utc)::TIMESTAMP AS target_time_utc
     FROM location_components AS lc
         INNER JOIN picked AS p
-            ON p.geometry_uuid = lc.component_geometry_uuid
+        ON lc.component_geometry_uuid = p.geometry_uuid
     GROUP BY lc.target_geometry_uuid, lc.is_direct, lc.component_count
     HAVING COUNT(*) = lc.component_count
 ),
@@ -750,7 +750,7 @@ SELECT
     w.target_time_utc
 FROM winning AS w
     INNER JOIN requested_sources AS rs
-        ON rs.geometry_uuid = w.target_geometry_uuid;
+    ON w.target_geometry_uuid = rs.geometry_uuid;
 
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed
