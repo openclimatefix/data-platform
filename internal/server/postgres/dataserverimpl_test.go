@@ -3610,3 +3610,1318 @@ func TestCreateGetEnergyPrices(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestCompositeLocationCRUD(t *testing.T) {
+	pivotTime := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
+
+	locA := createTestLocation(
+		t,
+		"test_cloc_crud_a",
+		"POINT(-1.5 52.0)",
+		100_000_000,
+		pivotTime,
+		&structpb.Struct{},
+		"GB",
+	)
+	locB := createTestLocation(
+		t,
+		"test_cloc_crud_b",
+		"POINT(-1.6 52.2)",
+		200_000_000,
+		pivotTime,
+		&structpb.Struct{},
+		"GB",
+	)
+
+	meta, err := structpb.NewStruct(map[string]any{"gsp_id": 99})
+	require.NoError(t, err)
+
+	compLoc := createTestLocation(
+		t,
+		"test_cloc_crud_main",
+		"POINT(-1.55 52.1)",
+		50_000_000,
+		pivotTime,
+		meta,
+		"GB",
+	)
+
+	setResp, err := dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: compLoc.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: locA.LocationUuid, Weight: 0.5},
+			{SourceLocationUuid: locB.LocationUuid, Weight: 1.0},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, compLoc.LocationUuid, setResp.LocationUuid)
+
+	getResp, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+		LocationUuid:      compLoc.LocationUuid,
+		EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		PivotTimestampUtc: timestamppb.New(pivotTime.Add(time.Hour)),
+	})
+	require.NoError(t, err)
+	require.Equal(t, compLoc.LocationUuid, getResp.LocationUuid)
+	require.Equal(t, "test_cloc_crud_main", getResp.LocationName)
+	require.Equal(t, "GB", getResp.CountryCode)
+	require.Equal(t, uint64(250_000_000), getResp.EffectiveCapacityWatts)
+	require.InDelta(t, 52.1, getResp.Latlng.Latitude, 1e-4)
+	require.InDelta(t, -1.55, getResp.Latlng.Longitude, 1e-4)
+	require.Equal(t, float64(99), getResp.Metadata.Fields["gsp_id"].GetNumberValue())
+	require.True(t, getResp.IsComposite)
+
+	otherLoc := createTestLocation(
+		t,
+		"test_cloc_crud_other",
+		"POINT(-1.7 52.3)",
+		10_000_000,
+		pivotTime,
+		&structpb.Struct{},
+		"GB",
+	)
+
+	invalidSetCases := []struct {
+		name string
+		req  *pb.SetLocationComponentsRequest
+		code codes.Code
+	}{
+		{
+			name: "Should reject unknown target location_uuid",
+			code: codes.NotFound,
+			req: &pb.SetLocationComponentsRequest{
+				LocationUuid: uuid.New().String(),
+				Components: []*pb.LocationComponent{
+					{SourceLocationUuid: locA.LocationUuid, Weight: 1.0},
+				},
+			},
+		},
+		{
+			name: "Should reject unknown source_location_uuid",
+			code: codes.FailedPrecondition,
+			req: &pb.SetLocationComponentsRequest{
+				LocationUuid: otherLoc.LocationUuid,
+				Components: []*pb.LocationComponent{
+					{SourceLocationUuid: uuid.New().String(), Weight: 1.0},
+				},
+			},
+		},
+		{
+			name: "Should reject recursive composite location as component",
+			code: codes.FailedPrecondition,
+			req: &pb.SetLocationComponentsRequest{
+				LocationUuid: otherLoc.LocationUuid,
+				Components: []*pb.LocationComponent{
+					{SourceLocationUuid: compLoc.LocationUuid, Weight: 1.0},
+				},
+			},
+		},
+		{
+			name: "Should reject duplicate source_location_uuids",
+			code: codes.InvalidArgument,
+			req: &pb.SetLocationComponentsRequest{
+				LocationUuid: otherLoc.LocationUuid,
+				Components: []*pb.LocationComponent{
+					{SourceLocationUuid: locA.LocationUuid, Weight: 0.5},
+					{SourceLocationUuid: locA.LocationUuid, Weight: 0.5},
+				},
+			},
+		},
+		{
+			name: "Should reject non-positive weight",
+			code: codes.InvalidArgument,
+			req: &pb.SetLocationComponentsRequest{
+				LocationUuid: otherLoc.LocationUuid,
+				Components: []*pb.LocationComponent{
+					{SourceLocationUuid: locA.LocationUuid, Weight: -0.5},
+				},
+			},
+		},
+	}
+
+	for _, tc := range invalidSetCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := dc.SetLocationComponents(t.Context(), tc.req)
+			require.Error(t, err)
+			require.Equal(t, tc.code, status.Code(err), err.Error())
+		})
+	}
+
+	t.Run(
+		"Should update location components and reflect in GetLocation",
+		func(t *testing.T) {
+			_, err := dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+				LocationUuid: compLoc.LocationUuid,
+				Components: []*pb.LocationComponent{
+					{SourceLocationUuid: locA.LocationUuid, Weight: 0.25},
+				},
+			})
+			require.NoError(t, err)
+
+			locSnap, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+				LocationUuid:      compLoc.LocationUuid,
+				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				IncludeGeometry:   true,
+				PivotTimestampUtc: timestamppb.New(pivotTime.Add(time.Hour)),
+			})
+			require.NoError(t, err)
+			require.Equal(t, uint64(25_000_000), locSnap.EffectiveCapacityWatts)
+			require.True(t, locSnap.IsComposite)
+			require.NotEmpty(t, locSnap.GeometryWkb)
+		},
+	)
+
+	t.Run(
+		"Should clear location components when given empty list and revert to non-composite",
+		func(t *testing.T) {
+			_, err := dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+				LocationUuid: compLoc.LocationUuid,
+				Components:   nil,
+			})
+			require.NoError(t, err)
+
+			locSnap, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+				LocationUuid:      compLoc.LocationUuid,
+				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				PivotTimestampUtc: timestamppb.New(pivotTime.Add(time.Hour)),
+			})
+			require.NoError(t, err)
+			require.Equal(t, uint64(50_000_000), locSnap.EffectiveCapacityWatts)
+			require.False(t, locSnap.IsComposite)
+		},
+	)
+
+	t.Run("Should delete location and remove from GetLocation", func(t *testing.T) {
+		_, err := dc.DeleteLocation(t.Context(), &pb.DeleteLocationRequest{
+			LocationUuid: compLoc.LocationUuid,
+		})
+		require.NoError(t, err)
+
+		_, err = dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+			LocationUuid:      compLoc.LocationUuid,
+			EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			PivotTimestampUtc: timestamppb.New(pivotTime.Add(time.Hour)),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
+	})
+}
+
+func TestCompositeLocationDiscoveryAndTemporal(t *testing.T) {
+	t0 := time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC)
+	t1 := t0.Add(2 * time.Hour)
+	t2 := t0.Add(4 * time.Hour)
+
+	outerNation, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_cloc_outer_nation",
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		GeometryWkt:            "POLYGON((-5.0 50.0, 2.0 50.0, 2.0 56.0, -5.0 56.0, -5.0 50.0))",
+		LocationType:           pb.LocationType_LOCATION_TYPE_NATION,
+		EffectiveCapacityWatts: 1_000_000_000,
+		ValidFromUtc:           timestamppb.New(t0),
+		CountryCode:            ptr("GB"),
+	})
+	require.NoError(t, err)
+
+	locA := createTestLocation(
+		t,
+		"test_cloc_disc_a",
+		"POINT(-1.0 51.5)",
+		100_000_000,
+		t0,
+		&structpb.Struct{},
+		"GB",
+	)
+	locB := createTestLocation(
+		t,
+		"test_cloc_disc_b",
+		"POINT(-2.0 52.5)",
+		200_000_000,
+		t0,
+		&structpb.Struct{},
+		"GB",
+	)
+
+	// Add WIND only to locA initially (locB does not have WIND yet)
+	_, err = dc.CreateLocationEnergySource(t.Context(), &pb.CreateLocationEnergySourceRequest{
+		LocationUuid:           locA.LocationUuid,
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_WIND,
+		EffectiveCapacityWatts: 50_000_000,
+		ValidFromUtc:           timestamppb.New(t0),
+	})
+	require.NoError(t, err)
+
+	// Update locA SOLAR capacity at t1 (100 MW -> 150 MW) and locB SOLAR capacity at t2 (200 MW -> 300 MW)
+	newCapA := uint64(150_000_000)
+	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
+		LocationUuid:              locA.LocationUuid,
+		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		NewEffectiveCapacityWatts: &newCapA,
+		ValidFromUtc:              timestamppb.New(t1),
+	})
+	require.NoError(t, err)
+
+	newCapB := uint64(300_000_000)
+	_, err = dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
+		LocationUuid:              locB.LocationUuid,
+		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		NewEffectiveCapacityWatts: &newCapB,
+		ValidFromUtc:              timestamppb.New(t2),
+	})
+	require.NoError(t, err)
+
+	vloc, err := dc.CreateLocation(t.Context(), &pb.CreateLocationRequest{
+		LocationName:           "test_cloc_disc_composite",
+		EnergySource:           pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		GeometryWkt:            "POLYGON((-1.6 51.9, -1.4 51.9, -1.4 52.1, -1.6 52.1, -1.6 51.9))",
+		LocationType:           pb.LocationType_LOCATION_TYPE_GSP,
+		EffectiveCapacityWatts: 1,
+		ValidFromUtc:           timestamppb.New(t0),
+		CountryCode:            ptr("GB"),
+	})
+	require.NoError(t, err)
+
+	_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: vloc.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: locA.LocationUuid, Weight: 1.0},
+			{SourceLocationUuid: locB.LocationUuid, Weight: 0.5},
+		},
+	})
+	require.NoError(t, err)
+
+	t.Run("Strict all-or-nothing multi-energy-source inheritance", func(t *testing.T) {
+		// SOLAR exists on both A and B -> composite location exists for SOLAR
+		solarLoc, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+			LocationUuid:      vloc.LocationUuid,
+			EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			PivotTimestampUtc: timestamppb.New(t0.Add(30 * time.Minute)),
+		})
+		require.NoError(t, err)
+		require.Equal(t, uint64(200_000_000), solarLoc.EffectiveCapacityWatts)
+		require.True(t, solarLoc.IsComposite)
+
+		// WIND only exists on A -> composite location must NOT exist for WIND yet
+		_, err = dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+			LocationUuid:      vloc.LocationUuid,
+			EnergySource:      pb.EnergySource_ENERGY_SOURCE_WIND,
+			PivotTimestampUtc: timestamppb.New(t0.Add(30 * time.Minute)),
+		})
+		require.Error(t, err)
+		require.Equal(t, codes.NotFound, status.Code(err))
+
+		// Now add WIND to locB -> composite location now appears for WIND too
+		_, err = dc.CreateLocationEnergySource(t.Context(), &pb.CreateLocationEnergySourceRequest{
+			LocationUuid:           locB.LocationUuid,
+			EnergySource:           pb.EnergySource_ENERGY_SOURCE_WIND,
+			EffectiveCapacityWatts: 80_000_000,
+			ValidFromUtc:           timestamppb.New(t0),
+		})
+		require.NoError(t, err)
+
+		windLoc, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+			LocationUuid:      vloc.LocationUuid,
+			EnergySource:      pb.EnergySource_ENERGY_SOURCE_WIND,
+			PivotTimestampUtc: timestamppb.New(t0.Add(30 * time.Minute)),
+		})
+		require.NoError(t, err)
+		require.Equal(t, uint64(90_000_000), windLoc.EffectiveCapacityWatts)
+	})
+
+	t.Run(
+		"Non-overlapping temporal capacity slicing and GetLocationAsTimeseries",
+		func(t *testing.T) {
+			histResp, err := dc.GetLocationAsTimeseries(
+				t.Context(),
+				&pb.GetLocationAsTimeseriesRequest{
+					LocationUuid: vloc.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					TimeWindow: &pb.TimeWindow{
+						StartTimestampUtc: timestamppb.New(t0),
+						EndTimestampUtc:   timestamppb.New(t2.Add(time.Hour)),
+					},
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, histResp.Values, 3)
+			// At t0: 1.0 * 100 MW + 0.5 * 200 MW = 200 MW
+			require.Equal(t, uint64(200_000_000), histResp.Values[0].EffectiveCapacityWatts)
+			require.Equal(t, t0, histResp.Values[0].TimestampUtc.AsTime())
+			// At t1: 1.0 * 150 MW + 0.5 * 200 MW = 250 MW
+			require.Equal(t, uint64(250_000_000), histResp.Values[1].EffectiveCapacityWatts)
+			require.Equal(t, t1, histResp.Values[1].TimestampUtc.AsTime())
+			// At t2: 1.0 * 150 MW + 0.5 * 300 MW = 300 MW
+			require.Equal(t, uint64(300_000_000), histResp.Values[2].EffectiveCapacityWatts)
+			require.Equal(t, t2, histResp.Values[2].TimestampUtc.AsTime())
+		},
+	)
+
+	t.Run("Appears in ListLocations with spatial and attribute filters", func(t *testing.T) {
+		gspType := pb.LocationType_LOCATION_TYPE_GSP
+		solar := pb.EnergySource_ENERGY_SOURCE_SOLAR
+
+		// Filter by enclosing_location_uuid_filter (outerNation encloses vloc)
+		withinResp, err := dc.ListLocations(t.Context(), &pb.ListLocationsRequest{
+			EnclosingLocationUuidFilter: &outerNation.LocationUuid,
+			LocationUuidsFilter:         []string{vloc.LocationUuid, locA.LocationUuid},
+			EnergySourceFilter:          &solar,
+		})
+		require.NoError(t, err)
+		require.Len(t, withinResp.Locations, 2)
+
+		var foundComp, foundPhys bool
+		for _, loc := range withinResp.Locations {
+			if loc.LocationUuid == vloc.LocationUuid {
+				foundComp = true
+
+				require.True(t, loc.IsComposite)
+				require.Equal(t, uint64(300_000_000), loc.EffectiveCapacityWatts)
+			}
+
+			if loc.LocationUuid == locA.LocationUuid {
+				foundPhys = true
+
+				require.False(t, loc.IsComposite)
+			}
+		}
+
+		require.True(t, foundComp)
+		require.True(t, foundPhys)
+
+		// Filter by enclosed_location_uuid_filter with composite location as inner location
+		withoutResp, err := dc.ListLocations(t.Context(), &pb.ListLocationsRequest{
+			EnclosedLocationUuidFilter: &vloc.LocationUuid,
+			LocationUuidsFilter:        []string{outerNation.LocationUuid},
+			EnergySourceFilter:         &solar,
+		})
+		require.NoError(t, err)
+		require.Len(t, withoutResp.Locations, 1)
+		require.Equal(t, outerNation.LocationUuid, withoutResp.Locations[0].LocationUuid)
+
+		// Filter by location_names_filter and location_type_filter
+		byNameResp, err := dc.ListLocations(t.Context(), &pb.ListLocationsRequest{
+			LocationNamesFilter: []string{vloc.LocationName},
+			LocationTypeFilter:  &gspType,
+			EnergySourceFilter:  &solar,
+		})
+		require.NoError(t, err)
+		require.Len(t, byNameResp.Locations, 1)
+		require.Equal(t, vloc.LocationUuid, byNameResp.Locations[0].LocationUuid)
+		require.True(t, byNameResp.Locations[0].IsComposite)
+	})
+}
+
+func TestCompositeLocationPVLiveTransitionLifecycle(t *testing.T) {
+	baseTime := time.Now().UTC().Truncate(time.Hour).Add(-6 * time.Hour)
+	t0 := baseTime
+	t1 := baseTime.Add(30 * time.Minute)
+	t2 := baseTime.Add(60 * time.Minute)
+	t3 := baseTime.Add(90 * time.Minute)
+
+	fc := createTestForecaster(t, "test_cloc_pvlive_fc", "v1")
+	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
+		Name: "test_cloc_pvlive_obs",
+	})
+	require.NoError(t, err)
+
+	// =========================================================================
+	// Setup all 3 YAML scenarios at Step 0 (Pre-transition physical GSPs):
+	//   Scenario A (1-to-1 alias): GSP 4 (80 MW) -> GSP 350 (80 MW, weight 1.0)
+	//   Scenario B (2-to-1 merge): GSP 56 (27 MW) & GSP 122 (73 MW) -> GSP 351 (100 MW, weights 0.27 & 0.73)
+	//   Scenario C (1-to-2 split): GSP 41 (250 MW) -> GSP 343 (100 MW, 1.0) + GSP 344 (150 MW, 1.0)
+	// =========================================================================
+	gsp4 := createTestLocation(
+		t,
+		"test_cloc_gsp_4",
+		"POLYGON((-3.0 52.0, -2.9 52.0, -2.9 52.1, -3.0 52.1, -3.0 52.0))",
+		80_000_000,
+		t0.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	gsp56 := createTestLocation(
+		t,
+		"test_cloc_carr_1",
+		"POLYGON((-2.0 53.0, -1.9 53.0, -1.9 53.1, -2.0 53.1, -2.0 53.0))",
+		27_000_000,
+		t0.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	gsp122 := createTestLocation(
+		t,
+		"test_cloc_fidf_1",
+		"POLYGON((-1.9 53.0, -1.8 53.0, -1.8 53.1, -1.9 53.1, -1.9 53.0))",
+		73_000_000,
+		t0.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	gsp41 := createTestLocation(
+		t,
+		"test_cloc_brle_1_flee_1",
+		"POLYGON((-1.5 51.0, -1.3 51.0, -1.3 51.2, -1.5 51.2, -1.5 51.0))",
+		250_000_000,
+		t0.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+
+	// Step 0: Seed direct observations (50%) and forecasts (55%) at t0 on all 4 legacy GSPs
+	for _, legacy := range []struct {
+		uuid string
+		cap  uint64
+	}{
+		{gsp4.LocationUuid, 80_000_000},
+		{gsp56.LocationUuid, 27_000_000},
+		{gsp122.LocationUuid, 73_000_000},
+		{gsp41.LocationUuid, 250_000_000},
+	} {
+		_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+			LocationUuid:        legacy.uuid,
+			EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			ObserverName:        obsResp.ObserverName,
+			CreatedTimestampUtc: timestamppb.New(t0),
+			Values: []*pb.CreateObservationsRequest_Value{
+				{TimestampUtc: timestamppb.New(t0), ValueWatts: legacy.cap / 2}, // 50%
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
+			Forecaster:   fc,
+			LocationUuid: legacy.uuid,
+			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			InitTimeUtc:  timestamppb.New(t0),
+			Values: []*pb.CreateForecastRequest_ForecastValue{
+				{HorizonMins: 0, P50Fraction: 0.55},
+				{HorizonMins: 30, P50Fraction: 0.55},
+			},
+		})
+		require.NoError(t, err)
+	}
+
+	// =========================================================================
+	// Step 1: PVLive introduces new GSPs (350, 351, 343, 344) at t1.
+	// Legacy GSPs (4, 56, 122, 41) get component mappings via SetLocationComponents.
+	// PVLive writes observations at t1 ONLY to the new GSPs.
+	// Old ML model still writes forecasts at t1 (predicting t1=60% and t2=65%) ONLY to legacy GSPs.
+	// =========================================================================
+	gsp350 := createTestLocation(
+		t,
+		"test_cloc_gsp_350",
+		"POINT(-2.95 52.05)",
+		80_000_000,
+		t1,
+		&structpb.Struct{},
+		"GB",
+	)
+	gsp351 := createTestLocation(
+		t,
+		"test_cloc_carr_1_fidf_1",
+		"POINT(-1.95 53.05)",
+		100_000_000,
+		t1,
+		&structpb.Struct{},
+		"GB",
+	)
+	gsp343 := createTestLocation(
+		t,
+		"test_cloc_brle_1",
+		"POINT(-1.45 51.05)",
+		100_000_000,
+		t1,
+		&structpb.Struct{},
+		"GB",
+	)
+	gsp344 := createTestLocation(
+		t,
+		"test_cloc_flee_1",
+		"POINT(-1.35 51.15)",
+		150_000_000,
+		t1,
+		&structpb.Struct{},
+		"GB",
+	)
+
+	// Link Scenario A: 4 -> 1.0 * 350
+	_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: gsp4.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: gsp350.LocationUuid, Weight: 1.0},
+		},
+	})
+	require.NoError(t, err)
+
+	// Link Scenario B: 56 -> 0.27 * 351, 122 -> 0.73 * 351
+	_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: gsp56.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: gsp351.LocationUuid, Weight: 0.27},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: gsp122.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: gsp351.LocationUuid, Weight: 0.73},
+		},
+	})
+	require.NoError(t, err)
+
+	// Link Scenario C: 41 -> 1.0 * 343 + 1.0 * 344
+	_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: gsp41.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: gsp343.LocationUuid, Weight: 1.0},
+			{SourceLocationUuid: gsp344.LocationUuid, Weight: 1.0},
+		},
+	})
+	require.NoError(t, err)
+
+	// PVLive writes observations at t1 ONLY to new GSPs:
+	// - 350: 32 MW / 80 MW = 40%
+	// - 351: 40 MW / 100 MW = 40% (so both 56 and 122 should read 40% with capacities 27 MW and 73 MW)
+	// - 343: 50 MW (50% of 100 MW) and 344: 25 MW (16.67% of 150 MW) -> 41 should read (50+25)/250 = 30%!
+	for _, obs := range []struct {
+		uuid  string
+		watts uint64
+	}{
+		{gsp350.LocationUuid, 32_000_000},
+		{gsp351.LocationUuid, 40_000_000},
+		{gsp343.LocationUuid, 50_000_000},
+		{gsp344.LocationUuid, 25_000_000},
+	} {
+		_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+			LocationUuid:        obs.uuid,
+			EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			ObserverName:        obsResp.ObserverName,
+			CreatedTimestampUtc: timestamppb.New(t1),
+			Values: []*pb.CreateObservationsRequest_Value{
+				{TimestampUtc: timestamppb.New(t1), ValueWatts: obs.watts},
+			},
+		})
+		require.NoError(t, err)
+	}
+
+	// Old ML model still writes forecast at t1 directly to legacy GSPs (60% at t1, stale 65% tail at t2)
+	for _, legacyUuid := range []string{
+		gsp4.LocationUuid,
+		gsp56.LocationUuid,
+		gsp122.LocationUuid,
+		gsp41.LocationUuid,
+	} {
+		_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
+			Forecaster:   fc,
+			LocationUuid: legacyUuid,
+			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			InitTimeUtc:  timestamppb.New(t1),
+			Values: []*pb.CreateForecastRequest_ForecastValue{
+				{HorizonMins: 0, P50Fraction: 0.60},
+				{HorizonMins: 30, P50Fraction: 0.65},
+			},
+		})
+		require.NoError(t, err)
+	}
+
+	t.Run(
+		"Step 1: all 3 YAML scenarios serve direct forecasts and composite observations",
+		func(t *testing.T) {
+			cases := []struct {
+				name        string
+				uuid        string
+				expectedCap uint64
+				expectedObs float64
+			}{
+				{"Scenario A (1-to-1 alias GSP 4)", gsp4.LocationUuid, 80_000_000, 0.40},
+				{"Scenario B1 (split 0.27 GSP 56)", gsp56.LocationUuid, 27_000_000, 0.40},
+				{"Scenario B2 (split 0.73 GSP 122)", gsp122.LocationUuid, 73_000_000, 0.40},
+				{"Scenario C (sum 343+344 GSP 41)", gsp41.LocationUuid, 250_000_000, 0.30},
+			}
+
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					locSnap, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+						LocationUuid:      tc.uuid,
+						EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+						IncludeGeometry:   true,
+						PivotTimestampUtc: timestamppb.New(t1),
+					})
+					require.NoError(t, err)
+					require.True(t, locSnap.IsComposite)
+					require.NotEmpty(t, locSnap.GeometryWkb)
+					require.Equal(t, tc.expectedCap, locSnap.EffectiveCapacityWatts)
+
+					fcResp, err := dc.GetForecastAsTimeseries(
+						t.Context(),
+						&pb.GetForecastAsTimeseriesRequest{
+							LocationUuid: tc.uuid,
+							EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+							Forecaster:   fc,
+							TimeWindow: &pb.TimeWindow{
+								StartTimestampUtc: timestamppb.New(t0),
+								EndTimestampUtc:   timestamppb.New(t1),
+							},
+						},
+					)
+					require.NoError(t, err)
+					require.Len(t, fcResp.Values, 2)
+					require.InDelta(t, 0.55, fcResp.Values[0].P50ValueFraction, 1e-4)
+					require.InDelta(t, 0.60, fcResp.Values[1].P50ValueFraction, 1e-4)
+
+					obsRespTs, err := dc.GetObservationsAsTimeseries(
+						t.Context(),
+						&pb.GetObservationsAsTimeseriesRequest{
+							LocationUuid: tc.uuid,
+							EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+							ObserverName: obsResp.ObserverName,
+							TimeWindow: &pb.TimeWindow{
+								StartTimestampUtc: timestamppb.New(t0),
+								EndTimestampUtc:   timestamppb.New(t1),
+							},
+						},
+					)
+					require.NoError(t, err)
+					require.Len(t, obsRespTs.Values, 2)
+					require.InDelta(t, 0.50, obsRespTs.Values[0].ValueFraction, 1e-4)
+					require.InDelta(t, tc.expectedObs, obsRespTs.Values[1].ValueFraction, 1e-4)
+				})
+			}
+
+			latestObs, err := dc.GetLatestObservations(
+				t.Context(),
+				&pb.GetLatestObservationsRequest{
+					LocationUuids: []string{
+						gsp4.LocationUuid,
+						gsp56.LocationUuid,
+						gsp122.LocationUuid,
+						gsp41.LocationUuid,
+					},
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					ObserverName: obsResp.ObserverName,
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, latestObs.Observations, 4)
+
+			for _, o := range latestObs.Observations {
+				require.Equal(t, t1, o.TimestampUtc.AsTime())
+			}
+		},
+	)
+
+	// =========================================================================
+	// Step 2: New ML model deployed at t2 -> writes forecasts to new GSPs (350, 351, 343, 344)
+	// and stops writing to legacy GSPs (4, 56, 122, 41).
+	// Notice that at t2, legacy GSPs still have the 30-min horizon tail (65%) from init_time=t1,
+	// which must be beaten by the fresh 0-min horizon forecast from init_time=t2 on the new GSPs!
+	// =========================================================================
+	for _, newFc := range []struct {
+		uuid  string
+		p50T2 float32
+		p50T3 float32
+	}{
+		{gsp350.LocationUuid, 0.70, 0.75},
+		{gsp351.LocationUuid, 0.80, 0.85},
+		{gsp343.LocationUuid, 0.50, 0.60}, // 50 MW at t2, 60 MW at t3 (of 100 MW)
+		{gsp344.LocationUuid, 0.50, 0.60}, // 75 MW at t2, 90 MW at t3 (of 150 MW) -> combined 41 = 50% at t2, 60% at t3
+	} {
+		_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
+			Forecaster:   fc,
+			LocationUuid: newFc.uuid,
+			EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			InitTimeUtc:  timestamppb.New(t2),
+			Values: []*pb.CreateForecastRequest_ForecastValue{
+				{HorizonMins: 0, P50Fraction: newFc.p50T2},
+				{HorizonMins: 30, P50Fraction: newFc.p50T3},
+			},
+		})
+		require.NoError(t, err)
+	}
+
+	t.Run(
+		"Step 2: all 3 YAML scenarios switch cleanly at t2 from direct forecasts to composite forecasts",
+		func(t *testing.T) {
+			cases := []struct {
+				name  string
+				uuid  string
+				expT2 float64
+				expT3 float64
+			}{
+				{"Scenario A (1-to-1 alias GSP 4)", gsp4.LocationUuid, 0.70, 0.75},
+				{"Scenario B1 (split 0.27 GSP 56)", gsp56.LocationUuid, 0.80, 0.85},
+				{"Scenario B2 (split 0.73 GSP 122)", gsp122.LocationUuid, 0.80, 0.85},
+				{"Scenario C (sum 343+344 GSP 41)", gsp41.LocationUuid, 0.50, 0.60},
+			}
+
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					fcResp, err := dc.GetForecastAsTimeseries(
+						t.Context(),
+						&pb.GetForecastAsTimeseriesRequest{
+							LocationUuid: tc.uuid,
+							EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+							Forecaster:   fc,
+							TimeWindow: &pb.TimeWindow{
+								StartTimestampUtc: timestamppb.New(t0),
+								EndTimestampUtc:   timestamppb.New(t3),
+							},
+						},
+					)
+					require.NoError(t, err)
+					require.Len(t, fcResp.Values, 4)
+					// t0 (0.55) and t1 (0.60) from direct legacy GSP;
+					// t2 and t3 from fresh init_time=t2 composite (beating stale init_time=t1 65% tail!)
+					require.InDelta(t, 0.55, fcResp.Values[0].P50ValueFraction, 1e-4)
+					require.InDelta(t, 0.60, fcResp.Values[1].P50ValueFraction, 1e-4)
+					require.InDelta(t, tc.expT2, fcResp.Values[2].P50ValueFraction, 1e-4)
+					require.InDelta(t, tc.expT3, fcResp.Values[3].P50ValueFraction, 1e-4)
+				})
+			}
+
+			fcSnap, err := dc.GetForecastAtTimestamp(t.Context(), &pb.GetForecastAtTimestampRequest{
+				LocationUuids: []string{
+					gsp4.LocationUuid,
+					gsp56.LocationUuid,
+					gsp122.LocationUuid,
+					gsp41.LocationUuid,
+					gsp351.LocationUuid,
+				},
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecaster:   fc,
+				TimestampUtc: timestamppb.New(t2),
+			})
+			require.NoError(t, err)
+			require.Len(t, fcSnap.Values, 5)
+		},
+	)
+
+	t.Run("Step 4: retired legacy GSPs can be deleted while new GSPs remain", func(t *testing.T) {
+		for _, legacyUuid := range []string{
+			gsp4.LocationUuid,
+			gsp56.LocationUuid,
+			gsp122.LocationUuid,
+			gsp41.LocationUuid,
+		} {
+			_, err := dc.DeleteLocation(t.Context(), &pb.DeleteLocationRequest{
+				LocationUuid: legacyUuid,
+			})
+			require.NoError(t, err)
+
+			_, err = dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+				LocationUuid:      legacyUuid,
+				EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				PivotTimestampUtc: timestamppb.New(t2),
+			})
+			require.Error(t, err)
+			require.Equal(t, codes.NotFound, status.Code(err))
+		}
+
+		loc351, err := dc.GetLocation(t.Context(), &pb.GetLocationRequest{
+			LocationUuid:      gsp351.LocationUuid,
+			EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+			PivotTimestampUtc: timestamppb.New(t2),
+		})
+		require.NoError(t, err)
+		require.Equal(t, uint64(100_000_000), loc351.EffectiveCapacityWatts)
+	})
+}
+
+func TestCompositeLocationForecastAndObservationMath(t *testing.T) {
+	baseTime := time.Now().UTC().Truncate(time.Hour).Add(-4 * time.Hour)
+	t0 := baseTime
+	t1 := baseTime.Add(30 * time.Minute)
+	t2 := baseTime.Add(60 * time.Minute)
+
+	// locA: 100 MW, locB: 300 MW, locZero: 0 MW
+	locA := createTestLocation(
+		t,
+		"test_cloc_math_a",
+		"POINT(-1.1 51.1)",
+		100_000_000,
+		baseTime.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	locB := createTestLocation(
+		t,
+		"test_cloc_math_b",
+		"POINT(-1.2 51.2)",
+		300_000_000,
+		baseTime.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	locZero := createTestLocation(
+		t,
+		"test_cloc_math_zero",
+		"POINT(-1.3 51.3)",
+		1000,
+		baseTime.Add(-48*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	zeroCap := uint64(0)
+	_, err := dc.UpdateLocation(t.Context(), &pb.UpdateLocationRequest{
+		LocationUuid:              locZero.LocationUuid,
+		EnergySource:              pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		NewEffectiveCapacityWatts: &zeroCap,
+		ValidFromUtc:              timestamppb.New(baseTime.Add(-24 * time.Hour)),
+	})
+	require.NoError(t, err)
+
+	// 1. Single-source fractional split (weight = 0.27)
+	vlocSplit := createTestLocation(
+		t,
+		"test_cloc_math_split",
+		"POINT(-1.15 51.15)",
+		1,
+		baseTime.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: vlocSplit.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: locA.LocationUuid, Weight: 0.27},
+		},
+	})
+	require.NoError(t, err)
+
+	// 2. Multi-geometry weighted sum (A + B with weights [1.0, 1.0])
+	vlocSum := createTestLocation(
+		t,
+		"test_cloc_math_sum",
+		"POINT(-1.25 51.25)",
+		1,
+		baseTime.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: vlocSum.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: locA.LocationUuid, Weight: 1.0},
+			{SourceLocationUuid: locB.LocationUuid, Weight: 1.0},
+		},
+	})
+	require.NoError(t, err)
+
+	// 3. Zero-capacity composite geometry
+	vlocZero := createTestLocation(
+		t,
+		"test_cloc_math_zero_comp",
+		"POINT(-1.35 51.35)",
+		1,
+		baseTime.Add(-24*time.Hour),
+		&structpb.Struct{},
+		"GB",
+	)
+	_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: vlocZero.LocationUuid,
+		Components: []*pb.LocationComponent{
+			{SourceLocationUuid: locZero.LocationUuid, Weight: 1.0},
+		},
+	})
+	require.NoError(t, err)
+
+	fc := createTestForecaster(t, "test_cloc_math_fc", "v1")
+	obsResp, err := dc.CreateObserver(t.Context(), &pb.CreateObserverRequest{
+		Name: "test_cloc_math_obs",
+	})
+	require.NoError(t, err)
+
+	// Seed forecasts:
+	// locA has horizons [0, 30, 60] mins (t0, t1, t2) at 50% (50 MW), with p10=0.40 and p90=0.60
+	_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
+		Forecaster:   fc,
+		LocationUuid: locA.LocationUuid,
+		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		InitTimeUtc:  timestamppb.New(t0),
+		Values: []*pb.CreateForecastRequest_ForecastValue{
+			{
+				HorizonMins:              0,
+				P50Fraction:              0.50,
+				OtherStatisticsFractions: map[string]float32{"p10": 0.40, "p90": 0.60},
+			},
+			{
+				HorizonMins:              30,
+				P50Fraction:              0.50,
+				OtherStatisticsFractions: map[string]float32{"p10": 0.40, "p90": 0.60},
+			},
+			{
+				HorizonMins:              60,
+				P50Fraction:              0.50,
+				OtherStatisticsFractions: map[string]float32{"p10": 0.40, "p90": 0.60},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// locB ONLY has horizons [0, 30] mins (t0, t1) at 10% (30 MW), with p10=0.05 and NO p90!
+	// (t2 is missing on locB!)
+	_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
+		Forecaster:   fc,
+		LocationUuid: locB.LocationUuid,
+		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		InitTimeUtc:  timestamppb.New(t0),
+		Values: []*pb.CreateForecastRequest_ForecastValue{
+			{
+				HorizonMins:              0,
+				P50Fraction:              0.10,
+				OtherStatisticsFractions: map[string]float32{"p10": 0.05},
+			},
+			{
+				HorizonMins:              30,
+				P50Fraction:              0.10,
+				OtherStatisticsFractions: map[string]float32{"p10": 0.05},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// locZero has horizons [0, 30] mins at 0%
+	_, err = dc.CreateForecast(t.Context(), &pb.CreateForecastRequest{
+		Forecaster:   fc,
+		LocationUuid: locZero.LocationUuid,
+		EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		InitTimeUtc:  timestamppb.New(t0),
+		Values: []*pb.CreateForecastRequest_ForecastValue{
+			{HorizonMins: 0, P50Fraction: 0.0},
+			{HorizonMins: 30, P50Fraction: 0.0},
+		},
+	})
+	require.NoError(t, err)
+
+	// Seed observations:
+	// locA has observations at [t0, t1, t2] at 50 MW (50%)
+	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+		LocationUuid:        locA.LocationUuid,
+		EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		ObserverName:        obsResp.ObserverName,
+		CreatedTimestampUtc: timestamppb.New(t2),
+		Values: []*pb.CreateObservationsRequest_Value{
+			{TimestampUtc: timestamppb.New(t0), ValueWatts: 50_000_000},
+			{TimestampUtc: timestamppb.New(t1), ValueWatts: 50_000_000},
+			{TimestampUtc: timestamppb.New(t2), ValueWatts: 50_000_000},
+		},
+	})
+	require.NoError(t, err)
+
+	// locB only has observations at [t0, t1] at 30 MW (10%); t2 is missing!
+	_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+		LocationUuid:        locB.LocationUuid,
+		EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+		ObserverName:        obsResp.ObserverName,
+		CreatedTimestampUtc: timestamppb.New(t2),
+		Values: []*pb.CreateObservationsRequest_Value{
+			{TimestampUtc: timestamppb.New(t0), ValueWatts: 30_000_000},
+			{TimestampUtc: timestamppb.New(t1), ValueWatts: 30_000_000},
+		},
+	})
+	require.NoError(t, err)
+
+	t.Run(
+		"Single-source fractional split (0.27) preserves fraction and exact capacity",
+		func(t *testing.T) {
+			fcResp, err := dc.GetForecastAsTimeseries(
+				t.Context(),
+				&pb.GetForecastAsTimeseriesRequest{
+					LocationUuid: vlocSplit.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					Forecaster:   fc,
+					TimeWindow: &pb.TimeWindow{
+						StartTimestampUtc: timestamppb.New(t0),
+						EndTimestampUtc:   timestamppb.New(t2),
+					},
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, fcResp.Values, 3)
+
+			for _, v := range fcResp.Values {
+				require.Equal(t, uint64(27_000_000), v.EffectiveCapacityWatts)
+				require.InDelta(t, 0.50, v.P50ValueFraction, 1e-4)
+			}
+
+			obsTsResp, err := dc.GetObservationsAsTimeseries(
+				t.Context(),
+				&pb.GetObservationsAsTimeseriesRequest{
+					LocationUuid: vlocSplit.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					ObserverName: obsResp.ObserverName,
+					TimeWindow: &pb.TimeWindow{
+						StartTimestampUtc: timestamppb.New(t0),
+						EndTimestampUtc:   timestamppb.New(t2),
+					},
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, obsTsResp.Values, 3)
+
+			for _, v := range obsTsResp.Values {
+				require.Equal(t, uint64(27_000_000), v.EffectiveCapacityWatts)
+				require.InDelta(t, 0.50, v.ValueFraction, 1e-4)
+			}
+		},
+	)
+
+	t.Run(
+		"Multi-geometry weighted sum, strict missing component omission, and quantile null-safety",
+		func(t *testing.T) {
+			// Expected at t0 and t1:
+			// Capacity = 100 MW + 300 MW = 400 MW
+			// p50 = (50 MW + 30 MW) / 400 MW = 0.20
+			// p10 = (40 MW + 15 MW) / 400 MW = 55 / 400 = 0.1375
+			// p90 = omitted (since locB has no p90)
+			// t2 is omitted because locB has no forecast at t2!
+			fcResp, err := dc.GetForecastAsTimeseries(
+				t.Context(),
+				&pb.GetForecastAsTimeseriesRequest{
+					LocationUuid: vlocSum.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					Forecaster:   fc,
+					TimeWindow: &pb.TimeWindow{
+						StartTimestampUtc: timestamppb.New(t0),
+						EndTimestampUtc:   timestamppb.New(t2),
+					},
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, fcResp.Values, 2)
+
+			for _, v := range fcResp.Values {
+				require.Equal(t, uint64(400_000_000), v.EffectiveCapacityWatts)
+				require.InDelta(t, 0.20, v.P50ValueFraction, 1e-4)
+				require.Contains(t, v.OtherStatisticsFractions, "p10")
+				require.InDelta(t, 0.1375, v.OtherStatisticsFractions["p10"], 1e-4)
+				require.NotContains(t, v.OtherStatisticsFractions, "p90")
+			}
+
+			// Observations timeseries on vlocSum: only t0 and t1 (t2 omitted because locB lacks t2)
+			obsTsResp, err := dc.GetObservationsAsTimeseries(
+				t.Context(),
+				&pb.GetObservationsAsTimeseriesRequest{
+					LocationUuid: vlocSum.LocationUuid,
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					ObserverName: obsResp.ObserverName,
+					TimeWindow: &pb.TimeWindow{
+						StartTimestampUtc: timestamppb.New(t0),
+						EndTimestampUtc:   timestamppb.New(t2),
+					},
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, obsTsResp.Values, 2)
+
+			for _, v := range obsTsResp.Values {
+				require.Equal(t, uint64(400_000_000), v.EffectiveCapacityWatts)
+				require.InDelta(t, 0.20, v.ValueFraction, 1e-4)
+			}
+		},
+	)
+
+	t.Run(
+		"GetLatestObservations covers fast path, lagging tip slow path, and staggered gap slow path",
+		func(t *testing.T) {
+			t3 := baseTime.Add(90 * time.Minute)
+			locC := createTestLocation(
+				t,
+				"test_cloc_math_c",
+				"POINT(-1.4 51.4)",
+				100_000_000,
+				baseTime.Add(-24*time.Hour),
+				&structpb.Struct{},
+				"GB",
+			)
+			_, err := dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+				LocationUuid:        locC.LocationUuid,
+				EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName:        obsResp.ObserverName,
+				CreatedTimestampUtc: timestamppb.New(t0),
+				Values: []*pb.CreateObservationsRequest_Value{
+					{TimestampUtc: timestamppb.New(t0), ValueWatts: 50_000_000},
+					{TimestampUtc: timestamppb.New(t3), ValueWatts: 50_000_000},
+				},
+			})
+			require.NoError(t, err)
+
+			vlocStaggered := createTestLocation(
+				t,
+				"test_cloc_math_staggered",
+				"POINT(-1.45 51.45)",
+				1,
+				baseTime.Add(-24*time.Hour),
+				&structpb.Struct{},
+				"GB",
+			)
+			_, err = dc.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+				LocationUuid: vlocStaggered.LocationUuid,
+				Components: []*pb.LocationComponent{
+					{SourceLocationUuid: locB.LocationUuid, Weight: 1.0},
+					{SourceLocationUuid: locC.LocationUuid, Weight: 1.0},
+				},
+			})
+			require.NoError(t, err)
+
+			latestResp, err := dc.GetLatestObservations(
+				t.Context(),
+				&pb.GetLatestObservationsRequest{
+					LocationUuids: []string{
+						locA.LocationUuid,
+						vlocSplit.LocationUuid,
+						vlocSum.LocationUuid,
+						vlocStaggered.LocationUuid,
+					},
+					EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					ObserverName: obsResp.ObserverName,
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, latestResp.Observations, 4)
+
+			byLoc := make(map[string]*pb.GetLatestObservationsResponse_Observation)
+			for _, o := range latestResp.Observations {
+				byLoc[o.LocationUuid] = o
+			}
+
+			// Physical locA (fast path): t2
+			require.Equal(t, t2, byLoc[locA.LocationUuid].TimestampUtc.AsTime())
+			require.InDelta(t, 0.50, byLoc[locA.LocationUuid].ValueFraction, 1e-4)
+
+			// Composite vlocSplit (fast path, shares locA with locA and vlocSum): t2
+			require.Equal(t, t2, byLoc[vlocSplit.LocationUuid].TimestampUtc.AsTime())
+			require.Equal(
+				t,
+				uint64(27_000_000),
+				byLoc[vlocSplit.LocationUuid].EffectiveCapacityWatts,
+			)
+			require.InDelta(t, 0.50, byLoc[vlocSplit.LocationUuid].ValueFraction, 1e-4)
+
+			// Composite vlocSum (slow path - lagging tip): locA tip=t2, locB tip=t1 -> t1
+			require.Equal(t, t1, byLoc[vlocSum.LocationUuid].TimestampUtc.AsTime())
+			require.Equal(
+				t,
+				uint64(400_000_000),
+				byLoc[vlocSum.LocationUuid].EffectiveCapacityWatts,
+			)
+			require.InDelta(t, 0.20, byLoc[vlocSum.LocationUuid].ValueFraction, 1e-4)
+
+			// Composite vlocStaggered (slow path - staggered gap): locB tip=t1, locC tip=t3 (missing t1) -> t0
+			require.Equal(t, t0, byLoc[vlocStaggered.LocationUuid].TimestampUtc.AsTime())
+			require.Equal(
+				t,
+				uint64(400_000_000),
+				byLoc[vlocStaggered.LocationUuid].EffectiveCapacityWatts,
+			)
+			require.InDelta(t, 0.20, byLoc[vlocStaggered.LocationUuid].ValueFraction, 1e-4)
+
+			// Now test the fast path on multi-component vlocSum (min_tip_utc = max_tip_utc = t2)
+			_, err = dc.CreateObservations(t.Context(), &pb.CreateObservationsRequest{
+				LocationUuid:        locB.LocationUuid,
+				EnergySource:        pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				ObserverName:        obsResp.ObserverName,
+				CreatedTimestampUtc: timestamppb.New(t3),
+				Values: []*pb.CreateObservationsRequest_Value{
+					{TimestampUtc: timestamppb.New(t2), ValueWatts: 90_000_000}, // 30% of 300 MW
+				},
+			})
+			require.NoError(t, err)
+
+			fastPathResp, err := dc.GetLatestObservations(
+				t.Context(),
+				&pb.GetLatestObservationsRequest{
+					LocationUuids:     []string{vlocSum.LocationUuid},
+					EnergySource:      pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					ObserverName:      obsResp.ObserverName,
+					PivotTimestampUtc: timestamppb.New(t3),
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, fastPathResp.Observations, 1)
+			// At t2: locA = 50 MW, locB = 90 MW -> (50 + 90) / 400 = 140 / 400 = 0.35
+			require.Equal(t, t2, fastPathResp.Observations[0].TimestampUtc.AsTime())
+			require.Equal(
+				t,
+				uint64(400_000_000),
+				fastPathResp.Observations[0].EffectiveCapacityWatts,
+			)
+			require.InDelta(t, 0.35, fastPathResp.Observations[0].ValueFraction, 1e-4)
+		},
+	)
+
+	t.Run("Zero-capacity safety returns 0 without division by zero", func(t *testing.T) {
+		fcResp, err := dc.GetForecastAsTimeseries(
+			t.Context(),
+			&pb.GetForecastAsTimeseriesRequest{
+				LocationUuid: vlocZero.LocationUuid,
+				EnergySource: pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecaster:   fc,
+				TimeWindow: &pb.TimeWindow{
+					StartTimestampUtc: timestamppb.New(t0),
+					EndTimestampUtc:   timestamppb.New(t1),
+				},
+			},
+		)
+		require.NoError(t, err)
+		require.Len(t, fcResp.Values, 2)
+
+		for _, v := range fcResp.Values {
+			require.Equal(t, uint64(0), v.EffectiveCapacityWatts)
+			require.Equal(t, float32(0), v.P50ValueFraction)
+		}
+	})
+
+	t.Run(
+		"Map snapshots GetForecastAtTimestamp and GetObservationsAtTimestamp mix physical and virtual",
+		func(t *testing.T) {
+			fcSnap, err := dc.GetForecastAtTimestamp(t.Context(), &pb.GetForecastAtTimestampRequest{
+				LocationUuids: []string{locA.LocationUuid, vlocSum.LocationUuid},
+				EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+				Forecaster:    fc,
+				TimestampUtc:  timestamppb.New(t1),
+			})
+			require.NoError(t, err)
+			require.Len(t, fcSnap.Values, 2)
+
+			fcByLoc := make(map[string]*pb.GetForecastAtTimestampResponse_Value)
+			for _, v := range fcSnap.Values {
+				fcByLoc[v.LocationUuid] = v
+			}
+
+			require.InDelta(t, 0.50, fcByLoc[locA.LocationUuid].ValueFraction, 1e-4)
+			require.InDelta(t, 0.20, fcByLoc[vlocSum.LocationUuid].ValueFraction, 1e-4)
+			require.Equal(
+				t,
+				uint64(400_000_000),
+				fcByLoc[vlocSum.LocationUuid].EffectiveCapacityWatts,
+			)
+
+			obsSnap, err := dc.GetObservationsAtTimestamp(
+				t.Context(),
+				&pb.GetObservationsAtTimestampRequest{
+					LocationUuids: []string{locA.LocationUuid, vlocSum.LocationUuid},
+					EnergySource:  pb.EnergySource_ENERGY_SOURCE_SOLAR,
+					ObserverName:  obsResp.ObserverName,
+					TimestampUtc:  timestamppb.New(t1),
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, obsSnap.Values, 2)
+
+			obsByLoc := make(map[string]*pb.GetObservationsAtTimestampResponse_Value)
+			for _, v := range obsSnap.Values {
+				obsByLoc[v.LocationUuid] = v
+			}
+
+			require.InDelta(t, 0.50, obsByLoc[locA.LocationUuid].ValueFraction, 1e-4)
+			require.InDelta(t, 0.20, obsByLoc[vlocSum.LocationUuid].ValueFraction, 1e-4)
+			require.Equal(
+				t,
+				uint64(400_000_000),
+				obsByLoc[vlocSum.LocationUuid].EffectiveCapacityWatts,
+			)
+		},
+	)
+}

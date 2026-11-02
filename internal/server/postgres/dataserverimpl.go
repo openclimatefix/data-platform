@@ -1091,6 +1091,7 @@ func (s *DataPlatformDataServiceServerImpl) GetLocation(
 		Metadata:               dbSource.MetadataJsonb,
 		GeometryWkb:            geometry,
 		CountryCode:            ptrToValElseEmpty(dbSource.CountryCode),
+		IsComposite:            dbSource.IsComposite,
 	}, nil
 }
 
@@ -1699,7 +1700,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			locations = append(locations, mapLocationSummary(
 				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
 				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
-				loc.CountryCode,
+				loc.CountryCode, loc.IsComposite,
 			))
 		}
 	} else if req.EnclosedLocationUuidFilter != nil {
@@ -1722,7 +1723,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			locations = append(locations, mapLocationSummary(
 				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
 				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
-				loc.CountryCode,
+				loc.CountryCode, loc.IsComposite,
 			))
 		}
 	} else {
@@ -1745,7 +1746,7 @@ func (s *DataPlatformDataServiceServerImpl) ListLocations(
 			locations = append(locations, mapLocationSummary(
 				loc.GeometryUuid, loc.GeometryName, loc.Latitude, loc.Longitude,
 				loc.CapacityWatts, loc.SourceTypeID, loc.GeometryTypeID, loc.MetadataJsonb,
-				loc.CountryCode,
+				loc.CountryCode, loc.IsComposite,
 			))
 		}
 	}
@@ -1963,6 +1964,133 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 	return stream.SendAndClose(&pb.StreamCreateForecastsResponse{
 		ForecastUuids: createdUuids,
 	})
+}
+
+func unpackLocationComponents(
+	components []*pb.LocationComponent,
+) ([]uuid.UUID, []float64, error) {
+	sourceUuids := make([]uuid.UUID, len(components))
+	weights := make([]float64, len(components))
+	seen := make(map[uuid.UUID]struct{}, len(components))
+
+	for i, c := range components {
+		u, err := uuid.Parse(c.SourceLocationUuid)
+		if err != nil {
+			return nil, nil, status.Errorf(
+				codes.InvalidArgument,
+				"invalid source_location_uuid '%s': %v",
+				c.SourceLocationUuid,
+				err,
+			)
+		}
+
+		if _, exists := seen[u]; exists {
+			return nil, nil, status.Errorf(
+				codes.InvalidArgument,
+				"duplicate source_location_uuid '%s'",
+				c.SourceLocationUuid,
+			)
+		}
+
+		if c.Weight <= 0 {
+			return nil, nil, status.Error(
+				codes.InvalidArgument,
+				"component weight must be positive",
+			)
+		}
+
+		seen[u] = struct{}{}
+		sourceUuids[i] = u
+		weights[i] = c.Weight
+	}
+
+	return sourceUuids, weights, nil
+}
+
+func (s *DataPlatformDataServiceServerImpl) SetLocationComponents(
+	ctx context.Context,
+	req *pb.SetLocationComponentsRequest,
+) (*pb.SetLocationComponentsResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+	locationUuid := uuid.MustParse(req.LocationUuid)
+
+	sourceUuids, weights, err := unpackLocationComponents(req.Components)
+	if err != nil {
+		return nil, err
+	}
+
+	exists, err := querier.CheckGeometryExists(ctx, db.CheckGeometryExistsParams{
+		GeometryUuid: locationUuid,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to check location existence: %w", err)
+	}
+
+	if !exists {
+		return nil, status.Error(codes.NotFound, "location not found")
+	}
+
+	err = querier.DeleteGeometryComponents(ctx, db.DeleteGeometryComponentsParams{
+		GeometryUuid: locationUuid,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to clear location components: %w", err)
+	}
+
+	if len(sourceUuids) > 0 {
+		err = querier.InsertGeometryComponents(ctx, db.InsertGeometryComponentsParams{
+			GeometryUuid:        locationUuid,
+			SourceGeometryUuids: sourceUuids,
+			Weights:             weights,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("invalid location components: %w", err)
+		}
+	}
+
+	if err := querier.RefreshSourcesMaterializedView(ctx); err != nil {
+		return nil, fmt.Errorf("failed to update sources materialised view: %w", err)
+	}
+
+	l.Debug().
+		Str("dp.geometry.uuid", locationUuid.String()).
+		Int("dp.geometry.components", len(sourceUuids)).
+		Msg("set location components")
+
+	return &pb.SetLocationComponentsResponse{
+		LocationUuid: locationUuid.String(),
+	}, nil
+}
+
+func (s *DataPlatformDataServiceServerImpl) DeleteLocation(
+	ctx context.Context,
+	req *pb.DeleteLocationRequest,
+) (*pb.DeleteLocationResponse, error) {
+	l := zerolog.Ctx(ctx)
+	querier := db.New(ix.GetTxFromContext(ctx))
+	locationUuid := uuid.MustParse(req.LocationUuid)
+
+	rowsAffected, err := querier.DeleteGeometry(ctx, db.DeleteGeometryParams{
+		GeometryUuid: locationUuid,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete location: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return nil, status.Error(codes.NotFound, "location not found")
+	}
+
+	if err := querier.RefreshSourcesMaterializedView(ctx); err != nil {
+		return nil, fmt.Errorf("failed to update sources materialised view: %w", err)
+	}
+
+	l.Debug().
+		Str("dp.geometry.uuid", locationUuid.String()).
+		Msg("deleted location")
+
+	return &pb.DeleteLocationResponse{}, nil
 }
 
 // Compile-time check to ensure the interface is implemented fully.

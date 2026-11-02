@@ -541,6 +541,7 @@ message GetLocationResponse {
   google.protobuf.Struct metadata = 5;
   optional bytes geometry_wkb = 6;
   string country_code = 7;
+  bool is_composite = 8;
 }
 
 message GetLocationAsTimeseriesRequest {
@@ -680,6 +681,46 @@ message BatchUpdateLocationCapacityResponse {
   // and so were left unchanged.
   uint32 unchanged_count = 2;
 }
+
+message LocationComponent {
+  string source_location_uuid = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+  double weight = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).double.gt = 0,
+    (buf.validate.field).double.finite = true
+  ];
+}
+
+message SetLocationComponentsRequest {
+  string location_uuid = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+  repeated LocationComponent components = 2 [
+    (buf.validate.field).repeated.max_items = 1000,
+    (buf.validate.field).cel = {
+      id: "unique_source_location_uuids"
+      message: "each source_location_uuid may only appear once"
+      expression: "this.map(c, c.source_location_uuid).unique()"
+    }
+  ];
+}
+
+message SetLocationComponentsResponse {
+  string location_uuid = 1;
+}
+
+message DeleteLocationRequest {
+  string location_uuid = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.uuid = true
+  ];
+}
+
+message DeleteLocationResponse {}
 
 message GetLocationsAsGeoJSONRequest {
   repeated string location_uuids = 1 [
@@ -1049,6 +1090,7 @@ message ListLocationsResponse {
     LatLng latlng = 6;
     google.protobuf.Struct metadata = 7;
     string country_code = 8;
+    bool is_composite = 9;
   }
 
   repeated LocationSummary locations = 1;
