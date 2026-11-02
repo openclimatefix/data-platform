@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	pb "github.com/openclimatefix/data-platform/internal/gen/ocf/dp"
 )
 
 func TestDetermineIrradience(t *testing.T) {
@@ -53,6 +56,31 @@ func TestDetermineIrradience(t *testing.T) {
 			require.Equal(t, tt.expected.daylengthHours, sd.daylengthHours)
 		})
 	}
+}
+
+func TestCompositeLocationDummyRPCs(t *testing.T) {
+	t.Parallel()
+
+	srv := &DataPlatformDataServiceServerImpl{}
+	locUUID := uuid.New().String()
+
+	setResp, err := srv.SetLocationComponents(t.Context(), &pb.SetLocationComponentsRequest{
+		LocationUuid: locUUID,
+		Components: []*pb.LocationComponent{
+			{
+				SourceLocationUuid: uuid.New().String(),
+				Weight:             1.0,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, locUUID, setResp.LocationUuid)
+
+	delResp, err := srv.DeleteLocation(t.Context(), &pb.DeleteLocationRequest{
+		LocationUuid: locUUID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, delResp)
 }
 
 /*

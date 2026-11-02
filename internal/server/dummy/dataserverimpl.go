@@ -834,5 +834,23 @@ func (s *DataPlatformDataServiceServerImpl) StreamCreateForecasts(
 	return status.Errorf(codes.Unimplemented, "method StreamCreateForecasts not implemented")
 }
 
+// SetLocationComponents implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) SetLocationComponents(
+	ctx context.Context,
+	req *pb.SetLocationComponentsRequest,
+) (*pb.SetLocationComponentsResponse, error) {
+	return &pb.SetLocationComponentsResponse{
+		LocationUuid: req.LocationUuid,
+	}, nil
+}
+
+// DeleteLocation implements dp.DataPlatformDataServiceServer.
+func (d *DataPlatformDataServiceServerImpl) DeleteLocation(
+	ctx context.Context,
+	req *pb.DeleteLocationRequest,
+) (*pb.DeleteLocationResponse, error) {
+	return &pb.DeleteLocationResponse{}, nil
+}
+
 // Compile-time check to ensure the interface is implemented fully.
 var _ pb.DataPlatformDataServiceServer = (*DataPlatformDataServiceServerImpl)(nil)

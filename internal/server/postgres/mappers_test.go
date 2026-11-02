@@ -236,21 +236,26 @@ func Test_mapLocationSummary(t *testing.T) {
 	tests := []struct {
 		name           string
 		metadata       *structpb.Struct
+		isComposite    bool
 		validateResult func(*testing.T, *pb.ListLocationsResponse_LocationSummary)
 	}{
 		{
-			name:     "valid metadata",
-			metadata: meta,
+			name:        "valid metadata",
+			metadata:    meta,
+			isComposite: false,
 			validateResult: func(t *testing.T, res *pb.ListLocationsResponse_LocationSummary) {
 				require.NotNil(t, res.Metadata)
 				require.Equal(t, "value", res.Metadata.Fields["key"].GetStringValue())
+				require.False(t, res.IsComposite)
 			},
 		},
 		{
-			name:     "nil metadata",
-			metadata: nil,
+			name:        "nil metadata and composite",
+			metadata:    nil,
+			isComposite: true,
 			validateResult: func(t *testing.T, res *pb.ListLocationsResponse_LocationSummary) {
 				require.Nil(t, res.Metadata)
+				require.True(t, res.IsComposite)
 			},
 		},
 	}
@@ -267,6 +272,7 @@ func Test_mapLocationSummary(t *testing.T) {
 				1,
 				tt.metadata,
 				nil,
+				tt.isComposite,
 			)
 
 			require.Equal(t, id.String(), res.LocationUuid)

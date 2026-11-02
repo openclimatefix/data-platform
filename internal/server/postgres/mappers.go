@@ -444,6 +444,7 @@ func mapLocationSummary(
 	srcType, geomType int16,
 	meta *structpb.Struct,
 	countryCode *string,
+	isComposite bool,
 ) *pb.ListLocationsResponse_LocationSummary {
 	return &pb.ListLocationsResponse_LocationSummary{
 		LocationUuid: geomUuid.String(),
@@ -457,6 +458,7 @@ func mapLocationSummary(
 		LocationType:           pb.LocationType(geomType),
 		Metadata:               meta,
 		CountryCode:            ptrToValElseEmpty(countryCode),
+		IsComposite:            isComposite,
 	}
 }
 

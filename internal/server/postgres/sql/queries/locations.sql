@@ -89,6 +89,34 @@ FROM (
     WHERE l.geometry_uuid = ANY(sqlc.arg(geometry_uuids)::UUID[])
 ) AS sl;
 
+/*- Queries for geometry components --------------------------------- */
+
+-- name: CheckGeometryExists :one
+SELECT EXISTS(
+    SELECT 1
+    FROM loc.geometries AS g
+    WHERE g.geometry_uuid = sqlc.arg(geometry_uuid)::UUID
+);
+
+-- name: DeleteGeometryComponents :exec
+DELETE FROM loc.geometry_components AS gc
+WHERE gc.geometry_uuid = sqlc.arg(geometry_uuid)::UUID;
+
+-- name: InsertGeometryComponents :exec
+INSERT INTO loc.geometry_components (
+    geometry_uuid,
+    source_geometry_uuid,
+    weight
+)
+SELECT
+    sqlc.arg(geometry_uuid)::UUID AS geometry_uuid,
+    UNNEST(sqlc.arg(source_geometry_uuids)::UUID[]) AS source_geometry_uuid,
+    UNNEST(sqlc.arg(weights)::DOUBLE PRECISION[]) AS weight;
+
+-- name: DeleteGeometry :execrows
+DELETE FROM loc.geometries AS g
+WHERE g.geometry_uuid = sqlc.arg(geometry_uuid)::UUID;
+
 /*- Queries for the sources table -------------------------------------*/
 
 -- name: GetSourceAtTimestamp :one
@@ -106,7 +134,10 @@ SELECT
     s.longitude,
     s.latitude,
     s.owning_entity_id,
-    s.metadata_jsonb
+    s.metadata_jsonb,
+    s.is_composite,
+    s.source_geometry_uuids,
+    s.source_weights
 FROM loc.sources_mv AS s
 WHERE
     s.geometry_uuid = $1
@@ -264,15 +295,15 @@ INSERT INTO loc.sources_history (
 -- name: GetSourceHistory :many
 /* GetSourceHistory shows all the historical records for a given geometry and source type. */
 SELECT
-    sh.capacity_watts,
-    sh.capacity_limit_sip,
-    sh.valid_from_utc,
-    sh.metadata
-FROM loc.sources_history AS sh
-WHERE sh.geometry_uuid = $1
-    AND sh.source_type_id = $2
-    AND sh.valid_from_utc >= sqlc.arg(start_timestamp_utc)::TIMESTAMP
-    AND sh.valid_from_utc < sqlc.arg(end_timestamp_utc)::TIMESTAMP
+    s.capacity_watts,
+    s.capacity_limit_sip,
+    s.metadata,
+    LOWER(s.sys_period)::TIMESTAMP AS valid_from_utc
+FROM loc.sources_mv AS s
+WHERE s.geometry_uuid = $1
+    AND s.source_type_id = $2
+    AND LOWER(s.sys_period) >= sqlc.arg(start_timestamp_utc)::TIMESTAMP
+    AND LOWER(s.sys_period) < sqlc.arg(end_timestamp_utc)::TIMESTAMP
 ORDER BY valid_from_utc ASC;
 
 -- name: ListSourcesAtTimestamp :many
@@ -290,7 +321,8 @@ WITH unfiltered_sources AS (
         ls.owning_entity_id,
         ls.longitude,
         ls.latitude,
-        ls.metadata_jsonb
+        ls.metadata_jsonb,
+        ls.is_composite
     FROM loc.sources_mv AS ls
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
 )
@@ -347,7 +379,8 @@ unfiltered_sources AS (
         ls.longitude,
         ls.latitude,
         ls.owning_entity_id,
-        ls.metadata_jsonb
+        ls.metadata_jsonb,
+        ls.is_composite
     FROM loc.sources_mv AS ls
         INNER JOIN loc.geometries AS l USING (geometry_uuid)
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP
@@ -407,7 +440,8 @@ unfiltered_sources AS (
         ls.longitude,
         ls.latitude,
         ls.owning_entity_id,
-        ls.metadata_jsonb
+        ls.metadata_jsonb,
+        ls.is_composite
     FROM loc.sources_mv AS ls
         INNER JOIN loc.geometries AS l USING (geometry_uuid)
     WHERE ls.sys_period @> sqlc.arg(at_timestamp_utc)::TIMESTAMP

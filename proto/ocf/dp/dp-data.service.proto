@@ -47,6 +47,12 @@ service DataPlatformDataService {
    * values. Intended for bulk maintenance jobs.
    */
   rpc BatchUpdateLocationCapacity(BatchUpdateLocationCapacityRequest) returns (BatchUpdateLocationCapacityResponse) {}
+  /* SetLocationComponents configures a location as a weighted combination of source locations,
+   * or clears its components when an empty list is supplied.
+   */
+  rpc SetLocationComponents(SetLocationComponentsRequest) returns (SetLocationComponentsResponse) {}
+  /* DeleteLocation removes a location and its associated data. */
+  rpc DeleteLocation(DeleteLocationRequest) returns (DeleteLocationResponse) {}
   
   /* ListLocations fetches a list of registered locations that match the supplied filters. */
   rpc ListLocations(ListLocationsRequest) returns (ListLocationsResponse) {}
