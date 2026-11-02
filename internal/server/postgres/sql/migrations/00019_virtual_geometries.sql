@@ -51,6 +51,8 @@ DROP MATERIALIZED VIEW loc.sources_mv;
 
 CREATE MATERIALIZED VIEW loc.sources_mv AS
 WITH physical_sources AS (
+    -- Equivalent to what sources_mv was before. Lists all the non-composite locations
+    -- and their source types in a time-bucketed manner.
     SELECT
         sh.geometry_uuid,
         sh.source_type_id,
@@ -75,6 +77,8 @@ WITH physical_sources AS (
     INNER JOIN loc.geometries AS g USING (geometry_uuid)
 ),
 cg_change_points AS (
+    -- Collect all the change points for every geometry within a composite into one
+    -- deduplicated list.
     SELECT DISTINCT
         gc.geometry_uuid,
         ps.source_type_id,
@@ -85,6 +89,7 @@ cg_change_points AS (
         OR ps.geometry_uuid = gc.geometry_uuid
 ),
 cg_periods AS (
+    -- Turn the change points into non-overlapping periods
     SELECT
         geometry_uuid,
         source_type_id,
@@ -99,6 +104,7 @@ cg_periods AS (
     FROM cg_change_points
 ),
 composite_sources AS (
+    -- Calculate capacities from either weighted sums (where ALL components are present) or direct
     SELECT
         cg.geometry_uuid,
         cgp.source_type_id,
@@ -169,6 +175,7 @@ WHERE NOT EXISTS (
     FROM loc.geometry_components AS gc
     WHERE gc.geometry_uuid = ps.geometry_uuid
 )
+-- Combine the composite and direct geometries
 UNION ALL
 SELECT
     cs.geometry_uuid,
