@@ -127,10 +127,8 @@ composite_sources AS (
         ARRAY_AGG(gc.source_geometry_uuid ORDER BY gc.source_geometry_uuid)::UUID[] AS source_geometry_uuids,
         ARRAY_AGG(gc.weight ORDER BY gc.source_geometry_uuid)::DOUBLE PRECISION[] AS source_weights
     FROM cg_periods AS cgp
-    INNER JOIN loc.geometries AS cg
-        ON cg.geometry_uuid = cgp.geometry_uuid
-    INNER JOIN loc.geometry_components AS gc
-        ON gc.geometry_uuid = cgp.geometry_uuid
+    INNER JOIN loc.geometries AS cg USING (geometry_uuid)
+    INNER JOIN loc.geometry_components AS gc USING (geometry_uuid)
     LEFT JOIN physical_sources AS comp_ps
         ON comp_ps.geometry_uuid = gc.source_geometry_uuid
         AND comp_ps.source_type_id = cgp.source_type_id

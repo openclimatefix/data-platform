@@ -267,7 +267,7 @@ target_components AS MATERIALIZED (
     -- Direct predictions on the target location itself take priority when present
     SELECT
         TRUE AS is_direct,
-        $1::UUID AS component_geometry_uuid,
+        $1::UUID AS geometry_uuid,
         1.0::DOUBLE PRECISION AS weight,
         1 AS component_count
     FROM target_source
@@ -275,14 +275,14 @@ target_components AS MATERIALIZED (
     -- Otherwise fall back to the composite component geometry UUIDs and weights
     SELECT
         FALSE AS is_direct,
-        UNNEST(src.source_geometry_uuids) AS component_geometry_uuid,
+        UNNEST(src.source_geometry_uuids) AS geometry_uuid,
         UNNEST(src.source_weights) AS weight,
         CARDINALITY(src.source_geometry_uuids) AS component_count
     FROM target_source AS src
     WHERE src.is_composite
 ),
 distinct_components AS (
-    SELECT DISTINCT component_geometry_uuid
+    SELECT DISTINCT geometry_uuid
     FROM target_components
 ),
 component_sources AS MATERIALIZED (
@@ -294,15 +294,14 @@ component_sources AS MATERIALIZED (
         cs.longitude,
         cs.geometry_name,
         cs.sys_period
-    FROM distinct_components AS dc
-        INNER JOIN loc.sources_mv AS cs
-        ON dc.component_geometry_uuid = cs.geometry_uuid
-            AND cs.source_type_id = $2
-            AND cs.sys_period && TSRANGE(
-                sqlc.arg(start_timestamp_utc)::TIMESTAMP,
-                sqlc.arg(end_timestamp_utc)::TIMESTAMP,
-                '[]'
-            )
+    FROM distinct_components
+        INNER JOIN loc.sources_mv AS cs USING (geometry_uuid)
+    WHERE cs.source_type_id = $2
+        AND cs.sys_period && TSRANGE(
+            sqlc.arg(start_timestamp_utc)::TIMESTAMP,
+            sqlc.arg(end_timestamp_utc)::TIMESTAMP,
+            '[]'
+        )
 ),
 allowed_forecasts AS (
     -- Fetch all forecasts for the components that are within the requested time window and horizon
@@ -322,9 +321,8 @@ allowed_forecasts AS (
         f.p90_sips,
         f.p98_sips,
         LOWER(f.target_period) AS first_target_utc
-    FROM distinct_components AS dc
-        INNER JOIN pred.forecasts AS f
-        ON dc.component_geometry_uuid = f.geometry_uuid
+    FROM distinct_components
+        INNER JOIN pred.forecasts AS f USING (geometry_uuid)
     WHERE f.source_type_id = $2
         AND f.forecaster_id = $3
         AND f.forecast_uuid >= UUIDV7_BOUNDARY(
@@ -469,8 +467,7 @@ aggregated AS (
         MAX(wp.init_time_utc)::TIMESTAMP AS init_time_utc,
         MAX(wp.created_at_utc)::TIMESTAMP AS created_at_utc
     FROM winning_predictions AS wp
-        INNER JOIN target_components AS tc
-        ON wp.geometry_uuid = tc.component_geometry_uuid
+        INNER JOIN target_components AS tc USING (geometry_uuid)
         INNER JOIN component_sources AS comp_sv
         ON wp.geometry_uuid = comp_sv.geometry_uuid
             AND comp_sv.sys_period @> wp.target_time_utc
@@ -725,7 +722,21 @@ aggregated AS (
     HAVING COUNT(*) = lc.component_count
 ),
 winning AS (
-    SELECT DISTINCT ON (a.target_geometry_uuid) *
+    SELECT DISTINCT ON (a.target_geometry_uuid)
+        a.target_geometry_uuid AS geometry_uuid,
+        a.forecast_uuid,
+        a.horizon_mins,
+        a.created_at_utc,
+        a.init_time_utc,
+        a.metadata,
+        a.p02_sip,
+        a.p10_sip,
+        a.p25_sip,
+        a.p50_sip,
+        a.p75_sip,
+        a.p90_sip,
+        a.p98_sip,
+        a.target_time_utc
     FROM aggregated AS a
     ORDER BY a.target_geometry_uuid ASC, a.init_time_utc DESC, a.is_direct DESC
 )
@@ -750,8 +761,7 @@ SELECT
     w.p98_sip,
     w.target_time_utc
 FROM winning AS w
-    INNER JOIN requested_sources AS rs
-    ON w.target_geometry_uuid = rs.geometry_uuid;
+    INNER JOIN requested_sources AS rs USING (geometry_uuid);
 
 -- name: GetWeekAverageDeltasForLocations :many
 /* GetWeekAverageDeltasForLocations retrieves the average deltas between predicted and observed

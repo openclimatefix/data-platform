@@ -80,7 +80,7 @@ target_components AS MATERIALIZED (
     -- Direct observations on the target location itself take priority when present
     SELECT
         TRUE AS is_direct,
-        $1::UUID AS component_geometry_uuid,
+        $1::UUID AS geometry_uuid,
         1.0::DOUBLE PRECISION AS weight,
         1 AS component_count
     FROM target_source
@@ -88,14 +88,14 @@ target_components AS MATERIALIZED (
     -- Otherwise fall back to the composite component geometry UUIDs and weights
     SELECT
         FALSE AS is_direct,
-        UNNEST(src.source_geometry_uuids) AS component_geometry_uuid,
+        UNNEST(src.source_geometry_uuids) AS geometry_uuid,
         UNNEST(src.source_weights) AS weight,
         CARDINALITY(src.source_geometry_uuids) AS component_count
     FROM target_source AS src
     WHERE src.is_composite
 ),
 distinct_components AS (
-    SELECT DISTINCT component_geometry_uuid
+    SELECT DISTINCT geometry_uuid
     FROM target_components
 ),
 component_sources AS MATERIALIZED (
@@ -105,15 +105,14 @@ component_sources AS MATERIALIZED (
         cs.source_type_id,
         cs.capacity_watts,
         cs.sys_period
-    FROM distinct_components AS dc
-        INNER JOIN loc.sources_mv AS cs
-        ON dc.component_geometry_uuid = cs.geometry_uuid
-            AND cs.source_type_id = $2
-            AND cs.sys_period && TSRANGE(
-                sqlc.arg(start_time_utc)::TIMESTAMP,
-                sqlc.arg(end_time_utc)::TIMESTAMP,
-                '[]'
-            )
+    FROM distinct_components
+        INNER JOIN loc.sources_mv AS cs USING (geometry_uuid)
+    WHERE cs.source_type_id = $2
+        AND cs.sys_period && TSRANGE(
+            sqlc.arg(start_time_utc)::TIMESTAMP,
+            sqlc.arg(end_time_utc)::TIMESTAMP,
+            '[]'
+        )
 ),
 component_observations AS MATERIALIZED (
     -- Fetch observations once per distinct component before joining capacity slices
@@ -122,14 +121,13 @@ component_observations AS MATERIALIZED (
         og.observation_timestamp_utc,
         og.value_sip,
         og.created_timestamp_utc
-    FROM distinct_components AS dc
-        INNER JOIN obs.observed_generation_values AS og
-        ON dc.component_geometry_uuid = og.geometry_uuid
-            AND og.source_type_id = $2
-            AND og.observer_uuid = $3
-            AND og.observation_timestamp_utc
-            BETWEEN sqlc.arg(start_time_utc)::TIMESTAMP AND sqlc.arg(end_time_utc)::TIMESTAMP
-            AND og.created_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
+    FROM distinct_components
+        INNER JOIN obs.observed_generation_values AS og USING (geometry_uuid)
+    WHERE og.source_type_id = $2
+        AND og.observer_uuid = $3
+        AND og.observation_timestamp_utc
+        BETWEEN sqlc.arg(start_time_utc)::TIMESTAMP AND sqlc.arg(end_time_utc)::TIMESTAMP
+        AND og.created_timestamp_utc <= sqlc.arg(pivot_time_utc)::TIMESTAMP
 ),
 aggregated AS (
     -- Combine observations for all the components, grouped by timestamp, and weighted-average them
@@ -142,8 +140,7 @@ aggregated AS (
         ), 0)::SMALLINT AS value_sip,
         MAX(og.created_timestamp_utc)::TIMESTAMP AS created_timestamp_utc
     FROM component_observations AS og
-        INNER JOIN target_components AS tc
-        ON og.geometry_uuid = tc.component_geometry_uuid
+        INNER JOIN target_components AS tc USING (geometry_uuid)
         INNER JOIN component_sources AS comp_sh
         ON og.geometry_uuid = comp_sh.geometry_uuid
             AND comp_sh.sys_period @> og.observation_timestamp_utc
@@ -267,8 +264,7 @@ location_tip AS (
         MIN(cl.observation_timestamp_utc)::TIMESTAMP AS min_tip_utc,
         MAX(cl.observation_timestamp_utc)::TIMESTAMP AS max_tip_utc
     FROM location_components AS lc
-        INNER JOIN component_latest AS cl
-        ON lc.component_geometry_uuid = cl.component_geometry_uuid
+        INNER JOIN component_latest AS cl USING (component_geometry_uuid)
     GROUP BY lc.geometry_uuid, lc.is_direct, lc.component_count
     HAVING COUNT(*) = lc.component_count
 ),
@@ -282,11 +278,8 @@ resolved_components AS (
         cl.observation_timestamp_utc,
         cl.value_sip
     FROM location_tip AS lt
-        INNER JOIN location_components AS lc
-        ON lt.geometry_uuid = lc.geometry_uuid
-            AND lt.is_direct = lc.is_direct
-        INNER JOIN component_latest AS cl
-        ON lc.component_geometry_uuid = cl.component_geometry_uuid
+        INNER JOIN location_components AS lc USING (geometry_uuid, is_direct)
+        INNER JOIN component_latest AS cl USING (component_geometry_uuid)
     WHERE lt.min_tip_utc = lt.max_tip_utc
     UNION ALL
     -- If components have different latest timestamps, find the latest timestamp that has all components
@@ -433,7 +426,7 @@ component_observations AS MATERIALIZED (
 aggregated AS (
     -- Aggregate the component observations into a single weighted average for each requested source
     SELECT
-        lc.target_geometry_uuid,
+        lc.target_geometry_uuid AS geometry_uuid,
         lc.is_direct,
         co.observation_timestamp_utc,
         COALESCE(ROUND(
@@ -442,20 +435,19 @@ aggregated AS (
         ), 0)::SMALLINT AS value_sip,
         MAX(co.created_timestamp_utc)::TIMESTAMP AS created_timestamp_utc
     FROM location_components AS lc
-        INNER JOIN component_observations AS co
-        ON lc.component_geometry_uuid = co.component_geometry_uuid
+        INNER JOIN component_observations AS co USING (component_geometry_uuid)
     GROUP BY lc.target_geometry_uuid, lc.is_direct, lc.component_count, co.observation_timestamp_utc
     -- Drop any timestamps that don't have the full complement of component observations
     HAVING COUNT(*) = lc.component_count
 ),
 winning AS (
-    SELECT DISTINCT ON (a.target_geometry_uuid)
-        a.target_geometry_uuid,
+    SELECT DISTINCT ON (a.geometry_uuid)
+        a.geometry_uuid,
         a.observation_timestamp_utc,
         a.value_sip,
         a.created_timestamp_utc
     FROM aggregated AS a
-    ORDER BY a.target_geometry_uuid ASC, a.is_direct DESC
+    ORDER BY a.geometry_uuid ASC, a.is_direct DESC
 )
 SELECT
     rs.geometry_uuid,
@@ -468,5 +460,4 @@ SELECT
     w.value_sip,
     w.created_timestamp_utc
 FROM winning AS w
-    INNER JOIN requested_sources AS rs
-    ON w.target_geometry_uuid = rs.geometry_uuid;
+    INNER JOIN requested_sources AS rs USING (geometry_uuid);
